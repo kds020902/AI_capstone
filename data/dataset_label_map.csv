@@ -1,0 +1,59 @@
+source,source_label,subcategory,main_category,note
+deepfashion,Anorak,바람막이,아우터,
+deepfashion,Blazer,블레이저,아우터,
+deepfashion,Blouse,블라우스,상의,
+deepfashion,Bomber,봄버재킷,아우터,
+deepfashion,Button-Down,셔츠,상의,
+deepfashion,Cardigan,가디건,아우터,
+deepfashion,Flannel,셔츠,상의,
+deepfashion,Halter,민소매,상의,
+deepfashion,Henley,,상의,반팔·긴팔 혼재 → 대분류 학습에만 사용
+deepfashion,Hoodie,후드티,상의,
+deepfashion,Jacket,,아우터,종류 혼재 → 대분류 학습에만 사용
+deepfashion,Jersey,,상의,기능성 티셔츠 후보 — 이미지 검수 후 지정 권장
+deepfashion,Parka,,아우터,야상·패딩 혼재 — 이미지 검수 후 지정 권장
+deepfashion,Peacoat,코트,아우터,
+deepfashion,Sweater,니트,상의,
+deepfashion,Tank,민소매,상의,
+deepfashion,Tee,반팔 티셔츠,상의,긴팔 티셔츠가 일부 섞여 있음 — 검수 권장
+deepfashion,Top,,상의,종류 혼재 → 대분류 학습에만 사용
+deepfashion,Turtleneck,니트,상의,
+deepfashion,Capris,,하의,
+deepfashion,Chinos,치노팬츠,하의,
+deepfashion,Culottes,,하의,
+deepfashion,Cutoffs,반바지,하의,
+deepfashion,Jeans,청바지,하의,
+deepfashion,Jeggings,청바지,하의,
+deepfashion,Joggers,조거팬츠,하의,
+deepfashion,Leggings,,하의,
+deepfashion,Shorts,반바지,하의,
+deepfashion,Skirt,스커트,하의,
+deepfashion,Sweatpants,조거팬츠,하의,
+deepfashion,Sweatshorts,반바지,하의,
+deepfashion,Coat,코트,아우터,
+deepfashion,Dress,원피스,원피스,
+deepfashion,Sundress,원피스,원피스,
+deepfashion,Shirtdress,셔츠원피스,원피스,
+deepfashion,Jumpsuit,,원피스,점프수트 → 대분류 학습에만 사용
+deepfashion2,short sleeve top,,상의,티셔츠·셔츠·폴로 혼재 → 대분류 학습에만 사용
+deepfashion2,long sleeve top,,상의,티셔츠·셔츠·니트 혼재 → 대분류 학습에만 사용
+deepfashion2,short sleeve outwear,,아우터,
+deepfashion2,long sleeve outwear,,아우터,
+deepfashion2,vest,민소매,상의,
+deepfashion2,sling,민소매,상의,
+deepfashion2,shorts,반바지,하의,
+deepfashion2,trousers,,하의,청바지·슬랙스 등 혼재 → 대분류 학습에만 사용
+deepfashion2,skirt,스커트,하의,
+deepfashion2,short sleeve dress,,원피스,셔츠원피스·니트원피스 구분 없음 → 대분류 학습에만 사용
+deepfashion2,long sleeve dress,,원피스,셔츠원피스·니트원피스 구분 없음 → 대분류 학습에만 사용
+deepfashion2,vest dress,,원피스,
+deepfashion2,sling dress,,원피스,
+utzappos,Shoes/Sneakers and Athletic Shoes,스니커즈,신발,러닝화·캔버스화가 한 폴더에 섞여 있어 세 클래스로 나눌 수 없음 — 러닝화·캔버스화는 별도 수집 필요
+utzappos,Shoes/Loafers,로퍼,신발,
+utzappos,Shoes/Oxfords,,신발,구두 — 세부분류 없음
+utzappos,Shoes/Heels,,신발,
+utzappos,Shoes/Flats,,신발,
+utzappos,Shoes/Boat Shoes,,신발,
+utzappos,Shoes/Clogs and Mules,,신발,
+utzappos,Boots,부츠,신발,Boots 아래 모든 세부 폴더
+utzappos,Sandals,,신발,

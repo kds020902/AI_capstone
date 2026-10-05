@@ -1,0 +1,7 @@
+﻿source,n_val,accuracy
+f200k,574,0.7840
+fpi,658,0.9164
+grigorev,296,0.8784
+kream,1019,0.8381
+shoe3,34,0.9412
+utzappos,449,0.8619

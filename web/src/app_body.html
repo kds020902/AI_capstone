@@ -1,0 +1,612 @@
+<title>AI 옷장 체험판</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* 레이아웃: 한 줄 앱 칼럼. 코디 한 벌 = 옷걸이에 걸린 태그 한 줄, 날씨 = 온도계 띠 */
+:root {
+  --bg: #f2f3f7; --surface: #ffffff; --sunk: #e9ebf2; --ink: #1a1f33; --muted: #5b6380; --line: #d9dde8;
+  --accent: #3045c4; --accent-ink: #ffffff; --accent-soft: #e4e8fb;
+  --warm: #b55f17; --good: #2c7a4b; --warn: #9a5800; --warn-soft: #fbefdc; --bad: #b3261e;
+  --display: "Hahmlet", "Nanum Myeongjo", serif;
+  --body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f121b; --surface: #171b27; --sunk: #11141e; --ink: #e6e9f2; --muted: #99a0ba; --line: #2a3042;
+  --accent: #8d9cff; --accent-ink: #0f121b; --accent-soft: #232a4a;
+  --warm: #e59a52; --good: #6cc38f; --warn: #e6a64c; --warn-soft: #2e2416; --bad: #f08a80; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f121b; --surface: #171b27; --sunk: #11141e; --ink: #e6e9f2; --muted: #99a0ba; --line: #2a3042;
+  --accent: #8d9cff; --accent-ink: #0f121b; --accent-soft: #232a4a;
+  --warm: #e59a52; --good: #6cc38f; --warn: #e6a64c; --warn-soft: #2e2416; --bad: #f08a80; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+
+/* 머리말 */
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand h1 { font-family: var(--display); font-size: 2rem; font-weight: 700; letter-spacing: -0.01em; }
+.badge { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; border: 1px solid var(--accent); color: var(--accent);
+  border-radius: 999px; padding: 1px 10px; }
+.lede { margin: 6px 0 16px; color: var(--muted); max-width: 62ch; }
+
+/* 탭 */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; position: sticky;
+  top: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 5; }
+.tab { border: 0; background: none; padding: 10px 14px; cursor: pointer; color: var(--muted); font-weight: 500;
+  border-bottom: 2px solid transparent; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab .count { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); margin-left: 4px; }
+section.panel { padding-top: 18px; display: grid; gap: 16px; }
+
+/* 공통 블록 */
+.block { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0; }
+.label { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+/* 날씨 입력 */
+.weather { display: grid; gap: 14px; }
+.wgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.field .val { font-family: var(--mono); font-weight: 600; font-size: 1.05rem; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+.seg button { border: 0; background: var(--surface); padding: 6px 14px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.thermo { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 0.92rem; padding: 10px 12px;
+  border-radius: 8px; background: var(--sunk); }
+.thermo b { font-family: var(--mono); }
+.thermo .eff { font-family: var(--mono); font-weight: 600; color: var(--accent); font-size: 1.05rem; }
+
+/* 경고 */
+.warns { display: grid; gap: 8px; }
+.warn { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 9px 12px; font-size: 0.92rem; }
+
+/* 코디 카드 */
+.outfits { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.outfit { display: grid; gap: 12px; }
+.outfit .top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.rank { font-family: var(--display); font-size: 1.35rem; font-weight: 700; }
+.pct { font-family: var(--mono); font-size: 1.05rem; color: var(--accent); font-weight: 600; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; border: 1px solid var(--line);
+  border-radius: 6px 14px 14px 6px; padding: 7px 12px 7px 10px; background: var(--sunk); min-width: 0; position: relative; }
+.tag::before { content: ""; position: absolute; left: -4px; top: 50%; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--line); transform: translateY(-50%); }
+.tag .sw { grid-row: span 2; width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line); }
+.tag .role { font-size: 0.7rem; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.tag .nm { font-weight: 500; overflow-wrap: anywhere; }
+.reasons { margin: 0; padding-left: 18px; color: var(--ink); display: grid; gap: 3px; font-size: 0.93rem; }
+.bars { display: grid; gap: 6px; }
+.bar { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 0.85rem; }
+.bar .track { display: block; height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+.bar .fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.bar .w { font-family: var(--mono); color: var(--muted); text-align: right; font-size: 0.8rem; white-space: nowrap; }
+.outfit .acts { display: flex; justify-content: flex-end; gap: 8px; }
+.empty { text-align: center; color: var(--muted); padding: 28px 16px; }
+
+/* 옷장 */
+.closet-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+.group h3 { font-size: 0.95rem; margin-bottom: 10px; display: flex; gap: 8px; align-items: baseline; }
+.items { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.item { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 10px; background: var(--surface); min-width: 0; }
+.item.off { opacity: 0.5; }
+.item .thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; grid-row: span 2; border: 1px solid var(--line); }
+.item .sw.big { width: 40px; height: 40px; border-radius: 6px; grid-row: span 2; border: 1px solid var(--line); }
+.item .nm { font-weight: 500; overflow-wrap: anywhere; }
+.item .meta { font-size: 0.8rem; color: var(--muted); grid-column: 2 / 3; }
+.item .ctl { grid-row: 1 / span 2; grid-column: 3; display: grid; gap: 4px; justify-items: end; }
+.dots { letter-spacing: 1px; color: var(--warm); font-size: 0.75rem; }
+.switch { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--muted); cursor: pointer; }
+.linkbtn { border: 0; background: none; color: var(--bad); cursor: pointer; font-size: 0.8rem; padding: 0; }
+
+/* 사진 추가 */
+.photo { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 720px) { .photo { grid-template-columns: 1fr; } }
+.drop { border: 1.5px dashed var(--line); border-radius: var(--r); display: grid; place-items: center; text-align: center;
+  padding: 20px; min-height: 220px; background: var(--sunk); cursor: pointer; gap: 8px; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop img { max-height: 260px; border-radius: 8px; }
+.status { font-size: 0.9rem; color: var(--muted); min-height: 1.4em; }
+.cands { display: flex; flex-wrap: wrap; gap: 8px; }
+.cands .chip .num { margin-left: 6px; opacity: 0.85; }
+.auto { font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.auto.check { background: var(--warn-soft); color: var(--warn); }
+form.add { display: grid; gap: 12px; }
+form.add .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+form.add label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+form.add input[type="text"], form.add select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); }
+.inline { display: flex !important; align-items: center; gap: 8px; color: var(--ink) !important; }
+
+/* 설정 */
+.opts { display: grid; gap: 6px; }
+.opts label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.confirm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; background: var(--warn-soft); color: var(--warn);
+  padding: 10px 12px; border-radius: 8px; }
+
+footer { margin-top: 28px; font-size: 0.82rem; color: var(--muted); display: grid; gap: 4px; }
+footer a { color: var(--accent); }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: 0.9rem; z-index: 20;
+  display: flex; gap: 12px; align-items: center; max-width: calc(100% - 32px); }
+.toast button { border: 0; background: none; color: var(--accent-soft); text-decoration: underline; cursor: pointer; padding: 0; }
+@media (prefers-reduced-motion: no-preference) { .outfit, .item { transition: opacity 0.15s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><h1>AI 옷장</h1><span class="badge">체험판</span></div>
+    <p class="lede">설치 없이 브라우저에서 바로 써 보는 버전이에요. 날씨와 외출 목적을 고르면 옷장에 있는 옷으로 코디 3벌을 추천하고,
+      옷 사진을 올리면 AI가 종류와 색을 채워 줘요. 옷장 기록은 이 브라우저에만 저장돼요.</p>
+    <nav class="tabs" role="tablist" aria-label="메뉴">
+      <button class="tab" role="tab" id="t-rec" aria-controls="p-rec" aria-selected="true">오늘의 추천</button>
+      <button class="tab" role="tab" id="t-closet" aria-controls="p-closet" aria-selected="false">내 옷장<span class="count" id="closet-count"></span></button>
+      <button class="tab" role="tab" id="t-photo" aria-controls="p-photo" aria-selected="false">사진으로 추가</button>
+      <button class="tab" role="tab" id="t-settings" aria-controls="p-settings" aria-selected="false">설정</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 오늘의 추천 -->
+    <section class="panel" id="p-rec" role="tabpanel" aria-labelledby="t-rec">
+      <div class="block weather">
+        <div class="row" role="group" aria-label="예시 날씨">
+          <span class="label">예시 날씨</span>
+          <div class="row" id="presets"></div>
+        </div>
+        <div class="wgrid">
+          <div class="field">
+            <div class="head"><label for="in-temp">기온</label><span class="val" id="v-temp"></span></div>
+            <input type="range" id="in-temp" min="-15" max="38" step="0.5">
+          </div>
+          <div class="field">
+            <div class="head"><label for="in-app">체감온도</label><span class="val" id="v-app"></span></div>
+            <input type="range" id="in-app" min="-20" max="42" step="0.5">
+          </div>
+        </div>
+        <div class="row">
+          <span class="label">외출 목적</span>
+          <div class="seg" id="purposes" role="group" aria-label="외출 목적"></div>
+          <label class="switch" style="font-size:0.95rem;color:var(--ink)"><input type="checkbox" id="in-rain"> 비가 와요</label>
+        </div>
+        <div class="thermo" id="thermo" aria-live="polite"></div>
+      </div>
+      <div class="warns" id="warns"></div>
+      <ol class="outfits" id="outfits"></ol>
+    </section>
+
+    <!-- 내 옷장 -->
+    <section class="panel" id="p-closet" role="tabpanel" aria-labelledby="t-closet" hidden>
+      <div class="closet-head">
+        <p class="muted" id="closet-summary" style="margin:0"></p>
+        <div class="row">
+          <button class="btn" id="go-photo">사진으로 옷 추가</button>
+        </div>
+      </div>
+      <div id="groups" class="panel" style="padding:0"></div>
+    </section>
+
+    <!-- 사진으로 추가 -->
+    <section class="panel" id="p-photo" role="tabpanel" aria-labelledby="t-photo" hidden>
+      <div class="photo">
+        <div class="field">
+          <label class="drop" id="drop" for="in-file">
+            <span id="drop-text">옷 사진을 끌어다 놓거나 눌러서 고르세요<br><span class="muted" style="font-size:0.85rem">JPG · PNG · 사진은 이 기기 밖으로 보내지 않아요</span></span>
+            <img id="preview" alt="올린 옷 사진" hidden>
+          </label>
+          <input type="file" id="in-file" accept="image/*" hidden>
+          <div class="status" id="ai-status" aria-live="polite"></div>
+        </div>
+        <div class="block">
+          <form class="add" id="add-form" novalidate>
+            <div class="row" id="cand-wrap" hidden>
+              <span class="label">AI 후보</span><span class="auto" id="auto-badge"></span>
+              <div class="cands" id="cands" style="width:100%"></div>
+            </div>
+            <div class="grid2">
+              <label>세부분류<select id="f-sub"></select></label>
+              <label>대분류<input type="text" id="f-main" readonly></label>
+              <label>색상<select id="f-color"></select></label>
+              <label>두께<select id="f-warmth"></select></label>
+            </div>
+            <label>이름<input type="text" id="f-name" placeholder="예: 네이비 후드티" autocomplete="off"></label>
+            <label class="inline"><input type="checkbox" id="f-rain"> 비 오는 날 입어도 괜찮아요</label>
+            <div class="row"><button class="btn primary" type="submit" id="f-save">옷장에 추가</button>
+              <span class="muted" style="font-size:0.85rem">사진 없이 직접 골라서 추가해도 돼요.</span></div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- 설정 -->
+    <section class="panel" id="p-settings" role="tabpanel" aria-labelledby="t-settings" hidden>
+      <div class="block field">
+        <span class="label">스타터 옷장</span>
+        <div class="seg" id="genders" role="group" aria-label="스타터 옷장 성별"></div>
+        <div id="gender-confirm"></div>
+        <p class="muted" style="margin:0;font-size:0.88rem">처음 써 보기 편하도록 자주 입는 옷 30벌을 넣어 둔 옷장이에요. 없는 옷은 내 옷장에서 '보유'를 끄세요.</p>
+      </div>
+      <div class="block field">
+        <span class="label">체감 성향</span>
+        <div class="opts" id="thermals"></div>
+      </div>
+      <div class="block field">
+        <span class="label">기록 초기화</span>
+        <div class="row"><button class="btn danger" id="reset">옷장·설정 전부 지우기</button></div>
+        <div id="reset-confirm"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>추천: 날씨 60% · 비 25% · 색상 15% · 외출 목적에 안 맞는 옷은 규칙표로 먼저 거름</span>
+    <span>사진 분류: EfficientNet-B0 · 33종 · 검증 정확도 85.4% (폰 사진 87.8%) · 브라우저 안에서 계산</span>
+    <span>날씨 자동 조회와 기록 저장은 설치형 앱에서 쓸 수 있어요 · <a href="https://github.com/kds020902/AI_capstone" target="_blank" rel="noopener">GitHub에서 전체 앱 받기</a></span>
+  </footer>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script type="application/json" id="closet-data">__CLOSET_DATA__</script>
+<script id="closetnet-src">__CLOSETNET_SRC__</script>
+<script>__CLOSET_JS__</script>
+<script>
+(function () {
+  "use strict";
+  const DATA = JSON.parse(document.getElementById("closet-data").textContent);
+  const C = Closet.create(DATA);
+  const KO = C.COLOR_KO;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const SWATCH = { black: "#1f2024", white: "#f6f6f3", gray: "#9a9ca3" };
+  for (const [k, [r, g, b]] of Object.entries(DATA.PALETTE)) SWATCH[k] = `rgb(${r},${g},${b})`;
+  const swatch = (color) => SWATCH[C.normalizeColor(color)] || "transparent";
+  const colorKo = (color) => KO[C.normalizeColor(color)] || (color || "색 미상");
+  const ROLE = { 상의: "상의", 이너: "이너", 하의: "하의", 원피스: "원피스", 아우터: "겉옷", 신발: "신발" };
+  const THERMAL = [["추위를 잘 탐", 1, 0], ["추위를 조금 탐", 0.6, 0.1], ["보통", 0, 0], ["더위를 조금 탐", 0.1, 0.6], ["더위를 잘 탐", 0, 1]];
+  const PRESETS = [
+    { label: "한겨울", t: -5, a: -9, rain: false }, { label: "쌀쌀한 날", t: 12, a: 11, rain: false },
+    { label: "봄비", t: 14, a: 12, rain: true }, { label: "초여름", t: 23, a: 24, rain: false }, { label: "한여름", t: 31, a: 34, rain: false },
+  ];
+  const WARMTH_LABEL = ["", "1 · 아주 얇음", "2 · 얇음", "3 · 보통", "4 · 두꺼움", "5 · 아주 두꺼움"];
+  const STORE = "ai-closet-trial-v1";
+  const today = new Date().toISOString().slice(0, 10);
+
+  const starter = (g) => DATA.STARTER[g].map((r, i) => ({ id: i + 1, name: r[0], category: r[1], subcategory: r[2], color: r[3],
+    warmth: r[4], rain_ok: !!r[5], material: r[6], active: true, starter: true }));
+  const fresh = (g) => ({ gender: g, thermal: 2, items: starter(g), disliked: [], nextId: 1000,
+    weather: { t: 12, a: 11, rain: false, purpose: "등교", preset: 1 } });
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORE) || "null");
+      if (s && Array.isArray(s.items) && s.weather && DATA.STARTER[s.gender]) return s;
+    } catch (e) { /* 저장소를 못 쓰는 환경 */ }
+    return fresh("male");
+  }
+  let state = load();
+  const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* 무시 */ } };
+
+  // ---------------------------------------------------------------- 탭
+  const TABS = { rec: "t-rec", closet: "t-closet", photo: "t-photo", settings: "t-settings" };
+  function show(name) {
+    for (const [k, id] of Object.entries(TABS)) {
+      const on = k === name;
+      $(id).setAttribute("aria-selected", on);
+      $("p-" + k).hidden = !on;
+    }
+    if (name === "photo") ensureModel();
+  }
+  for (const [k, id] of Object.entries(TABS)) $(id).addEventListener("click", () => show(k));
+  $("go-photo").addEventListener("click", () => show("photo"));
+
+  let toastTimer;
+  function toast(msg, undo) {
+    const t = $("toast");
+    t.innerHTML = esc(msg) + (undo ? ' <button type="button">되돌리기</button>' : "");
+    t.hidden = false;
+    if (undo) t.querySelector("button").onclick = () => { undo(); t.hidden = true; };
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+  }
+
+  // ---------------------------------------------------------------- 오늘의 추천
+  $("presets").innerHTML = PRESETS.map((p, i) =>
+    `<button class="chip" type="button" data-i="${i}" aria-pressed="false">${esc(p.label)} <span class="num">${p.t}℃</span>${p.rain ? " · 비" : ""}</button>`).join("");
+  $("purposes").innerHTML = DATA.PURPOSES.map((p) => `<button type="button" data-p="${p}" aria-pressed="false">${p}</button>`).join("");
+
+  function syncWeatherInputs() {
+    const w = state.weather;
+    $("in-temp").value = w.t; $("in-app").value = w.a; $("in-rain").checked = w.rain;
+    $("v-temp").textContent = `${w.t}℃`; $("v-app").textContent = `${w.a}℃`;
+    for (const b of $("presets").children) b.setAttribute("aria-pressed", +b.dataset.i === w.preset);
+    for (const b of $("purposes").children) b.setAttribute("aria-pressed", b.dataset.p === w.purpose);
+  }
+  $("presets").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const p = PRESETS[+b.dataset.i];
+    Object.assign(state.weather, { t: p.t, a: p.a, rain: p.rain, preset: +b.dataset.i });
+    update();
+  });
+  $("purposes").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    state.weather.purpose = b.dataset.p; update();
+  });
+  $("in-temp").addEventListener("input", (e) => { state.weather.t = +e.target.value; state.weather.preset = -1; update(); });
+  $("in-app").addEventListener("input", (e) => { state.weather.a = +e.target.value; state.weather.preset = -1; update(); });
+  $("in-rain").addEventListener("change", (e) => { state.weather.rain = e.target.checked; state.weather.preset = -1; update(); });
+
+  const fmt = (v) => (Math.round(v * 10) / 10).toString().replace("-", "−");
+  function tagHtml(p, role) {
+    return `<span class="tag"><span class="sw" style="background:${swatch(p.color)}"></span>` +
+      `<span class="role">${esc(ROLE[role] || role)}</span><span class="nm">${esc(p.name)}</span></span>`;
+  }
+  function renderRec() {
+    const w = state.weather, [, cold, heat] = THERMAL[state.thermal];
+    const items = state.items.filter((x) => x.active);
+    const out = C.recommend(items, { temperature: w.t, apparent: w.a, rain: w.rain, purpose: w.purpose, cold, heat,
+      excludeKeys: state.disliked, seed: `${state.gender}-${today}` });
+    const ctx = out.context;
+    const adj = ctx.adjustments.map(([l, d]) => `<span>${esc(l)} <b>${d > 0 ? "+" : ""}${fmt(d)}℃</b></span>`).join("");
+    $("thermo").innerHTML = `<span>체감 <b>${fmt(ctx.baseTemp)}℃</b></span>${adj || "<span class='muted'>보정 없음</span>"}` +
+      `<span>→ 기준 <span class="eff">${fmt(ctx.eff)}℃</span>로 추천</span>`;
+    $("warns").innerHTML = out.warnings.map((m) => `<div class="warn">${esc(m)}</div>`).join("");
+    if (!out.results.length) {
+      $("outfits").innerHTML = `<li class="block empty">추천할 코디가 없어요. 내 옷장에서 상의·하의·신발을 보유로 켜 두세요.</li>`;
+      return;
+    }
+    $("outfits").innerHTML = out.results.map((r, i) => {
+      const roles = C.roles(r.pieces);
+      const bars = C.breakdown(r.components).map((b) =>
+        `<div class="bar"><span>${b.label}</span><span class="track"><span class="fill" style="width:${(b.score * 100).toFixed(0)}%"></span></span>` +
+        `<span class="w">${(b.score * 100).toFixed(0)} × ${(b.weight * 100).toFixed(0)}%</span></div>`).join("");
+      return `<li class="block outfit">
+        <div class="top"><span class="rank">${i + 1}위</span><span class="pct">${(r.score * 100).toFixed(1)}%</span>
+          <span class="muted num" style="font-size:0.82rem">보온 ${r.components.actual_warmth.toFixed(2)} / 목표 ${r.components.target_warmth.toFixed(2)}</span></div>
+        <div class="tags">${r.pieces.map((p, j) => tagHtml(p, roles[j])).join("")}</div>
+        <ul class="reasons">${r.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+        <div class="bars">${bars}</div>
+        <div class="acts"><button class="btn" type="button" data-dislike="${C.outfitKey(r.pieces)}">이 조합 별로예요</button></div>
+      </li>`;
+    }).join("");
+  }
+  $("outfits").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-dislike]"); if (!b) return;
+    const key = b.dataset.dislike;
+    state.disliked.push(key); update();
+    toast("이 조합은 다음 추천에서 빼요.", () => { state.disliked = state.disliked.filter((k) => k !== key); update(); });
+  });
+
+  // ---------------------------------------------------------------- 내 옷장
+  const dots = (n) => "●".repeat(n) + "○".repeat(5 - n);
+  function renderCloset() {
+    const act = state.items.filter((x) => x.active).length;
+    $("closet-count").textContent = act;
+    $("closet-summary").textContent = `${state.items.length}벌 중 ${act}벌을 추천에 쓰고 있어요. 없는 옷은 '보유'를 끄세요.`;
+    $("groups").innerHTML = DATA.MAIN_CATEGORIES.map((cat) => {
+      const list = state.items.filter((x) => x.category === cat);
+      if (!list.length) return "";
+      return `<div class="block group"><h3>${cat}<span class="muted num" style="font-size:0.8rem">${list.length}</span></h3><div class="items">` +
+        list.map((x) => `<div class="item${x.active ? "" : " off"}">
+          ${x.thumb ? `<img class="thumb" src="${x.thumb}" alt="">` : `<span class="sw big" style="background:${swatch(x.color)}"></span>`}
+          <span class="nm">${esc(x.name)}</span>
+          <span class="meta">${esc(x.subcategory)} · ${esc(colorKo(x.color))} · <span class="dots" title="두께 ${x.warmth}/5">${dots(x.warmth)}</span> · 비 ${x.rain_ok ? "O" : "X"}</span>
+          <span class="ctl"><label class="switch" for="own-${x.id}"><input type="checkbox" id="own-${x.id}" data-toggle="${x.id}" ${x.active ? "checked" : ""}> 보유</label>
+          ${x.starter ? "" : `<button class="linkbtn" type="button" data-del="${x.id}">삭제</button>`}</span>
+        </div>`).join("") + "</div></div>";
+    }).join("");
+  }
+  $("groups").addEventListener("change", (e) => {
+    const id = e.target.dataset.toggle; if (!id) return;
+    const it = state.items.find((x) => x.id === +id); it.active = e.target.checked; update();
+  });
+  $("groups").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-del]"); if (!b) return;
+    const id = +b.dataset.del, idx = state.items.findIndex((x) => x.id === id), it = state.items[idx];
+    state.items.splice(idx, 1); update();
+    toast(`${it.name}을(를) 지웠어요.`, () => { state.items.splice(idx, 0, it); update(); });
+  });
+
+  // ---------------------------------------------------------------- 사진으로 추가
+  const SUBS_BY_MAIN = {};
+  for (const s of DATA.SUBCATEGORIES) (SUBS_BY_MAIN[DATA.RULES[s].main_category] ||= []).push(s);
+  $("f-sub").innerHTML = DATA.MAIN_CATEGORIES.map((m) =>
+    `<optgroup label="${m}">${SUBS_BY_MAIN[m].map((s) => `<option>${s}</option>`).join("")}</optgroup>`).join("");
+  const COLOR_ORDER = ["black", "white", "gray", "navy", "beige", "ivory", "brown", "khaki", "blue", "skyblue", "red", "pink", "orange", "yellow", "green", "purple"];
+  $("f-color").innerHTML = COLOR_ORDER.map((c) => `<option value="${c}">${KO[c]}</option>`).join("");
+  $("f-warmth").innerHTML = [1, 2, 3, 4, 5].map((n) => `<option value="${n}">${WARMTH_LABEL[n]}</option>`).join("");
+  let nameEdited = false, thumb = null;
+  function applySub(sub, keepWarmth) {
+    const r = DATA.RULES[sub];
+    $("f-sub").value = sub; $("f-main").value = r.main_category === "아우터" ? "아우터(겉옷)" : r.main_category;
+    if (!keepWarmth) { $("f-warmth").value = r.default_warmth; $("f-rain").checked = !!r.default_rain_ok; }
+    autoName();
+  }
+  function autoName() { if (!nameEdited) $("f-name").value = `${KO[$("f-color").value]} ${$("f-sub").value}`; }
+  $("f-sub").addEventListener("change", () => { applySub($("f-sub").value); markCand($("f-sub").value); });
+  $("f-color").addEventListener("change", autoName);
+  $("f-name").addEventListener("input", () => { nameEdited = $("f-name").value.trim() !== ""; });
+  applySub(DATA.SUBCATEGORIES[0]);
+
+  function markCand(sub) { for (const b of $("cands").children) b.setAttribute("aria-pressed", b.dataset.sub === sub); }
+  $("cands").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { applySub(b.dataset.sub); markCand(b.dataset.sub); } });
+
+  $("add-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const sub = $("f-sub").value, r = DATA.RULES[sub];
+    const name = $("f-name").value.trim() || `${KO[$("f-color").value]} ${sub}`;
+    state.items.push({ id: state.nextId++, name, category: r.main_category, subcategory: sub, color: $("f-color").value,
+      warmth: +$("f-warmth").value, rain_ok: $("f-rain").checked, material: "", active: true, starter: false, thumb });
+    update();
+    toast(`${name}을(를) 옷장에 추가했어요.`);
+    resetPhoto();
+  });
+  function resetPhoto() {
+    nameEdited = false; thumb = null;
+    $("preview").hidden = true; $("drop-text").hidden = false; $("cand-wrap").hidden = true; $("ai-status").textContent = "";
+    $("in-file").value = ""; applySub($("f-sub").value);
+  }
+
+  // 대표색: 사진 가운데 영역에서 가장 많이 나오는 색 (가장자리 배경과 가슴 프린트에 덜 흔들리도록)
+  function dominantColor(img) {
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d"); g.drawImage(img, 0, 0, 64, 64);
+    const d = g.getImageData(12, 12, 40, 40).data, bins = new Map();
+    for (let i = 0; i < d.length; i += 4) {
+      const key = (d[i] >> 5) * 64 + (d[i + 1] >> 5) * 8 + (d[i + 2] >> 5);
+      const b = bins.get(key) || [0, 0, 0, 0];
+      b[0]++; b[1] += d[i]; b[2] += d[i + 1]; b[3] += d[i + 2];
+      bins.set(key, b);
+    }
+    let best = null;
+    for (const b of bins.values()) if (!best || b[0] > best[0]) best = b;
+    const hex = "#" + [best[1], best[2], best[3]].map((v) => Math.round(v / best[0]).toString(16).padStart(2, "0")).join("");
+    return C.hexToName(hex) || "gray";
+  }
+  function makeThumb(img) {
+    const c = document.createElement("canvas"); c.width = c.height = 96;
+    const g = c.getContext("2d"), s = Math.min(img.naturalWidth, img.naturalHeight);
+    g.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, 96, 96);
+    try { return c.toDataURL("image/jpeg", 0.75); } catch (e) { return null; }
+  }
+
+  // AI 분류: 모델(8MB)을 처음 쓸 때 한 번 받아 작업자(Worker)에서 계산
+  let worker = null, modelState = "none", spec = null, pending = null, mainModel = null;
+  function makeWorker() {
+    const src = $("closetnet-src").textContent + `
+      let model = null;
+      self.onmessage = (e) => {
+        const m = e.data;
+        try {
+          if (m.type === "load") { model = ClosetNet.load(m.spec, m.buffer); self.postMessage({ type: "ready" }); }
+          else if (m.type === "run") {
+            const t0 = Date.now();
+            const p = ClosetNet.softmax(ClosetNet.forward(model, ClosetNet.preprocess(m.rgba, model.spec)));
+            self.postMessage({ type: "result", probs: p, ms: Date.now() - t0 });
+          }
+        } catch (err) { self.postMessage({ type: "error", message: String(err && err.message || err) }); }
+      };`;
+    return new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+  }
+  function b64ToBuffer(text) {
+    const bin = atob(text.trim()), u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u.buffer;
+  }
+  function ensureModel() {
+    if (modelState !== "none") return;
+    modelState = "loading";
+    $("ai-status").textContent = "AI 분류 모델을 불러오는 중이에요 (약 11MB, 처음 한 번만).";
+    Promise.all([fetch("model/closet_effnet_b0.json").then((r) => r.json()), fetch("model/closet_effnet_b0.f16.b64.txt").then((r) => r.text()).then(b64ToBuffer)])
+      .then(([s, buf]) => {
+        spec = s;
+        const useMain = () => { worker = null; mainModel = ClosetNet.load(s, buf); onWorker({ data: { type: "ready" } }); };
+        try {
+          worker = makeWorker();
+          worker.onmessage = onWorker;
+          worker.onerror = () => { if (modelState !== "ready") useMain(); };
+          const copy = buf.slice(0);
+          worker.postMessage({ type: "load", spec: s, buffer: copy }, [copy]);
+        } catch (err) { useMain(); }
+      })
+      .catch(() => { modelState = "failed"; $("ai-status").textContent = "AI 모델을 불러오지 못했어요. 세부분류와 색을 직접 골라 추가할 수 있어요."; });
+  }
+  function onWorker(e) {
+    const m = e.data;
+    if (m.type === "ready") {
+      modelState = "ready";
+      $("ai-status").textContent = "AI 분류 준비 완료. 옷 사진을 올려 보세요.";
+      if (pending) { classify(pending); pending = null; }
+    } else if (m.type === "result") showResult(m.probs, m.ms);
+    else if (m.type === "error") $("ai-status").textContent = "분류 중 문제가 생겼어요: " + m.message;
+  }
+  function classify(rgba) {
+    if (modelState === "failed") { $("ai-status").textContent = "AI 모델을 불러오지 못했어요. 세부분류와 색을 직접 골라 추가할 수 있어요."; return; }
+    if (modelState !== "ready") { pending = rgba; ensureModel(); $("ai-status").textContent = "모델을 불러온 뒤 바로 분석할게요."; return; }
+    $("ai-status").textContent = "AI가 옷 종류를 보는 중이에요 (1~3초).";
+    if (worker) { worker.postMessage({ type: "run", rgba }, [rgba.buffer]); return; }
+    setTimeout(() => {   // 작업자를 못 쓰는 환경: 화면이 먼저 그려지도록 한 박자 뒤에 계산
+      const t0 = Date.now();
+      const p = ClosetNet.softmax(ClosetNet.forward(mainModel, ClosetNet.preprocess(rgba, spec)));
+      showResult(p, Date.now() - t0);
+    }, 30);
+  }
+  function showResult(probs, ms) {
+    const order = probs.map((p, i) => [p, i]).sort((a, b) => b[0] - a[0]).slice(0, 3);
+    const top = spec.classes[order[0][1]], conf = order[0][0];
+    $("cands").innerHTML = order.map(([p, i]) =>
+      `<button class="chip" type="button" data-sub="${spec.classes[i]}" aria-pressed="false">${spec.classes[i]}<span class="num">${(p * 100).toFixed(0)}%</span></button>`).join("");
+    $("cand-wrap").hidden = false;
+    const sure = conf >= 0.7;
+    $("auto-badge").textContent = sure ? "자동 입력됨" : "후보 중에서 골라 주세요";
+    $("auto-badge").className = "auto" + (sure ? "" : " check");
+    applySub(top); markCand(top);
+    $("ai-status").textContent = `${top} ${(conf * 100).toFixed(0)}% · ${(ms / 1000).toFixed(1)}초 걸렸어요.`;
+  }
+  function handleFile(file) {
+    if (!file || !file.type.startsWith("image/")) { $("ai-status").textContent = "이미지 파일을 골라 주세요."; return; }
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      $("preview").src = url; $("preview").hidden = false; $("drop-text").hidden = true;
+      nameEdited = false;
+      $("f-color").value = dominantColor(img); thumb = makeThumb(img); autoName();
+      const c = document.createElement("canvas"); c.width = c.height = 224;
+      const g = c.getContext("2d"); g.imageSmoothingQuality = "high"; g.drawImage(img, 0, 0, 224, 224);
+      classify(new Uint8ClampedArray(g.getImageData(0, 0, 224, 224).data));
+    };
+    img.onerror = () => { $("ai-status").textContent = "이 사진은 열 수 없어요. JPG나 PNG로 다시 골라 주세요."; };
+    img.src = url;
+  }
+  $("in-file").addEventListener("change", (e) => handleFile(e.target.files[0]));
+  const drop = $("drop");
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); handleFile(e.dataTransfer.files[0]); });
+
+  // ---------------------------------------------------------------- 설정
+  $("genders").innerHTML = [["male", "남성"], ["female", "여성"]].map(([v, l]) => `<button type="button" data-g="${v}" aria-pressed="false">${l}</button>`).join("");
+  $("genders").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b || b.dataset.g === state.gender) return;
+    const g = b.dataset.g, label = g === "male" ? "남성" : "여성";
+    $("gender-confirm").innerHTML = `<div class="confirm"><span>스타터 옷장을 ${label}용으로 바꿀까요? 직접 추가한 옷은 그대로 둬요.</span>
+      <button class="btn primary" type="button" data-yes>바꾸기</button><button class="btn" type="button" data-no>취소</button></div>`;
+    $("gender-confirm").querySelector("[data-yes]").onclick = () => {
+      state.gender = g; state.items = [...starter(g), ...state.items.filter((x) => !x.starter)]; state.disliked = [];
+      $("gender-confirm").innerHTML = ""; update(); toast(`${label} 스타터 옷장으로 바꿨어요.`);
+    };
+    $("gender-confirm").querySelector("[data-no]").onclick = () => { $("gender-confirm").innerHTML = ""; };
+  });
+  $("thermals").innerHTML = THERMAL.map(([l], i) => `<label for="th-${i}"><input type="radio" id="th-${i}" name="thermal" value="${i}"> ${l}</label>`).join("");
+  $("thermals").addEventListener("change", (e) => { state.thermal = +e.target.value; update(); });
+  $("reset").addEventListener("click", () => {
+    $("reset-confirm").innerHTML = `<div class="confirm"><span>추가한 옷, 보유 표시, '별로' 기록이 모두 지워져요.</span>
+      <button class="btn danger" type="button" data-yes>전부 지우기</button><button class="btn" type="button" data-no>취소</button></div>`;
+    $("reset-confirm").querySelector("[data-yes]").onclick = () => { state = fresh(state.gender); $("reset-confirm").innerHTML = ""; update(); toast("처음 상태로 되돌렸어요."); };
+    $("reset-confirm").querySelector("[data-no]").onclick = () => { $("reset-confirm").innerHTML = ""; };
+  });
+  function renderSettings() {
+    for (const b of $("genders").children) b.setAttribute("aria-pressed", b.dataset.g === state.gender);
+    for (const r of $("thermals").querySelectorAll("input")) r.checked = +r.value === state.thermal;
+  }
+
+  function update() { syncWeatherInputs(); renderRec(); renderCloset(); renderSettings(); save(); }
+  update();
+  if (TABS[location.hash.slice(1)]) show(location.hash.slice(1));
+})();
+</script>
