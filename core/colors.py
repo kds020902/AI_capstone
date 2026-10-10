@@ -10,6 +10,13 @@ import re
 
 NEUTRALS = {"black", "white", "gray", "navy", "beige", "ivory", "brown", "khaki"}
 
+# 화면에 보일 한글 색 이름 (웹 체험판 web/src/closet.js 의 COLOR_KO 와 같음)
+COLOR_KO = {
+    "black": "검정", "white": "흰색", "gray": "회색", "navy": "네이비", "beige": "베이지", "ivory": "아이보리",
+    "brown": "브라운", "khaki": "카키", "blue": "파랑", "skyblue": "하늘색", "red": "빨강", "pink": "분홍",
+    "orange": "주황", "yellow": "노랑", "green": "초록", "purple": "보라",
+}
+
 # 유채색 비교용 기준색 (RGB)
 _PALETTE = {
     "navy": (30, 40, 80),
@@ -106,7 +113,8 @@ def color_score(pieces):
     if n == 0:
         return 0.95, "무채색 위주라 무난한 색 조합입니다."
     if n == 1:
-        return 1.0, f"무채색에 포인트 컬러({next(iter(accents))}) 하나를 더한 조합입니다."
+        accent = next(iter(accents))
+        return 1.0, f"무채색에 포인트 컬러({COLOR_KO.get(accent, accent)}) 하나를 더한 조합입니다."
     if n == 2:
         if accents in ({"blue", "skyblue"}, {"red", "pink"}):
             return 0.9, "같은 계열 색을 겹친 톤온톤 조합입니다."

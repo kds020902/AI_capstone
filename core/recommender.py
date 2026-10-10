@@ -9,6 +9,8 @@
    (목적에 맞는지는 2)의 하드 필터가 맡는다 — 운동엔 러닝화, 격식엔 셔츠·슬랙스·로퍼 등)
 4) TOP-K 다양화: 신발만 다른 코디를 같이 내보내지 않음
    동점은 seed로 섞어서 깬다 (등록 순서로 깨면 같은 옷만 반복되고 원피스가 늘 뒤로 밀림)
+5) 일교차: 귀가 전까지 가장 추운 때(later)가 지금보다 LATER_DROP 이상 추우면, 코디마다
+   그때 입을 겉옷을 옷장에서 골라 '챙기세요'로 안내 (코디 자체는 지금 날씨 기준)
 
 코디 구성: 원피스+신발 2벌 ~ 이너+상의+하의+겉옷+신발 5벌.
 상의 겹쳐 입기는 LAYER_PAIRS 조합만, 유효 기온 LAYER_MAX_TEMP 미만에서만.
@@ -52,6 +54,8 @@ RAIN_SHIFT = -1.0        # 20℃ 미만에서 비 오면 더 춥게 느낌
 OUTER_REQUIRED_AT = 12.0  # 유효 기온이 이 이하면 겉옷 필수
 LAYER_MAX_TEMP = 24.0    # 유효 기온이 이 이상이면 상의를 겹쳐 입히지 않음
 WARMTH_TOLERANCE = 1.5   # 목표와 보온값 차이가 이만큼 나면 날씨 점수 0
+LATER_DROP = 3.0         # 귀가 전 가장 추울 때의 유효 기온이 지금보다 이만큼 이상 낮을 때만 따로 안내
+LATER_GAP = 0.35         # 그때 목표 보온값보다 이만큼 넘게 모자라면 '추울 수 있다'고 본다 (이유 문구 기준과 같음)
 MAX_COMBOS = 60000
 
 CAT_LABEL = {"상의": "상의", "하의": "하의", "원피스": "원피스", "아우터": "겉옷", "신발": "신발"}
@@ -266,13 +270,67 @@ def _score(pieces, ctx):
     return round(max(0.0, min(1.0, final)), 4), reasons, components
 
 
-def _context(temperature, apparent_temperature, rain, purpose, cold, heat):
+def _context(temperature, apparent_temperature, rain, purpose, cold, heat, later=None):
     eff, adj = effective_temperature(temperature, apparent_temperature, rain, purpose, cold, heat)
-    return {
+    ctx = {
         "eff": eff, "adjustments": adj, "target": target_warmth(eff), "rain": bool(rain),
         "purpose": purpose,
         "base_temp": apparent_temperature if apparent_temperature is not None else temperature,
+        "later": None,
     }
+    if later:
+        l_app = later.get("apparent_temperature")
+        l_eff, _ = effective_temperature(later["temperature"], l_app, rain, purpose, cold, heat)
+        ctx["later"] = {"label": later.get("label") or "저녁", "eff": l_eff, "target": target_warmth(l_eff),
+                        "base_temp": l_app if l_app is not None else later["temperature"]}
+    return ctx
+
+
+def _later_advice(pieces, ctx, outers):
+    """(챙길 겉옷 or None, 안내 문구) 또는 None. 귀가 전 가장 추울 때 이 코디로 모자라면 옷장에서 겉옷을 고른다."""
+    lt = ctx["later"]
+    if not lt or lt["eff"] > ctx["eff"] - LATER_DROP:
+        return None
+    has_outer = any(p["category"] == "아우터" for p in pieces)
+    short = lt["target"] - outfit_warmth(pieces) > LATER_GAP
+    if not (short or (not has_outer and lt["eff"] <= OUTER_REQUIRED_AT)):
+        return None
+    when = f"{lt['label']}쯤 체감 {lt['eff']:.0f}℃까지 내려가요."
+
+    def fit(base, o):  # 그때 목표 보온값에 가까울수록, 같으면 색이 잘 어울릴수록, 그래도 같으면 id 순
+        return (round(abs(outfit_warmth(base + [o]) - lt["target"]), 6), -color_score(base + [o])[0], int(o["id"]))
+
+    if has_outer:  # 입고 있는 겉옷보다 두껍고 그때 더 잘 맞는 겉옷이 있으면 그걸 입고 나가라고 안내
+        cur = next(p for p in pieces if p["category"] == "아우터")
+        rest = [p for p in pieces if p is not cur]
+        gap = round(abs(outfit_warmth(pieces) - lt["target"]), 6)
+        better = [o for o in outers if int(o["id"]) != int(cur["id"]) and _level(o) > _level(cur)
+                  and _purpose_ok(o, ctx["purpose"]) and _temp_ok(o, lt["eff"]) and _pairs_ok(rest + [o])
+                  and fit(rest, o)[0] < gap]
+        if not better:
+            return None, f"{when} {cur['name']}만으로는 조금 추울 수 있으니 안에 한 겹 더 챙기세요."
+        best = min(better, key=lambda o: fit(rest, o))
+        return best, (f"{when} {cur['name']}보다 {best['name']}{_josa(best['name'])} 더 따뜻해요. "
+                      f"늦게까지 밖에 있으면 {best['name']}{_josa(best['name'], '을', '를')} 입고 나가세요.")
+    ok = [o for o in outers if _purpose_ok(o, ctx["purpose"]) and _pairs_ok(pieces + [o])]
+    cands = [o for o in ok if _temp_ok(o, lt["eff"])] or ok
+    if not cands:
+        return None, f"{when} 챙길 만한 겉옷이 옷장에 없어요."
+    best = min(cands, key=lambda o: fit(pieces, o))
+    return best, f"{when} {best['name']}{_josa(best['name'], '을', '를')} 챙기세요."
+
+
+def _attach_later(result, ctx, outers):
+    """결과에 carry(챙길 겉옷)를 달고, 안내 문구를 기온 이유 바로 뒤에 넣는다."""
+    result["carry"] = None
+    if not ctx["later"]:
+        return
+    result["components"]["later_effective_temp"] = round(ctx["later"]["eff"], 1)
+    advice = _later_advice(result["pieces"], ctx, outers)
+    if advice:
+        result["carry"], text = advice
+        at = next((i + 1 for i, r in enumerate(result["reasons"]) if r.startswith("체감 ")), len(result["reasons"]))
+        result["reasons"].insert(at, text)
 
 
 def score_outfit(pieces, temperature, apparent_temperature, humidity, precipitation, rain, wind_speed,
@@ -318,12 +376,17 @@ def _pick_diverse(scored, k):
 
 # ---------------------------------------------------------------- 메인
 def recommend(items, temperature, apparent_temperature, humidity, precipitation, rain, wind_speed,
-              purpose, cold_sensitivity, heat_sensitivity, top_k=3, exclude_keys=None, seed=0):
-    """반환: {"results": [...], "warnings": [...], "context": {...}}
+              purpose, cold_sensitivity, heat_sensitivity, top_k=3, exclude_keys=None, seed=0, later=None,
+              must_include=None):
+    """반환: {"results": [...], "warnings": [...], "context": {...}, "n_combos": 후보 코디 수}
 
     seed: 동점 코디의 순서를 정하는 값. 앱은 '사용자-날짜'를 넘겨 날마다 다른 동점 코디가 나오게 한다.
+    later: 귀가 전까지 가장 추운 때 {"temperature", "apparent_temperature", "label": "21시"}. 주면 결과마다
+           carry(챙길 겉옷 or None)를 달고 이유에 안내 문구를 넣는다.
+    must_include: 이 id의 옷이 들어간 코디만 (사기 전에 맞춰보기). 이때는 조합·'별로' 규칙을 완화하지 않고,
+                  후보 코디 목록을 "combo_keys"(옷 id 목록)로도 돌려준다.
     """
-    ctx = _context(temperature, apparent_temperature, rain, purpose, cold_sensitivity, heat_sensitivity)
+    ctx = _context(temperature, apparent_temperature, rain, purpose, cold_sensitivity, heat_sensitivity, later)
     eff = ctx["eff"]
     warnings = []
     usable = [x for x in items if x.get("category") in WARMTH_CONTRIB]
@@ -361,10 +424,14 @@ def recommend(items, temperature, apparent_temperature, humidity, precipitation,
         warnings.append(f"체감 {eff:.0f}℃인데 두꺼운 겉옷(코트·패딩)이 옷장에 없어 보온이 부족할 수 있어요.")
 
     if not pools["신발"] or not ((pools["상의"] and pools["하의"]) or pools["원피스"]):
-        return {"results": [], "warnings": warnings + ["추천에 필요한 옷 조합(상의+하의+신발 또는 원피스+신발)이 없습니다."],
-                "context": ctx}
+        out = {"results": [], "warnings": warnings + ["추천에 필요한 옷 조합(상의+하의+신발 또는 원피스+신발)이 없습니다."],
+               "context": ctx, "n_combos": 0}
+        if must_include is not None:
+            out["combo_keys"] = []
+        return out
 
-    pools = _prune(pools, eff)
+    if must_include is None:  # 특정 옷을 꼭 넣을 때는 덜어내지 않는다 (그 옷이 빠질 수 있어서)
+        pools = _prune(pools, eff)
     outers = pools["아우터"] if outer_required else [None] + pools["아우터"]
 
     def combos():
@@ -374,15 +441,21 @@ def recommend(items, temperature, apparent_temperature, humidity, precipitation,
             yield [dress] + ([outer] if outer else []) + [shoe]
 
     candidates = list(combos())
-    paired = [c for c in candidates if _pairs_ok(c)]
-    if not paired:
-        warnings.append("옷장 구성상 평소엔 피하는 조합도 포함했어요.")
-        paired = candidates
     exclude_keys = set(exclude_keys or ())
-    kept = [c for c in paired if outfit_key(c) not in exclude_keys]
-    if not kept:
-        warnings.append("'별로'를 누른 조합을 빼면 추천할 코디가 없어 다시 포함했어요.")
-        kept = paired
+    if must_include is not None:
+        kept = [c for c in candidates if any(int(p["id"]) == int(must_include) for p in c)
+                and _pairs_ok(c) and outfit_key(c) not in exclude_keys]
+    else:
+        paired = [c for c in candidates if _pairs_ok(c)]
+        if not paired:
+            warnings.append("옷장 구성상 평소엔 피하는 조합도 포함했어요.")
+            paired = candidates
+        kept = [c for c in paired if outfit_key(c) not in exclude_keys]
+        if not kept:
+            warnings.append("'별로'를 누른 조합을 빼면 추천할 코디가 없어 다시 포함했어요.")
+            kept = paired
+    n_combos = len(kept)
+    combo_keys = sorted(sorted(int(p["id"]) for p in c) for c in kept) if must_include is not None else None
 
     random.Random(seed).shuffle(kept)  # 이후 안정 정렬 → 동점끼리는 섞인 순서 유지
     scored = []
@@ -390,14 +463,21 @@ def recommend(items, temperature, apparent_temperature, humidity, precipitation,
         score, reasons, components = _score(pieces, ctx)
         scored.append({"score": score, "pieces": pieces, "reasons": reasons, "components": components})
     scored.sort(key=lambda r: r["score"], reverse=True)
-    return {"results": _pick_diverse(scored, top_k), "warnings": warnings, "context": ctx}
+    results = _pick_diverse(scored, top_k)
+    outer_items = [x for x in usable if x["category"] == "아우터"]
+    for r in results:
+        _attach_later(r, ctx, outer_items)
+    out = {"results": results, "warnings": warnings, "context": ctx, "n_combos": n_combos}
+    if combo_keys is not None:
+        out["combo_keys"] = combo_keys
+    return out
 
 
 def recommend_outfits(items, temperature, apparent_temperature, humidity, precipitation, rain, wind_speed,
-                      purpose, cold_sensitivity, heat_sensitivity, top_k=3, exclude_keys=None, seed=0):
+                      purpose, cold_sensitivity, heat_sensitivity, top_k=3, exclude_keys=None, seed=0, later=None):
     """결과 리스트만 반환."""
     return recommend(items, temperature, apparent_temperature, humidity, precipitation, rain, wind_speed,
-                     purpose, cold_sensitivity, heat_sensitivity, top_k, exclude_keys, seed)["results"]
+                     purpose, cold_sensitivity, heat_sensitivity, top_k, exclude_keys, seed, later)["results"]
 
 
 def explain_score_breakdown(c, purpose=None):

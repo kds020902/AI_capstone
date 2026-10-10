@@ -7,7 +7,6 @@ data/uploads/*
 !data/uploads/.gitkeep
 models/*.pt
 !models/clothing_classifier.pt
-models/*.joblib
 raw/
 open_csv/
 dataset_sub/

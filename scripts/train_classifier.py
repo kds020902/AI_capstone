@@ -1,13 +1,12 @@
 """EfficientNet-B0 의류 분류기 학습.
 
 데이터 폴더는 scripts/prepare_dataset.py 로 만든다.
-  dataset_main/train/상의, 하의, 원피스, 아우터, 신발          (--task main)
-  dataset_sub/train/반팔 티셔츠, 긴팔 티셔츠, ... 부츠          (--task subcategory, 33종)
+  dataset_sub/train/반팔 티셔츠, 긴팔 티셔츠, ... 플랫슈즈      (42종)
 
 사용 예
-  python scripts/train_classifier.py --data dataset_sub --task subcategory --epochs 10
-  python scripts/train_classifier.py --data dataset_sub --task subcategory --epochs 10 --unfreeze-blocks 2
-  python scripts/train_classifier.py --data dataset_sub --task subcategory --cache-features   # GPU 없을 때
+  python scripts/train_classifier.py --data dataset_sub --epochs 10
+  python scripts/train_classifier.py --data dataset_sub --epochs 10 --unfreeze-blocks 2
+  python scripts/train_classifier.py --data dataset_sub --cache-features --unfreeze-blocks 2 --epochs 15   # GPU 없을 때
 
 동작
 - 학습 전 클래스명 검사: 규칙표에 없는 클래스 폴더가 있으면 중단
@@ -28,11 +27,13 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from core.taxonomy import MAIN_CATEGORIES, SUBCATEGORY_TO_MAIN  # noqa: E402
+from core.taxonomy import SUBCATEGORY_TO_MAIN  # noqa: E402
+
+TASK = "subcategory"  # 체크포인트에 같이 저장 (앱이 모델 종류를 표시할 때 씀)
 
 
-def check_classes(train_classes, val_classes, task):
-    known = set(SUBCATEGORY_TO_MAIN) if task == "subcategory" else set(MAIN_CATEGORIES)
+def check_classes(train_classes, val_classes):
+    known = set(SUBCATEGORY_TO_MAIN)
     unknown = [c for c in train_classes if c not in known]
     if unknown:
         raise SystemExit(f"규칙표(data/clothing_taxonomy.csv)에 없는 클래스 폴더: {unknown}")
@@ -185,7 +186,7 @@ def train_cached(args, train_ds, val_ds, out, models_dir):
         tail.load_state_dict(best_tail)
     model.classifier[1] = nn.Linear(in_features, k)
     model.classifier[1].load_state_dict({"weight": best_head["1.weight"], "bias": best_head["1.bias"]})
-    torch.save({"state_dict": model.state_dict(), "classes": train_ds.classes, "task": args.task,
+    torch.save({"state_dict": model.state_dict(), "classes": train_ds.classes, "task": TASK,
                 "val_accuracy": best_acc, "val_macro_accuracy": best,
                 "mode": f"cached-features, unfreeze={n_free}"}, out)
     save_reports(models_dir, train_ds.classes, best_conf)
@@ -196,7 +197,6 @@ def train_cached(args, train_ds, val_ds, out, models_dir):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--data", required=True)
-    p.add_argument("--task", choices=["main", "subcategory"], default="subcategory")
     p.add_argument("--epochs", type=int, default=5)
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--lr", type=float, default=1e-3)
@@ -222,7 +222,7 @@ def main():
         transforms.ToTensor(), norm,
     ]))
     val_ds = datasets.ImageFolder(root / "val", transform=plain)
-    check_classes(train_ds.classes, val_ds.classes, args.task)
+    check_classes(train_ds.classes, val_ds.classes)
 
     models_dir = ROOT / "models"
     models_dir.mkdir(exist_ok=True)
@@ -279,7 +279,7 @@ def main():
             best = acc
             torch.save({
                 "state_dict": model.state_dict(), "classes": train_ds.classes,
-                "task": args.task, "val_accuracy": acc, "val_macro_accuracy": macro,
+                "task": TASK, "val_accuracy": acc, "val_macro_accuracy": macro,
             }, out)
             save_reports(out.parent, train_ds.classes, confusion)
             print("saved:", out)

@@ -9,10 +9,15 @@ from PIL import Image
 
 from core import db
 from core.care import get_care_guide
+from core.colors import COLOR_KO, normalize_color
 from core.recommender import recommend, explain_score_breakdown
-from core.taxonomy import MAIN_CATEGORIES, NUM_SUBCATEGORIES, RULES, SUBCATEGORIES, main_category_for_subcategory
+from core.shopping import candidate_report
+from core.taxonomy import (
+    MAIN_CATEGORIES, NUM_SUBCATEGORIES, PURPOSES, RULES, SEASONS, SUBCATEGORIES, current_season, item_seasons,
+    main_category_for_subcategory, manual_seasons, season_label, seasons_for,
+)
 from core.vision import classify_clothing_image, dominant_color_hex, dominant_color_name, model_status
-from core.weather import CITY_PRESETS, get_current_weather
+from core.weather import CITY_PRESETS, RETURN_HOURS, coldest_until, get_current_weather
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT / "data" / "uploads"
@@ -55,6 +60,17 @@ THERMAL_TO_SENSITIVITY = {
 THERMAL_FEEDBACK = {None: "응답 안 함", -2: "매우 추움", -1: "약간 추움", 0: "적당함", 1: "약간 더움", 2: "매우 더움"}
 
 
+@st.cache_data(show_spinner=False, max_entries=64)
+def cached_candidate_report(cand, items, cold, heat):
+    return candidate_report(cand, items, cold, heat)
+
+
+def score_cell(cell, improved):
+    if cell["best"] is None:
+        return "–"
+    return f"{cell['best'] * 100:.0f}점" + (" ▲" if improved else "")
+
+
 def thermal_label(cold, heat):
     cold, heat = float(cold), float(heat)
     if cold >= 0.8:
@@ -88,11 +104,10 @@ if st.session_state.active_user_id != st.session_state.user_id:
     st.session_state.rec_meta = None
     st.session_state.last_ai_result = None
 
-page = st.sidebar.radio("메뉴", ["홈", "프로필", "내 옷장", "오늘의 추천", "저장 코디", "KPI·데이터"])
+page = st.sidebar.radio("메뉴", ["홈", "프로필", "내 옷장", "오늘의 추천", "사기 전에 맞춰보기", "저장 코디", "KPI·데이터"])
 st.sidebar.divider()
 status = model_status()
 st.sidebar.caption(f"의류 분류: {status['classifier']}")
-st.sidebar.caption(f"추천 랭커: {status['ranker']}")
 
 # ------------------------------------------------------------------ 홈
 if page == "홈":
@@ -165,12 +180,29 @@ elif page == "내 옷장":
 
     with tab1:
         items = db.list_wardrobe_items(user["id"], active_only=True)
-        c1, c2 = st.columns(2)
+        season_now = current_season(date.today().month)
+        with st.expander(f"계절 정리 · 지금은 {season_now}"):
+            season = st.radio("계절", SEASONS, index=SEASONS.index(season_now), horizontal=True, key="tidy_season")
+            off = [x for x in items if season not in item_seasons(x)]
+            back = [x for x in db.list_inactive_items(user["id"]) if season in item_seasons(x)]
+            c1, c2 = st.columns(2)
+            if c1.button(f"{season}에 안 입는 옷 {len(off)}벌 넣어두기", disabled=not off):
+                db.set_items_active([x["id"] for x in off], user["id"], False)
+                st.rerun()
+            if c2.button(f"넣어 둔 옷 중 {season} 옷 {len(back)}벌 꺼내기", disabled=not back):
+                db.set_items_active([x["id"] for x in back], user["id"], True)
+                st.rerun()
+            st.caption("넣어 둔 옷은 추천에 쓰지 않아요. 아래 '넣어 둔 옷'에서 한 벌씩 꺼낼 수도 있어요.")
+
+        c1, c2, c3 = st.columns(3)
         category_filter = c1.selectbox("카테고리", ["전체"] + MAIN_CATEGORIES)
-        search = c2.text_input("이름/세부분류 검색")
+        season_filter = c2.selectbox("계절", ["전체"] + SEASONS)
+        search = c3.text_input("이름/세부분류 검색")
         filtered = items
         if category_filter != "전체":
             filtered = [x for x in filtered if x["category"] == category_filter]
+        if season_filter != "전체":
+            filtered = [x for x in filtered if season_filter in item_seasons(x)]
         if search.strip():
             q = search.lower()
             filtered = [x for x in filtered if q in x["name"].lower() or q in str(x.get("subcategory") or "").lower()]
@@ -187,11 +219,21 @@ elif page == "내 옷장":
                         st.markdown(f"### {item['name']}")
                         st.caption(
                             f"{item['category']} / {item.get('subcategory') or '세부분류 없음'} · "
-                            f"두께 {item['warmth']}/5"
+                            f"두께 {item['warmth']}/5 · {season_label(item_seasons(item))}"
+                            + (" (직접 지정)" if manual_seasons(item) else "")
                         )
                         st.write(f"색상: {item['color'] or '-'} · 비 적합: {'O' if item['rain_ok'] else 'X'}")
                         if item.get("material"):
                             st.caption(f"세탁: {get_care_guide(item['material'])['text']}")
+                        with st.popover("계절 수정"):
+                            picked = st.multiselect("입는 계절", SEASONS, default=item_seasons(item),
+                                                    key=f"season_{item['id']}")
+                            if st.button("저장", key=f"season_save_{item['id']}"):
+                                same_as_auto = picked == seasons_for(item.get("subcategory"))
+                                db.update_item_seasons(item["id"], user["id"], None if same_as_auto else picked)
+                                st.rerun()
+                            st.caption(f"자동: {season_label(seasons_for(item.get('subcategory')))} (옷 종류 기준). "
+                                       "전부 지우고 저장하면 자동으로 돌아가요.")
                         c_a, c_b = st.columns(2)
                         if c_a.button("비활성화", key=f"off_{item['id']}"):
                             db.deactivate_item(item["id"], user["id"])
@@ -202,12 +244,13 @@ elif page == "내 옷장":
 
         # 비활성화한 옷 다시 활성화
         inactive = db.list_inactive_items(user["id"])
-        with st.expander(f"비활성화한 옷 ({len(inactive)}개)"):
+        with st.expander(f"넣어 둔 옷 · 비활성화 ({len(inactive)}개)"):
             if not inactive:
-                st.caption("비활성화한 옷이 없습니다.")
+                st.caption("넣어 둔 옷이 없습니다.")
             for item in inactive:
                 c_a, c_b = st.columns([4, 1])
-                c_a.write(f"{item['name']} · {item['category']} / {item.get('subcategory') or '-'}")
+                c_a.write(f"{item['name']} · {item['category']} / {item.get('subcategory') or '-'} · "
+                          f"{season_label(item_seasons(item))}")
                 if c_b.button("다시 활성화", key=f"on_{item['id']}"):
                     db.reactivate_item(item["id"], user["id"])
                     st.rerun()
@@ -300,9 +343,13 @@ elif page == "오늘의 추천":
 
     mode = st.radio("날씨", ["자동 조회", "수동 입력"], horizontal=True)
     temperature, humidity, apparent, precipitation, rain, wind, source = 22.0, 70.0, 22.0, 0.0, False, 8.0, "manual"
+    later = None  # 귀가 전 가장 추운 때 → 추천마다 '챙길 겉옷' 안내
 
     if mode == "자동 조회":
-        city = st.selectbox("도시", list(CITY_PRESETS))
+        c1, c2 = st.columns(2)
+        city = c1.selectbox("도시", list(CITY_PRESETS))
+        return_hour = c2.select_slider("귀가 예정", RETURN_HOURS, value=22,
+                                       format_func=lambda h: "자정" if h == 24 else f"{h}시")
         lat, lon = CITY_PRESETS[city]
         if st.button("현재 날씨 불러오기"):
             st.session_state.weather_cache = get_current_weather(lat, lon)
@@ -315,11 +362,14 @@ elif page == "오늘의 추천":
             rain = data["rain"] > 0 or precipitation > 0
             wind = data["wind_speed"]
             source = data["source"]
-            c1, c2, c3, c4 = st.columns(4)
+            later = coldest_until(data, return_hour)
+            c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("기온", f"{temperature:.1f}℃")
             c2.metric("체감", f"{apparent:.1f}℃")
             c3.metric("습도", f"{humidity:.0f}%")
             c4.metric("풍속", f"{wind:.1f} km/h")
+            if later:
+                c5.metric(f"귀가 전 최저 체감 ({later['label']})", f"{later['apparent_temperature']:.1f}℃")
         elif data:
             st.warning(data["message"])
         else:
@@ -333,6 +383,10 @@ elif page == "오늘의 추천":
         rain = c4.checkbox("비가 옴")
         precipitation = c5.number_input("강수량(mm)", 0.0, 100.0, 0.0, 0.5)
         wind = c6.slider("풍속(km/h)", 0.0, 60.0, 8.0, 0.5)
+        c7, c8 = st.columns(2)
+        if c7.checkbox("저녁 늦게까지 밖에 있어요"):
+            later_app = c8.slider("저녁 체감온도", -15.0, 45.0, max(-15.0, apparent - 6), 0.5)
+            later = {"temperature": later_app, "apparent_temperature": later_app, "label": "저녁"}
 
     purpose = st.selectbox("외출 목적", ["등교", "데이트", "운동", "격식"])
     cold = float(user["cold_sensitivity"])
@@ -344,6 +398,7 @@ elif page == "오늘의 추천":
             purpose, cold, heat, 3,
             exclude_keys=db.disliked_item_sets(user["id"]),
             seed=f"{user['id']}-{date.today().isoformat()}",  # 같은 날엔 같은 결과, 날마다 동점 코디가 바뀜
+            later=later,
         )
         sid = db.create_recommendation_session(
             user["id"], purpose, temperature, apparent,
@@ -361,6 +416,10 @@ elif page == "오늘의 추천":
         ctx = meta["context"]
         adj = ", ".join(f"{label} {delta:+.0f}℃" for label, delta in ctx["adjustments"]) or "보정 없음"
         st.caption(f"유효 기온: 체감 {ctx['base_temp']:.1f}℃ → ({adj}) → **{ctx['eff']:.1f}℃** 기준으로 추천")
+        if ctx.get("later"):
+            lt = ctx["later"]
+            st.caption(f"{lt['label']}: 체감 {lt['base_temp']:.1f}℃ → 유효 **{lt['eff']:.1f}℃** "
+                       f"(지금보다 {ctx['eff'] - lt['eff']:.1f}℃ 낮음)")
     for w in meta.get("warnings", []):
         st.warning(w)
     if results == []:
@@ -371,6 +430,8 @@ elif page == "오늘의 추천":
             with st.container(border=True):
                 st.markdown(f"## {rank}위 · {result['score']*100:.1f}%")
                 st.write(" + ".join(p["name"] for p in result["pieces"]))
+                if result.get("carry"):
+                    st.markdown(f"🧥 **저녁 대비 겉옷:** {result['carry']['name']}")
                 for reason in result["reasons"]:
                     st.write(f"- {reason}")
                 with st.expander("점수 근거"):
@@ -398,6 +459,104 @@ elif page == "오늘의 추천":
                     if st.button("피드백 저장", key=f"f_{rid}"):
                         db.upsert_feedback(user["id"], rid, worn=worn, thermal_feedback=thermal, satisfaction=rating)
                         st.success("저장했습니다.")
+
+# ------------------------------------------------------------------ 사기 전에 맞춰보기
+elif page == "사기 전에 맞춰보기":
+    st.title("사기 전에 맞춰보기")
+    st.caption("쇼핑몰 상품 사진이나 화면 캡처를 올리면 지금 옷장과 맞춰 봐요. 옷장에는 넣지 않고 '구매 후보'로 따로 둬요.")
+    user = current_user()
+    if not user:
+        st.stop()
+    items = db.list_wardrobe_items(user["id"], active_only=True)
+    candidates = db.list_candidates(user["id"])
+
+    with st.expander("구매 후보 추가", expanded=not candidates):
+        up = st.file_uploader("상품 사진 또는 캡처 (JPG/PNG)", type=["jpg", "jpeg", "png"], key="cand_upload")
+        cand_ai, cand_color = None, ""
+        if up:
+            cand_image = Image.open(up).convert("RGB")
+            st.image(cand_image, width=220)
+            cand_color = dominant_color_name(cand_image) or ""
+            ai_key = f"cand_ai_{up.file_id}"  # 다시 그릴 때마다 분류하지 않도록
+            if ai_key not in st.session_state:
+                st.session_state[ai_key] = classify_clothing_image(cand_image)
+            cand_ai = st.session_state[ai_key]
+            if cand_ai.get("ok"):
+                st.caption(f"AI: {cand_ai['subcategory']} ({cand_ai['confidence'] * 100:.0f}%) · 색 {COLOR_KO.get(cand_color, cand_color)}")
+            else:
+                st.caption(cand_ai["message"])
+        ai_sub = cand_ai.get("subcategory") if cand_ai and cand_ai.get("ok") else None
+        c1, c2 = st.columns(2)
+        cand_sub = c1.selectbox("종류", SUBCATEGORIES,
+                                index=SUBCATEGORIES.index(ai_sub) if ai_sub in SUBCATEGORIES else 0, key=f"cand_sub_{ai_sub}")
+        colors = list(COLOR_KO)
+        cand_color = c2.selectbox("색", colors, index=colors.index(cand_color) if cand_color in colors else 0,
+                                  format_func=lambda c: COLOR_KO[c], key=f"cand_color_{cand_color}")
+        rule = RULES[cand_sub]
+        c3, c4 = st.columns(2)
+        cand_warmth = c3.slider("두께/보온", 1, 5, rule["default_warmth"], key=f"cand_w_{cand_sub}")
+        cand_rain = c4.checkbox("비 오는 날 부담이 적음", value=rule["default_rain_ok"], key=f"cand_r_{cand_sub}")
+        cand_name = st.text_input("이름", value=f"{COLOR_KO[cand_color]} {cand_sub}", key=f"cand_name_{cand_color}_{cand_sub}")
+        cand_link = st.text_input("상품 링크 (선택, 메모용)", key="cand_link")
+        if st.button("구매 후보로 저장", type="primary", disabled=not cand_name.strip()):
+            path = ""
+            if up:
+                path = str(UPLOAD_DIR / f"cand_{user['id']}_{int(time.time() * 1000)}{Path(up.name).suffix.lower()}")
+                Image.open(up).convert("RGB").save(path)
+            db.create_candidate(user["id"], cand_name.strip(), main_category_for_subcategory(cand_sub), cand_sub,
+                                cand_color, cand_warmth, cand_rain, image_path=path, link=cand_link.strip(),
+                                ai_subcategory=ai_sub, ai_confidence=cand_ai.get("confidence") if cand_ai else None)
+            st.rerun()
+
+    if not candidates:
+        st.info("아직 구매 후보가 없어요. 위에서 상품 사진을 올려 보세요.")
+        st.stop()
+    season_now = current_season(date.today().month)
+    c1, c2 = st.columns(2)
+    view_season = c1.radio("코디를 볼 계절", SEASONS, index=SEASONS.index(season_now), horizontal=True)
+    view_purpose = c2.radio("외출 목적", PURPOSES, horizontal=True)
+    cold, heat = float(user["cold_sensitivity"]), float(user["heat_sensitivity"])
+    owned = {x["id"]: x["name"] for x in items}
+    VERDICT_BOX = {"dup": st.warning, "none": st.error, "gap": st.success, "fit": st.info}
+
+    for cand in candidates:
+        rep = cached_candidate_report(cand, items, cold, heat)
+        with st.container(border=True):
+            c_img, c_body = st.columns([1, 3])
+            if cand["image_path"] and Path(cand["image_path"]).exists():
+                c_img.image(cand["image_path"])
+            with c_body:
+                st.markdown(f"### {cand['name']}")
+                st.caption(f"{cand['category']} / {cand['subcategory']} · {COLOR_KO.get(normalize_color(cand['color']), cand['color'])} · "
+                           f"두께 {cand['warmth']}/5 · {season_label(rep['seasons'])}"
+                           + (f" · [상품 링크]({cand['link']})" if cand["link"] else ""))
+                VERDICT_BOX[rep["verdict"][0]](rep["verdict"][1])
+                if rep["similar"]["same_type"]:
+                    st.caption("같은 종류로 가진 옷: " + ", ".join(x["name"] for x in rep["similar"]["same_type"]))
+                if rep["partners"]:
+                    st.caption(f"어울리는 내 옷 {len(rep['partners'])}벌: "
+                               + ", ".join(owned[i] for i in rep["partners"][:8] if i in owned)
+                               + (" …" if len(rep["partners"]) > 8 else ""))
+            gain = {(x["season"], x["purpose"]) for x in rep["improves"]}
+            table = pd.DataFrame([[score_cell(rep["cells"][(s, p)], (s, p) in gain) for p in PURPOSES] for s in SEASONS],
+                                 index=SEASONS, columns=PURPOSES)
+            st.caption("상황별 최고 코디 점수 (– 는 이 옷을 입기 어려운 상황, ▲ 는 이 옷이 있으면 점수가 오르는 상황)")
+            st.dataframe(table, use_container_width=True)
+            cell = rep["cells"][(view_season, view_purpose)]
+            if cell["results"]:
+                st.markdown(f"**{view_season} · {view_purpose} 코디 (체감 {cell['temp']}℃ 기준)**")
+                for r in cell["results"]:
+                    st.write(f"- {r['score'] * 100:.0f}점 · " + " + ".join(p["name"] for p in r["pieces"]))
+            else:
+                st.caption(f"{view_season} · {view_purpose}에는 이 옷으로 만들 코디가 없어요.")
+            c_a, c_b = st.columns(2)
+            if c_a.button("샀어요 · 옷장에 넣기", key=f"buy_{cand['id']}"):
+                db.buy_candidate(cand["id"], user["id"])
+                st.toast(f"{cand['name']}을(를) 옷장에 넣었어요.")
+                st.rerun()
+            if c_b.button("후보에서 지우기", key=f"cdel_{cand['id']}"):
+                db.delete_candidate(cand["id"], user["id"])
+                st.rerun()
 
 # ------------------------------------------------------------------ 저장 코디
 elif page == "저장 코디":
@@ -430,10 +589,3 @@ elif page == "KPI·데이터":
         st.dataframe(logs, use_container_width=True, hide_index=True)
         st.download_button("추천 로그 CSV", logs.to_csv(index=False).encode("utf-8-sig"),
                            f"user_{user['id']}_logs.csv", "text/csv")
-
-    train_df = db.build_ranker_training_dataframe(user["id"])
-    if not train_df.empty:
-        st.subheader("랭커 학습 데이터")
-        st.dataframe(train_df, use_container_width=True, hide_index=True)
-        st.download_button("랭커 학습 CSV", train_df.to_csv(index=False).encode("utf-8-sig"),
-                           f"ranker_user_{user['id']}.csv", "text/csv")

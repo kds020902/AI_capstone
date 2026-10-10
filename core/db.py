@@ -67,6 +67,7 @@ def init_db():
                 ai_category TEXT,
                 ai_subcategory TEXT,
                 ai_confidence REAL,
+                seasons TEXT,
                 active INTEGER NOT NULL DEFAULT 1,
                 deleted INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
@@ -125,6 +126,25 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 FOREIGN KEY (recommendation_id) REFERENCES recommendations(id)
             );
+
+            -- 사기 전에 맞춰보기: 아직 안 산 옷. 옷장(wardrobe_items)과 따로 둬서 추천에 섞이지 않게 한다
+            CREATE TABLE IF NOT EXISTS purchase_candidates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                subcategory TEXT,
+                color TEXT,
+                warmth INTEGER NOT NULL,
+                rain_ok INTEGER NOT NULL,
+                image_path TEXT,
+                link TEXT,
+                ai_subcategory TEXT,
+                ai_confidence REAL,
+                deleted INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
             """
         )
 
@@ -135,6 +155,8 @@ def init_db():
             c.execute("ALTER TABLE wardrobe_items ADD COLUMN subcategory TEXT")
         if not _has_column(c, "wardrobe_items", "ai_subcategory"):
             c.execute("ALTER TABLE wardrobe_items ADD COLUMN ai_subcategory TEXT")
+        if not _has_column(c, "wardrobe_items", "seasons"):  # 직접 고른 계절 ('여름|겨울'), NULL이면 종류로 자동
+            c.execute("ALTER TABLE wardrobe_items ADD COLUMN seasons TEXT")
 
         # 옛 DB 호환: 스타일 열 삭제. SQLite 3.35 미만이라 열을 못 지우면 남겨 두고 _insert가 빈 값으로 채운다
         for table, col in LEGACY_STYLE_COLUMNS:
@@ -218,6 +240,18 @@ def reactivate_item(item_id, user_id):
             (item_id, user_id),
         )
 
+def update_item_seasons(item_id, user_id, seasons):
+    """seasons: 계절 목록. 비우거나 None이면 '자동'(옷 종류로 정함)으로 되돌린다."""
+    value = "|".join(seasons) if seasons else None
+    with conn() as c:
+        c.execute("UPDATE wardrobe_items SET seasons=? WHERE id=? AND user_id=?", (value, item_id, user_id))
+
+def set_items_active(item_ids, user_id, active):
+    """여러 벌을 한 번에 넣어두기(active=False) / 꺼내기(active=True). 지운 옷은 꺼내지 않는다."""
+    with conn() as c:
+        c.executemany("UPDATE wardrobe_items SET active=? WHERE id=? AND user_id=? AND deleted=0",
+                      [(int(bool(active)), i, user_id) for i in item_ids])
+
 def list_inactive_items(user_id):
     with conn() as c:
         return [dict(r) for r in c.execute(
@@ -231,6 +265,40 @@ def soft_delete_item(item_id, user_id):
             "UPDATE wardrobe_items SET deleted=1, active=0 WHERE id=? AND user_id=?",
             (item_id, user_id),
         )
+
+def create_candidate(user_id, name, category, subcategory, color, warmth, rain_ok, image_path="", link="",
+                     ai_subcategory=None, ai_confidence=None):
+    now = datetime.now().isoformat(timespec="seconds")
+    with conn() as c:
+        return _insert(c, "purchase_candidates", {
+            "user_id": user_id, "name": name, "category": category, "subcategory": subcategory, "color": color,
+            "warmth": warmth, "rain_ok": int(bool(rain_ok)), "image_path": image_path, "link": link,
+            "ai_subcategory": ai_subcategory, "ai_confidence": ai_confidence, "created_at": now,
+        })
+
+def list_candidates(user_id):
+    with conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM purchase_candidates WHERE user_id=? AND deleted=0 ORDER BY id DESC", (user_id,),
+        ).fetchall()]
+
+def delete_candidate(candidate_id, user_id):
+    with conn() as c:
+        c.execute("UPDATE purchase_candidates SET deleted=1 WHERE id=? AND user_id=?", (candidate_id, user_id))
+
+def buy_candidate(candidate_id, user_id):
+    """'샀어요': 후보를 옷장에 넣고 후보 목록에서 뺀다. 새 옷장 옷 id (없는 후보면 None)."""
+    with conn() as c:
+        row = c.execute("SELECT * FROM purchase_candidates WHERE id=? AND user_id=? AND deleted=0",
+                        (candidate_id, user_id)).fetchone()
+    if row is None:
+        return None
+    r = dict(row)
+    item_id = create_wardrobe_item(user_id, r["name"], r["category"], r["subcategory"], r["color"], r["warmth"],
+                                   r["rain_ok"], image_path=r["image_path"] or "", notes=r["link"] or "",
+                                   ai_subcategory=r["ai_subcategory"], ai_confidence=r["ai_confidence"])
+    delete_candidate(candidate_id, user_id)
+    return item_id
 
 def add_starter_wardrobe(user_id):
     user = get_user(user_id)
@@ -376,13 +444,6 @@ def count_recommendation_sessions(user_id):
             (user_id,),
         ).fetchone()[0]
 
-def count_saved_outfits(user_id):
-    with conn() as c:
-        return c.execute(
-            "SELECT COUNT(*) FROM saved_outfits WHERE user_id=?",
-            (user_id,),
-        ).fetchone()[0]
-
 def top3_acceptance_rate(user_id):
     with conn() as c:
         total = c.execute(
@@ -479,62 +540,4 @@ def export_user_logs(user_id):
             d["outfit"] = " + ".join(p["name"] for p in pieces)
         d.pop("pieces_json", None)
         data.append(d)
-    return pd.DataFrame(data)
-
-def build_ranker_training_dataframe(user_id):
-    with conn() as c:
-        rows = c.execute(
-            """
-            SELECT
-                rs.purpose,
-                rs.temperature,
-                rs.apparent_temperature,
-                rs.humidity,
-                rs.precipitation,
-                rs.rain,
-                rs.wind_speed,
-                r.components_json,
-                r.score AS baseline_score,
-                f.rating,
-                f.worn,
-                f.thermal_feedback,
-                f.satisfaction
-            FROM recommendations r
-            JOIN recommendation_sessions rs ON rs.id=r.session_id
-            JOIN feedback f ON f.recommendation_id=r.id
-            WHERE rs.user_id=?
-            """,
-            (user_id,),
-        ).fetchall()
-
-    data = []
-    for row in rows:
-        d = dict(row)
-        comp = json.loads(d.pop("components_json"))
-        parts = []
-        if d["rating"] is not None:
-            parts.append(1.0 if d["rating"] == "like" else 0.0)
-        if d["worn"] is not None:
-            parts.append(1.0 if d["worn"] else 0.0)
-        if d["satisfaction"] is not None:
-            parts.append((float(d["satisfaction"]) - 1.0) / 4.0)
-        if d["thermal_feedback"] is not None:
-            parts.append(max(0.0, 1.0 - abs(float(d["thermal_feedback"])) / 2.0))
-        if not parts:
-            continue
-
-        data.append({
-            "purpose": d["purpose"],
-            "temperature": d["temperature"],
-            "apparent_temperature": d["apparent_temperature"],
-            "humidity": d["humidity"],
-            "precipitation": d["precipitation"],
-            "rain": d["rain"],
-            "wind_speed": d["wind_speed"],
-            "weather_score": comp.get("weather_score"),
-            "rain_score": comp.get("rain_score"),
-            "color_score": comp.get("color_score"),
-            "baseline_score": d["baseline_score"],
-            "target": sum(parts) / len(parts),
-        })
     return pd.DataFrame(data)

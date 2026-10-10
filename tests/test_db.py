@@ -3,6 +3,7 @@ import sqlite3
 
 from core import db
 from core.recommender import outfit_key, recommend_outfits
+from core.taxonomy import item_seasons
 
 
 def _use_tmp_db(tmp_path):
@@ -106,6 +107,7 @@ def test_old_db_style_columns_are_removed(tmp_path):
     assert "style" not in _columns("wardrobe_items")
     assert "preferred_style" not in _columns("recommendation_sessions")
     assert "satisfaction" in _columns("feedback") and "style_rating" not in _columns("feedback")
+    assert "seasons" in _columns("wardrobe_items")  # 계절 직접 지정 열이 추가됨
     # 기존 데이터는 그대로
     assert db.list_users()[0]["name"] == "옛사용자"
     assert db.list_wardrobe_items(1)[0]["name"] == "화이트 셔츠"
@@ -128,3 +130,29 @@ def test_insert_fills_style_column_that_old_sqlite_could_not_drop(tmp_path):
         iid = db._insert(c, "wardrobe_items", {"user_id": uid, "name": "y", "category": "상의", "color": "black",
                                                 "warmth": 1, "rain_ok": 1, "created_at": "now"})
         assert c.execute("SELECT style FROM wardrobe_items WHERE id=?", (iid,)).fetchone()[0] == ""
+
+
+def _get(uid, item_id):
+    return next(x for x in db.list_wardrobe_items(uid, active_only=False) if x["id"] == item_id)
+
+
+def test_season_override_and_put_away(tmp_path):
+    _use_tmp_db(tmp_path)
+    uid = db.create_user("계절", "male", 0, 0)
+    db.add_starter_wardrobe(uid)
+    items = {x["name"]: x for x in db.list_wardrobe_items(uid)}
+    shirt = items["흰 반팔 티셔츠"]
+    assert item_seasons(shirt) == ["여름"] and shirt["seasons"] is None          # 종류로 자동
+    db.update_item_seasons(shirt["id"], uid, ["여름", "봄·가을"])
+    assert item_seasons(_get(uid, shirt["id"])) == ["여름", "봄·가을"]
+    db.update_item_seasons(shirt["id"], uid, [])                                 # 비우면 자동으로
+    assert _get(uid, shirt["id"])["seasons"] is None
+
+    # 여름에 안 입는 옷 넣어두기 → 다시 꺼내기 (지운 옷은 꺼내지 않음)
+    off = [x["id"] for x in db.list_wardrobe_items(uid) if "여름" not in item_seasons(x)]
+    db.set_items_active(off, uid, False)
+    assert not set(off) & {x["id"] for x in db.list_wardrobe_items(uid)}
+    db.soft_delete_item(off[0], uid)
+    db.set_items_active(off, uid, True)
+    active = {x["id"] for x in db.list_wardrobe_items(uid)}
+    assert set(off[1:]) <= active and off[0] not in active

@@ -40,3 +40,21 @@ def test_broken_checkpoint_reports_load_error(monkeypatch, tmp_path):
     _reset(monkeypatch, ck)
     r = v.classify_clothing_image(IMG)
     assert not r["ok"] and "불러오지 못했습니다" in r["message"]
+
+
+def _photo(bg, item, item_box=(16, 16, 48, 48), size=64):
+    img = Image.new("RGB", (size, size), bg)
+    img.paste(Image.new("RGB", (item_box[2] - item_box[0], item_box[3] - item_box[1]), item), item_box[:2])
+    return img
+
+
+def test_dominant_color_ignores_background():
+    """흰 배경에 작은 신발 사진을 '흰색'으로 고르던 문제 — 가장자리 색(배경)을 빼고 고른다."""
+    assert v.dominant_color_name(_photo((250, 250, 250), (110, 110, 110), (24, 24, 40, 40))) == "gray"
+    assert v.dominant_color_name(_photo((238, 238, 236), (25, 25, 25))) == "black"      # KREAM식 연회색 배경
+    assert v.dominant_color_name(_photo((150, 120, 90), (30, 40, 80))) == "navy"        # 방바닥 위 폰 사진
+
+
+def test_dominant_color_when_item_fills_photo():
+    """옷이 사진을 꽉 채우면 가장자리도 옷 색이라 배경을 빼지 않는다."""
+    assert v.dominant_color_name(Image.new("RGB", (64, 64), (190, 40, 40))) == "red"

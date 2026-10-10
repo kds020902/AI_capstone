@@ -1,10 +1,9 @@
 """여러 공개 데이터셋을 이 프로젝트의 분류 클래스로 모아 ImageFolder 구조를 만든다.
 
-    dataset_sub/train/<세부분류>/*.jpg     (--task sub,  33종)
-    dataset_main/train/<대분류>/*.jpg      (--task main, 5종)
+    dataset_sub/train/<세부분류>/*.jpg     (42종)
 
 라벨 변환표: data/dataset_label_map.csv  (source, source_label → subcategory, main_category)
-- 세부분류가 비어 있는 행은 '대분류 학습에만' 쓰인다 (--task main 일 때만 저장).
+- 세부분류가 비어 있는 행(대분류만 아는 라벨)은 학습에서 뺀다.
 - 표에 없는 라벨은 건너뛰고, 끝에 '매핑 안 된 라벨' 목록을 출력한다 → 표에 행을 추가하면 된다.
 - 라벨이 이 프로젝트 클래스명과 똑같으면(예: AI-Hub의 '청바지') 표 없이 바로 매핑된다.
 
@@ -139,7 +138,6 @@ def main(argv=None):
     p.add_argument("--csv", type=Path, help="--source csv 일 때 라벨 csv")
     p.add_argument("--name", default=None, help="csv 출처 이름 (라벨 변환표의 source 값, 기본: aihub)")
     p.add_argument("--out", type=Path, required=True)
-    p.add_argument("--task", choices=["sub", "main"], default="sub")
     p.add_argument("--val-ratio", type=float, default=0.15)
     p.add_argument("--max-per-class", type=int, default=0, help="클래스당 최대 장수 (0=제한 없음)")
     p.add_argument("--min-size", type=int, default=64, help="이보다 작은 이미지/크롭은 버림")
@@ -166,10 +164,9 @@ def main(argv=None):
     skipped = collections.Counter()
 
     for i, (path, label, bbox, split) in enumerate(records):
-        sub, main_cat = map_label(table, source_name, label)
-        cls = sub if args.task == "sub" else main_cat
+        cls, main_cat = map_label(table, source_name, label)
         if cls is None:
-            (main_only if (args.task == "sub" and main_cat) else unmapped)[label] += 1
+            (main_only if main_cat else unmapped)[label] += 1
             continue
         if args.max_per_class and saved[cls] >= args.max_per_class:
             continue
@@ -199,7 +196,7 @@ def main(argv=None):
     for cls, n in sorted(saved.items(), key=lambda x: -x[1]):
         print(f"  {cls}: {n}")
     if main_only:
-        print(f"\n대분류만 있는 라벨 (--task sub 에서는 제외, --task main 에서 사용): {dict(main_only)}")
+        print(f"\n대분류만 있는 라벨 (세부분류를 정할 수 없어 제외): {dict(main_only)}")
     if unmapped:
         print("\n매핑 안 된 라벨 (data/dataset_label_map.csv 에 행을 추가하세요):")
         for lb, n in unmapped.most_common(30):
@@ -208,7 +205,7 @@ def main(argv=None):
         print(f"\n건너뜀: {dict(skipped)}")
 
     # 출력 폴더 전체 기준 클래스별 장수 (여러 출처 누적)
-    classes = list(SUBCATEGORY_TO_MAIN) if args.task == "sub" else MAIN_CATEGORIES
+    classes = list(SUBCATEGORY_TO_MAIN)
     totals = {c: sum(1 for _ in (args.out / "train" / c).glob("*.jpg")) if (args.out / "train" / c).exists() else 0
               for c in classes}
     short = {c: n for c, n in totals.items() if n < args.min_report}

@@ -14,12 +14,15 @@ PURPOSES = ["등교", "데이트", "운동", "격식"]
 TEMPS = [-5, 0, 5, 10, 15, 20, 25, 30, 33]
 
 SPORT_BAD = {"스니커즈", "니트", "블라우스", "셔츠", "슬랙스", "블레이저", "로퍼", "원피스", "셔츠원피스",
-             "니트원피스", "스커트", "청바지", "데님재킷", "부츠", "치노팬츠", "코트", "캔버스화"}
+             "니트원피스", "스커트", "청바지", "데님재킷", "부츠", "치노팬츠", "코트", "캔버스화",
+             "터틀넥", "구두", "힐", "플랫슈즈", "샌들", "슬리퍼"}
 FORMAL_BAD = {"긴팔 티셔츠", "반바지", "민소매", "후드티", "조거팬츠", "카고팬츠", "러닝화", "바람막이",
-              "반팔 티셔츠", "맨투맨", "기능성 티셔츠"}
-HOT_THICK = {"니트", "맨투맨", "후드티", "니트원피스"}
+              "반팔 티셔츠", "맨투맨", "기능성 티셔츠", "레깅스", "후드집업", "플리스", "샌들", "슬리퍼"}
+HOT_THICK = {"니트", "맨투맨", "후드티", "니트원피스", "터틀넥"}
 COLD_THIN = {"반팔 티셔츠", "반바지", "민소매"}
-BLAZER_BAD = {"후드티", "조거팬츠", "러닝화", "반바지", "민소매", "기능성 티셔츠"}
+OPEN_SHOES = {"샌들", "슬리퍼"}
+BLAZER_BAD = {"후드티", "조거팬츠", "러닝화", "반바지", "민소매", "기능성 티셔츠", "레깅스", "슬리퍼"}
+DRESS_SHOE_BAD = {"조거팬츠", "반바지", "레깅스", "기능성 티셔츠"}
 
 
 def violations(pieces, purpose, t, rain, warnings, reasons):
@@ -38,11 +41,15 @@ def violations(pieces, purpose, t, rain, warnings, reasons):
         v.append(("30℃ 이상인데 긴팔", ["긴팔 티셔츠"]))
     if t <= 10 and subs & COLD_THIN:
         v.append(("10℃ 이하인데 반팔/반바지/민소매", sorted(subs & COLD_THIN)))
+    if t <= 15 and subs & OPEN_SHOES:
+        v.append(("15℃ 이하인데 샌들/슬리퍼", sorted(subs & OPEN_SHOES)))
     need_outer = (t <= 8) if purpose != "운동" else (t <= 0)
     if need_outer and "아우터" not in cats:
         v.append(("추운데 겉옷 없음", []))
     if "블레이저" in subs and subs & BLAZER_BAD:
         v.append(("블레이저와 안 맞는 조합", sorted(subs & BLAZER_BAD)))
+    if subs & {"구두", "힐"} and subs & DRESS_SHOE_BAD:
+        v.append(("구두·힐과 안 맞는 조합", sorted(subs & DRESS_SHOE_BAD)))
     tops = [p for p in pieces if p["category"] == "상의"]
     if len(tops) > 2 or (len(tops) == 2 and (tops[0]["subcategory"], tops[1]["subcategory"]) not in LAYER_PAIRS):
         v.append(("허용 안 된 상의 겹쳐 입기", [p["subcategory"] for p in tops]))

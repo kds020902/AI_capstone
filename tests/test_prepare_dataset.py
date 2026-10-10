@@ -50,11 +50,6 @@ def test_deepfashion(tmp_path):
     assert _classes(out) == {"후드티": 1}
     assert rep["main_only"] == {"Jacket": 1} and rep["unmapped"] == {"Romper": 1}
 
-    out_main = tmp_path / "main"
-    main(["--source", "deepfashion", "--root", str(root), "--out", str(out_main), "--task", "main"])
-    assert _classes(out_main) == {"상의": 1}
-    assert _classes(out_main, "val") == {"아우터": 1}
-
 
 def test_deepfashion2_crops_each_item(tmp_path):
     root = tmp_path / "df2"

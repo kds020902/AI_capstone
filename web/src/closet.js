@@ -209,6 +209,49 @@
       };
     }
 
+    const cmpIds = (a, b) => {
+      for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i];
+      return a.length - b.length;
+    };
+
+    // ---------------------------------------------------------------- 일교차 (core/recommender.py _later_advice 와 같음)
+    function laterAdvice(pieces, ctx, outers) {
+      const lt = ctx.later;
+      if (!lt || lt.eff > ctx.eff - D.LATER_DROP) return null;
+      const hasOuter = pieces.some((p) => p.category === "아우터");
+      const short = lt.target - outfitWarmth(pieces) > D.LATER_GAP;
+      if (!(short || (!hasOuter && lt.eff <= D.OUTER_REQUIRED_AT))) return null;
+      const when = `${lt.label}쯤 체감 ${fmt0(lt.eff)}℃까지 내려가요.`;
+      const r6 = (v) => Math.round(v * 1e6) / 1e6;
+      const fit = (base, o) => [r6(Math.abs(outfitWarmth([...base, o]) - lt.target)), -colorScore([...base, o])[0], +o.id];
+      const less = (a, b) => a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2];
+      const best = (list, base) => list.reduce((m, o) => (m === null || less(fit(base, o), fit(base, m)) ? o : m), null);
+      if (hasOuter) {
+        const cur = pieces.find((p) => p.category === "아우터"), rest = pieces.filter((p) => p !== cur);
+        const gap = r6(Math.abs(outfitWarmth(pieces) - lt.target));
+        const better = outers.filter((o) => +o.id !== +cur.id && level(o) > level(cur) && purposeOk(o, ctx.purpose)
+          && tempOk(o, lt.eff) && pairsOk([...rest, o]) && fit(rest, o)[0] < gap);
+        if (!better.length) return [null, `${when} ${cur.name}만으로는 조금 추울 수 있으니 안에 한 겹 더 챙기세요.`];
+        const b = best(better, rest);
+        return [b, `${when} ${cur.name}보다 ${b.name}${josa(b.name)} 더 따뜻해요. 늦게까지 밖에 있으면 ${b.name}${josa(b.name, "을", "를")} 입고 나가세요.`];
+      }
+      const ok = outers.filter((o) => purposeOk(o, ctx.purpose) && pairsOk([...pieces, o]));
+      const warm = ok.filter((o) => tempOk(o, lt.eff)), cands = warm.length ? warm : ok;
+      if (!cands.length) return [null, `${when} 챙길 만한 겉옷이 옷장에 없어요.`];
+      const b = best(cands, pieces);
+      return [b, `${when} ${b.name}${josa(b.name, "을", "를")} 챙기세요.`];
+    }
+    function attachLater(result, ctx, outers) {
+      result.carry = null;
+      if (!ctx.later) return;
+      result.components.later_effective_temp = Math.round(ctx.later.eff * 10) / 10;
+      const advice = laterAdvice(result.pieces, ctx, outers);
+      if (!advice) return;
+      result.carry = advice[0];
+      const i = result.reasons.findIndex((r) => r.startsWith("체감 "));
+      result.reasons.splice(i < 0 ? result.reasons.length : i + 1, 0, advice[1]);
+    }
+
     // ---------------------------------------------------------------- 다양화
     const core = (pieces) => new Set(pieces.filter((p) => ["상의", "하의", "원피스"].includes(p.category)).map((p) => +p.id));
     const nonShoe = (pieces) => new Set(pieces.filter((p) => p.category !== "신발").map((p) => +p.id));
@@ -240,11 +283,19 @@
     }
 
     // ---------------------------------------------------------------- 메인
+    // later: 귀가 전까지 가장 추운 때 { temperature, apparent, label } — 주면 결과마다 carry(챙길 겉옷)와 안내 문구
+    // mustInclude: 이 id의 옷이 들어간 코디만 (사기 전에 맞춰보기) — 결과에 comboKeys(옷 id 목록)도 준다
     function recommend(items, { temperature, apparent = null, rain = false, purpose = "등교", cold = 0, heat = 0,
-      topK = 3, excludeKeys = [], seed = 0, all = false } = {}) {
+      topK = 3, excludeKeys = [], seed = 0, all = false, later = null, mustInclude = null } = {}) {
       const [eff, adjustments] = effectiveTemperature(temperature, apparent, rain, purpose, cold, heat);
       const ctx = { eff, adjustments, target: targetWarmth(eff), rain: !!rain, purpose,
-        baseTemp: apparent === null || apparent === undefined ? temperature : apparent };
+        baseTemp: apparent === null || apparent === undefined ? temperature : apparent, later: null };
+      if (later) {
+        const lApp = later.apparent === undefined ? null : later.apparent;
+        const [lEff] = effectiveTemperature(later.temperature, lApp, rain, purpose, cold, heat);
+        ctx.later = { label: later.label || "저녁", eff: lEff, target: targetWarmth(lEff),
+          baseTemp: lApp === null ? later.temperature : lApp };
+      }
       const warnings = [];
       const usable = items.filter((x) => x.category in D.WARMTH_CONTRIB);
       const pools = { 상의: [], 하의: [], 원피스: [], 아우터: [], 신발: [] };
@@ -277,9 +328,10 @@
       if (eff <= 5 && !strictOuter.some((x) => level(x) >= 4))
         warnings.push(`체감 ${fmt0(eff)}℃인데 두꺼운 겉옷(코트·패딩)이 옷장에 없어 보온이 부족할 수 있어요.`);
       if (!pools["신발"].length || !((pools["상의"].length && pools["하의"].length) || pools["원피스"].length))
-        return { results: [], warnings: [...warnings, "추천에 필요한 옷 조합(상의+하의+신발 또는 원피스+신발)이 없습니다."], context: ctx };
+        return { results: [], warnings: [...warnings, "추천에 필요한 옷 조합(상의+하의+신발 또는 원피스+신발)이 없습니다."], context: ctx,
+          nCombos: 0, ...(mustInclude === null ? {} : { comboKeys: [] }) };
 
-      prune(pools, eff);
+      if (mustInclude === null) prune(pools, eff);  // 특정 옷을 꼭 넣을 때는 덜어내지 않는다
       const outers = outerRequired ? pools["아우터"] : [null, ...pools["아우터"]];
       const candidates = [];
       for (const top of topUnits(pools["상의"], eff))
@@ -288,17 +340,99 @@
       for (const dress of pools["원피스"]) for (const outer of outers) for (const shoe of pools["신발"])
         candidates.push([dress, ...(outer ? [outer] : []), shoe]);
 
-      let paired = candidates.filter(pairsOk);
-      if (!paired.length) { warnings.push("옷장 구성상 평소엔 피하는 조합도 포함했어요."); paired = candidates; }
       const ex = new Set(excludeKeys);
-      let kept = paired.filter((c) => !ex.has(outfitKey(c)));
-      if (!kept.length) { warnings.push("'별로'를 누른 조합을 빼면 추천할 코디가 없어 다시 포함했어요."); kept = paired; }
+      let kept;
+      if (mustInclude !== null) {
+        kept = candidates.filter((c) => c.some((p) => +p.id === +mustInclude) && pairsOk(c) && !ex.has(outfitKey(c)));
+      } else {
+        let paired = candidates.filter(pairsOk);
+        if (!paired.length) { warnings.push("옷장 구성상 평소엔 피하는 조합도 포함했어요."); paired = candidates; }
+        kept = paired.filter((c) => !ex.has(outfitKey(c)));
+        if (!kept.length) { warnings.push("'별로'를 누른 조합을 빼면 추천할 코디가 없어 다시 포함했어요."); kept = paired; }
+      }
+      const nCombos = kept.length;
+      const comboKeys = mustInclude === null ? null
+        : kept.map((c) => c.map((p) => +p.id).sort((a, b) => a - b)).sort(cmpIds);
 
       const rnd = seededRandom(seed);
       for (let i = kept.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [kept[i], kept[j]] = [kept[j], kept[i]]; }
       const scored = kept.map((pieces) => ({ pieces, ...score(pieces, ctx) }));
       scored.sort((a, b) => b.score - a.score);
-      return { results: all ? scored : pickDiverse(scored, topK), warnings, context: ctx };
+      const results = all ? scored : pickDiverse(scored, topK);
+      const outerItems = usable.filter((x) => x.category === "아우터");
+      for (const r of results) attachLater(r, ctx, outerItems);
+      return { results, warnings, context: ctx, nCombos, ...(comboKeys ? { comboKeys } : {}) };
+    }
+
+    // ---------------------------------------------------------------- 계절 (core/taxonomy.py 와 같음)
+    const SEASONS = D.SEASONS;
+    function seasonsFor(subcategory) {
+      const r = ruleFor(subcategory);
+      if (!r) return SEASONS.slice();
+      return SEASONS.filter((s) => D.SEASON_TEMPS[s].some((t) => r.min_temp <= t && t <= r.max_temp));
+    }
+    function manualSeasons(item) {  // 직접 고른 계절: 배열 또는 '여름|겨울'
+      const v = item.seasons, list = Array.isArray(v) ? v : String(v || "").split("|");
+      return SEASONS.filter((s) => list.includes(s));
+    }
+    const itemSeasons = (item) => { const m = manualSeasons(item); return m.length ? m : seasonsFor(item.subcategory); };
+    const seasonLabel = (list) => (list.length === SEASONS.length ? "사계절" : list.join(", "));
+    const currentSeason = (month) => ([6, 7, 8].includes(month) ? "여름" : [12, 1, 2].includes(month) ? "겨울" : "봄·가을");
+
+    // ---------------------------------------------------------------- 사기 전에 맞춰보기 (core/shopping.py 와 같음)
+    function wearable(cand, purpose, eff) {
+      const r = ruleFor(cand.subcategory);
+      return !r || (!r.blocked_purposes.includes(purpose) && r.min_temp <= eff && eff <= r.max_temp);
+    }
+    function similarItems(cand, items) {
+      const s = canon(cand.subcategory), color = normalizeColor(cand.color);
+      const same = items.filter((x) => canon(x.subcategory) === s);
+      return { same_type: same, same_color: same.filter((x) => color && normalizeColor(x.color) === color) };
+    }
+    function candidateReport(candidate, items, { cold = 0, heat = 0 } = {}) {
+      const cand = { ...candidate, id: D.CANDIDATE_ID }, seasons = itemSeasons(cand);
+      const cells = {}, allKeys = new Set();
+      for (const season of SEASONS) for (const purpose of D.PURPOSES) {
+        const temps = D.SEASON_TEMPS[season];
+        const cell = { n: 0, best: null, best_without: null, results: [], temp: temps[temps.length - 1] }, keys = new Set();
+        for (const t of temps) {
+          const args = { temperature: t, apparent: t, rain: false, purpose, cold, heat };
+          const base = recommend(items, { ...args, topK: 1 });
+          if (base.results.length) {
+            const sc = base.results[0].score;
+            cell.best_without = cell.best_without === null ? sc : Math.max(cell.best_without, sc);
+          }
+          if (!seasons.includes(season) || !wearable(cand, purpose, base.context.eff)) continue;
+          const out = recommend([...items, cand], { ...args, topK: 3, mustInclude: D.CANDIDATE_ID });
+          for (const k of out.comboKeys) keys.add(k.join(","));
+          if (out.results.length && (cell.best === null || out.results[0].score > cell.best)) {
+            cell.best = out.results[0].score; cell.results = out.results; cell.temp = t;
+          }
+        }
+        cell.n = keys.size; keys.forEach((k) => allKeys.add(k));
+        cells[`${season}|${purpose}`] = cell;
+      }
+      const improves = [];
+      for (const [key, c] of Object.entries(cells)) {
+        const [season, purpose] = key.split("|");
+        if (c.best !== null && (c.best_without === null || c.best - c.best_without >= D.IMPROVE_MIN))
+          improves.push({ season, purpose, before: c.best_without, after: c.best });
+      }
+      improves.sort((a, b) => (b.after - (b.before || 0)) - (a.after - (a.before || 0)));
+      const partners = [...new Set([...allKeys].flatMap((k) => k.split(",").map(Number)))]
+        .filter((i) => i !== D.CANDIDATE_ID).sort((a, b) => a - b);
+      const similar = similarItems(cand, items), total = allKeys.size;
+      let verdict;
+      if (similar.same_color.length) {
+        verdict = ["dup", `거의 같은 옷이 이미 있어요 (${similar.same_color.slice(0, 3).map((x) => x.name).join(", ")}). 한 번 더 생각해 보세요.`];
+      } else if (total === 0) {
+        verdict = ["none", "지금 옷장으로는 함께 입을 코디가 없어요."];
+      } else if (improves.length) {
+        verdict = ["gap", `옷장에 없던 걸 채워 줘요. ${improves.slice(0, 3).map((x) => `${x.season} ${x.purpose}`).join(", ")}에서 코디 점수가 올라가요.`];
+      } else {
+        verdict = ["fit", `가진 옷 ${partners.length}벌과 어울려요.`];
+      }
+      return { seasons, cells, total, partners, improves, similar, verdict };
     }
 
     function breakdown(c) {
@@ -310,7 +444,8 @@
       ];
     }
 
-    return { recommend, breakdown, outfitKey, normalizeColor, hexToName, ruleFor, roles, josa, COLOR_KO, D };
+    return { recommend, breakdown, outfitKey, normalizeColor, hexToName, ruleFor, roles, josa, COLOR_KO, D,
+      SEASONS, seasonsFor, manualSeasons, itemSeasons, seasonLabel, currentSeason, candidateReport };
   }
 
   const api = { create, COLOR_KO };

@@ -8,16 +8,19 @@
   utzappos  UT-Zappos50K + meta-data.csv (연구용)                     운동화 폴더를 소재·브랜드로 세분: 캔버스 → 캔버스화,
                                                                        메시+러닝 브랜드 → 러닝화, 가죽·스웨이드 → 스니커즈
   shoe3     keremberke/shoe-classification (Public Domain)            converse 폴더 → 캔버스화
+  hnm       H&M 상품 이미지 128px (multabench/core-img-reg-hnm-fashion,   product_type + 상품 설명. 같은 상품의 색상만 다른 컷은 1장만,
+            원본 Kaggle H&M 대회 데이터 — 비상업 연구용)               아동복 제외. 해상도가 낮아 이 출처만 있는 클래스가 생기지 않게
+                                                                       기존 클래스에도 고르게 섞는다
 
-규칙에 걸리지 않거나 여러 세부분류가 섞인 라벨은 대분류(상의/하의/…)로만 내보낸다
-→ prepare_dataset.py --task sub 에서는 빠지고 --task main 에서만 쓰인다.
+규칙에 걸리지 않거나 여러 세부분류가 섞인 라벨은 대분류(상의/하의/…)로만 표시한다
+→ prepare_dataset.py 에서 학습에서 빠진다 (집계에서 어떤 라벨이 빠졌는지 보려고 남겨 둠).
 키워드 규칙은 위에서부터 먼저 맞는 것을 쓴다. 바꾸려면 아래 *_RULES 표를 고친다.
 
-사용 예
+사용 예 (먼저 pip install -r requirements-train.txt)
   python scripts/open_datasets.py download --raw raw
   python scripts/open_datasets.py build --raw raw --out open_csv --max-per-class 500
   python scripts/open_datasets.py build --raw raw --out open_csv --dry-run      # 클래스별 장수와 예시만 출력
-  for s in kream fpi f200k grigorev utzappos shoe3; do
+  for s in kream fpi f200k grigorev utzappos shoe3 hnm; do
     python scripts/prepare_dataset.py --source csv --csv open_csv/$s.csv --name $s --out dataset_sub
   done
 """
@@ -37,7 +40,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from core.taxonomy import MAIN_CATEGORIES, SUBCATEGORY_TO_MAIN  # noqa: E402
+from core.taxonomy import MAIN_CATEGORIES  # noqa: E402
 
 HF = "https://huggingface.co/datasets"
 DOWNLOADS = {
@@ -50,6 +53,8 @@ DOWNLOADS = {
     "utzappos": ["https://vision.cs.utexas.edu/projects/finegrained/utzap50k/ut-zap50k-images-square.zip",
                  "https://vision.cs.utexas.edu/projects/finegrained/utzap50k/ut-zap50k-data.zip"],
     "shoe3": [f"{HF}/keremberke/shoe-classification/resolve/main/data/train.zip"],
+    "hnm": [f"{HF}/multabench/core-img-reg-hnm-fashion/resolve/main/data.parquet"]
+           + [f"{HF}/multabench/core-img-reg-hnm-fashion/resolve/main/images-{i:05d}.zip" for i in range(42)],
 }
 GRIGOREV_GIT = "https://github.com/alexeygrigorev/clothing-dataset"
 
@@ -58,6 +63,14 @@ def R(*words):
     """단어 경계 기준 정규식 (영문 소문자 텍스트용)."""
     return re.compile(r"\b(?:" + "|".join(words) + r")\b")
 
+
+# 후드 + 지퍼 (순서 무관): 'Zip-Up Hoodie', 'Hood Zip-Up', 'Full Zip Hoodie'
+ZIP_HOOD = re.compile(r"\b(?:hoodie|hooded|hoody|hood)\b.*\b(?:zip|zipup|full-zip)\b"
+                      r"|\b(?:zip|zipup|full-zip)\b.*\b(?:hoodie|hooded|hoody|hood)\b")
+TURTLENECK = R("turtleneck", "turtle neck", "turtle-neck", "mock neck", "mock-neck", "mockneck", "roll neck",
+               "roll-neck", "funnel neck")
+# 'polo neck'은 영국식(H&M)으로는 터틀넥이지만 Myntra에서는 폴로 카라라서 H&M에만 쓴다
+TURTLENECK_UK = R("polo neck", "polo-neck", "high collar", "funnel collar")
 
 # (라벨, 포함 정규식, 제외 정규식 or None) — 위에서부터 먼저 맞는 규칙
 KREAM_RULES = {
@@ -69,11 +82,17 @@ KREAM_RULES = {
         ("봄버재킷", R("bomber", "ma-1", "ma1"), None),
         ("블레이저", R("blazer", "sport coat", "suit jacket"), None),
         ("바람막이", R("windbreaker", "anorak", "windrunner", "wind jacket", "shell jacket", "windshell"), None),
+        # 'Club Fleece', 'Tech Fleece'는 기모 스웨트 원단 이름이라 플리스 재킷이 아님
+        ("플리스", R("fleece", "sherpa", "boa", "polartec"),
+         R("vest", "gilet", "pants", "lined", "lining", "club fleece", "tech fleece")),
+        ("후드집업", ZIP_HOOD, R("jacket", "parka", "coat", "vest", "puffer", "padded")),
         ("코트", R("coat", "overcoat", "trench"), R("raincoat", "rain coat", "sport coat", "chore", "michigan")),
     ],
     "top": [
         ("가디건", R("cardigan"), None),
+        ("후드집업", ZIP_HOOD, R("vest", "jacket")),
         ("후드티", R("hoodie", "hooded sweatshirt", "hoody"), R("zip", "zip-up", "full-zip")),
+        ("터틀넥", TURTLENECK, R("vest", "cardigan", "zip", "jacket", "dress")),
         ("니트", R("knit", "sweater", "cashmere", "mohair"),
          R("sweatshirt", "polo", "vest", "cardigan", "fleece", "blouson", "jacket", "zip", "scarf")),
         ("맨투맨", R("crewneck", "crew neck", "sweatshirt"), R("hood", "hooded")),
@@ -86,6 +105,7 @@ KREAM_RULES = {
         ("반팔 티셔츠", R("t-shirt", "tee", "s/s t"), None),
     ],
     "bottom": [
+        ("레깅스", R("leggings", "legging", "tights"), R("shorts", "short")),
         ("반바지", R("shorts", "short pants"), None),
         ("스커트", R("skirt"), None),
         ("카고팬츠", R("cargo"), None),
@@ -118,7 +138,8 @@ def _first(rules, text):
 
 # ---------------------------------------------------------------- Fashion Product Images (Myntra)
 _FPI_DIRECT = {"Shirts": "셔츠", "Jeans": "청바지", "Shorts": "반바지", "Skirts": "스커트", "Track Pants": "조거팬츠",
-               "Blazers": "블레이저"}
+               "Blazers": "블레이저", "Flip Flops": "슬리퍼", "Sandals": "샌들", "Sports Sandals": "샌들"}
+# Leggings는 쿠르타(긴 상의)를 입은 착용컷이라, Heels는 대부분 굽 있는 샌들이라 쓰지 않는다
 
 
 _KIDS = re.compile(r"\b(kid|kids|kid's|kidswear|boys?|girls?|infant|toddler|baby|layette|youth|junior)\b")
@@ -133,6 +154,8 @@ def fpi_label(r):
     usage = r.get("usage") or ""
     if a in _FPI_DIRECT:
         return _FPI_DIRECT[a]
+    if a in ("Tshirts", "Sweaters") and TURTLENECK.search(name):
+        return "터틀넥"
     if a == "Tshirts":
         if R("polo").search(name_no_brand):
             return "폴로"
@@ -164,7 +187,7 @@ def fpi_label(r):
     if a == "Sports Shoes":
         return "러닝화" if R("running", "runner", "run").search(name) else "신발"
     if a == "Formal Shoes":
-        return "로퍼" if R("loafer", "loafers", "moccasin").search(name) else "신발"
+        return "로퍼" if R("loafer", "loafers", "moccasin").search(name) else "구두"
     if a == "Tops":
         return "상의"
     return None
@@ -185,12 +208,15 @@ F200K_RULES = {
         ("야상·필드재킷", R("field jacket", "military jacket", "utility jacket", "army jacket", "safari jacket"),
          R("leather jackets", "waistcoats and gilets", "vest", "transparent")),
         ("블레이저", R("blazers and suit jackets"), R("cardigan", "bolero", "vest", "kimono")),
+        ("플리스", R("fleece", "sherpa", "teddy"), R("vest", "gilet", "lined", "leather", "waistcoats")),
     ],
     "pants": [
+        ("레깅스", R("leggings"), R("shorts", "skirt")),
         ("카고팬츠", R("cargo"), R("jogger", "shorts", "skirt")),
         ("조거팬츠", R("jogger", "joggers", "track pants", "sweatpants"), None),
     ],
     "tops": [
+        ("터틀넥", TURTLENECK, R("sleeveless", "vest", "cardigan", "dress", "blouses")),
         ("블라우스", R("blouses"), None),
         ("민소매", R("sleeveless and tank tops"), R("blouse", "shirt")),
     ],
@@ -220,16 +246,19 @@ RUNNING_BRANDS = {"ASICS", "Saucony", "Brooks", "Mizuno", "adidas Running", "Sal
 CANVAS_BRANDS = {"Converse", "Vans", "Keds", "Superga", "TOMS"}
 
 
+_UTZ_SHOES = {"Loafers": "로퍼", "Oxfords": "구두", "Heels": "힐", "Flats": "플랫슈즈"}
+
+
 def utz_label(category, subcategory, brand, material):
     m = (material or "").lower()
     if category == "Boots":
         return "부츠"
+    if category == "Sandals":
+        return "샌들"
     if category != "Shoes":
-        return None
-    if subcategory == "Loafers":
-        return "로퍼"
-    if subcategory == "Oxfords":
-        return "신발"
+        return None  # Slippers는 실내화라 뺌
+    if subcategory in _UTZ_SHOES:
+        return _UTZ_SHOES[subcategory]
     if subcategory != "Sneakers and Athletic Shoes":
         return None
     if "canvas" in m or brand in CANVAS_BRANDS:
@@ -239,6 +268,87 @@ def utz_label(category, subcategory, brand, material):
     if any(k in m for k in ("leather", "suede", "nubuck")):
         return "스니커즈"
     return None
+
+
+# ---------------------------------------------------------------- H&M (상품 설명으로 세분)
+_HNM_TYPE = {"Blouse": "블라우스", "Polo shirt": "폴로", "Vest top": "민소매", "Shorts": "반바지", "Skirt": "스커트",
+             "Blazer": "블레이저", "Cardigan": "가디건", "Boots": "부츠", "Flip flop": "슬리퍼", "Ballerinas": "플랫슈즈",
+             "Pumps": "힐", "Heels": "힐", "Heeled sandals": "샌들"}
+_HNM_FLEECE = re.compile(r"\bin (?:\w+[ -]){0,3}(?:fleece|pile|teddy|borg|faux shearling)\b")
+_SLIDES = R("slider", "sliders", "slide", "slides", "flip-flop", "flip-flops", "flipflop", "flip flop", "pool")
+
+
+def hnm_label(r):
+    if r.get("index_group_name") == "Baby/Children":
+        return None
+    t = r.get("product_type_name") or ""
+    name = (r.get("prod_name") or "").lower()
+    desc = (r.get("detail_desc") or "").lower()
+    text = f"{name} {desc}"
+    if t == "Sandals":
+        return "슬리퍼" if _SLIDES.search(name) else "샌들"
+    if t == "Leggings/Tights":
+        return "레깅스" if R("leggings").search(name) and not R("tights", "pack", "1p", "cycling", "shorts", "den").search(name) \
+            else None
+    if t in ("Hoodie", "Jacket", "Cardigan") and "sweatshirt fabric" in desc and ZIP_HOOD.search(text) \
+            and not R("padded", "lined", "parka", "puffer", "down").search(name):
+        return "후드집업"
+    if t in ("Jacket", "Hoodie", "Sweater", "Cardigan") and _HNM_FLEECE.search(re.split(r" with |\. ", desc)[0]):
+        return "플리스"  # 첫 구절('Jacket in soft pile')로만 판단 — 'lined with pile'인 파카 제외
+    if t in ("Sweater", "Top", "T-shirt") and (TURTLENECK.search(text) or TURTLENECK_UK.search(text)) \
+            and not R("zip", "sleeveless").search(text):
+        return "터틀넥"
+    if t in _HNM_TYPE:
+        return _HNM_TYPE[t]
+    if t == "Hoodie":
+        return None if R("zip", "padded").search(text) else "후드티"
+    if t == "T-shirt":
+        if R("functional fabric", "fast-drying").search(desc):
+            return "기능성 티셔츠"
+        return "긴팔 티셔츠" if R("long sleeves").search(desc) else "반팔 티셔츠" if R("short sleeves").search(desc) else None
+    if t == "Shirt":
+        return None if R("jacket", "overshirt").search(text) else "셔츠"
+    if t == "Sweater":
+        if R("knit", "knitted", "fine-knit", "rib-knit", "wool", "cashmere").search(desc):
+            return "니트"
+        return "맨투맨" if "sweatshirt" in text and not R("hood", "zip").search(text) else None
+    if t == "Trousers":
+        return _first([("청바지", R("jeans", "denim"), None), ("조거팬츠", R("joggers", "sweatpants", "sweatshirt fabric"), None),
+                       ("카고팬츠", R("cargo"), None), ("치노팬츠", R("chinos", "chino"), None),
+                       ("슬랙스", R("tailored", "suit trousers", "pressed creases"), None)], text)
+    if t == "Dress":
+        return _first([("셔츠원피스", R("shirt dress", "shirtdress"), None),
+                       ("니트원피스", R("knitted dress", "fine-knit", "rib-knit", "knit dress"), None)], text) or "원피스"
+    if t == "Jacket":
+        return _first([("데님재킷", R("denim"), R("padded", "lined")), ("봄버재킷", R("bomber"), None),
+                       ("패딩", R("padded", "puffer", "down jacket", "down-filled", "down filling"), None),  # 'zip down the front'의 down 제외
+                       ("바람막이", R("windbreaker", "anorak"), None)], text)
+    if t == "Coat":
+        return None if R("padded", "puffer", "down jacket", "down-filled", "parka", "pile", "teddy").search(text) else "코트"
+    return None
+
+
+def _hnm_candidates(raw):
+    """(이미지 경로, 라벨, 설명). 같은 상품(사진 파일명의 앞 7자리)의 색상 변형은 첫 장만 쓰고, 필요한 사진만 압축에서 꺼낸다."""
+    import pyarrow.parquet as pq
+    root = raw / "hnm"
+    rows, seen = [], set()
+    for r in pq.read_table(root / "data.parquet").to_pylist():
+        code = r["ProductPic"].rsplit("_", 1)[-1][:7]
+        if code in seen:
+            continue
+        seen.add(code)
+        label = hnm_label(r)
+        if label:
+            rows.append((r["ProductPic"], label, f"{r['product_type_name']} | {r['prod_name']} | {(r['detail_desc'] or '')[:80]}"))
+    out_dir = root / "extracted"
+    wanted = {pic for pic, _, _ in rows if not (out_dir / pic).exists()}
+    for z in sorted(root.glob("images-*.zip")) if wanted else []:
+        with zipfile.ZipFile(z) as zf:
+            for name in wanted.intersection(zf.namelist()):
+                (out_dir / name).parent.mkdir(parents=True, exist_ok=True)
+                (out_dir / name).write_bytes(zf.read(name))
+    return [(out_dir / pic, label, desc) for pic, label, desc in rows if (out_dir / pic).exists()]
 
 
 # ---------------------------------------------------------------- 공통
@@ -334,6 +444,8 @@ def collect(source, raw):
             if label:
                 out.append((path, label, f"{parts[1]} | {parts[2]} | {r.get('Material', '')}"))
         return out
+    if source == "hnm":
+        return _hnm_candidates(raw)
     if source == "shoe3":
         root = raw / "shoe3"
         out = []
@@ -346,7 +458,7 @@ def collect(source, raw):
     raise ValueError(source)
 
 
-SOURCES = ["kream", "fpi", "f200k", "grigorev", "utzappos", "shoe3"]
+SOURCES = ["kream", "fpi", "f200k", "grigorev", "utzappos", "shoe3", "hnm"]
 
 
 def build(raw, out, sources, max_per_class, seed, dry_run, examples):
@@ -386,7 +498,7 @@ def download(raw, sources):
             dst.parent.mkdir(parents=True, exist_ok=True)
             print("download", url)
             urllib.request.urlretrieve(url, dst)
-            if dst.suffix == ".zip":
+            if dst.suffix == ".zip" and source != "hnm":  # hnm은 필요한 사진만 build 때 꺼냄 (20만 장)
                 with zipfile.ZipFile(dst) as z:
                     z.extractall(dst.parent)
 

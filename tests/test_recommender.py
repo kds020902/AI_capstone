@@ -3,7 +3,7 @@ from core.colors import color_score, normalize_color
 from core.recommender import (
     LAYER_MAX_TEMP, outfit_key, recommend, recommend_outfits, roles, score_outfit, target_warmth,
 )
-from core.taxonomy import LAYER_PAIRS
+from core.taxonomy import LAYER_PAIRS, rule_for
 from tests.helpers import starter_items
 
 ITEMS = [
@@ -173,3 +173,43 @@ def test_score_breakdown_has_no_style_rows():
     rows = explain_score_breakdown(r["components"])
     assert [x["항목"] for x in rows] == ["날씨 적합도", "비/강수 적합도", "색상 조합"]
     assert sum(float(x["가중치"].rstrip("%")) for x in rows) == 100
+
+
+# ---------------------------------------------------------------- 일교차 (귀가 전 가장 추운 때)
+LATER_9 = {"temperature": 9, "apparent_temperature": 9, "label": "21시"}
+
+
+def test_later_cold_suggests_outer_to_carry():
+    """낮 21℃ → 21시 9℃: 겉옷 없는 코디엔 그때 맞는 겉옷을 옷장에서 골라 챙기라고 한다."""
+    for gender in ("male", "female"):
+        for purpose in ("등교", "데이트", "격식"):
+            for r in recommend_outfits(starter_items(gender), 21, 21, 60, 0, False, 8, purpose, 0, 0, 3, later=LATER_9):
+                advice = [t for t in r["reasons"] if t.startswith("21시쯤 체감 9℃")]
+                assert len(advice) == 1, r["reasons"]
+                carry = r["carry"]
+                if not any(p["category"] == "아우터" for p in r["pieces"]):
+                    assert carry and carry["category"] == "아우터" and advice[0].endswith("챙기세요."), advice
+                if carry:
+                    rule = rule_for(carry["subcategory"])
+                    assert purpose not in rule["blocked_purposes"], (purpose, carry["name"])
+                    assert rule["min_temp"] <= 9 <= rule["max_temp"], carry["name"]
+
+
+def test_later_advice_only_when_much_colder():
+    for later_t in (19, 22):  # 2℃ 낮거나 오히려 따뜻하면 안내 없음
+        later = {"temperature": later_t, "apparent_temperature": later_t, "label": "21시"}
+        for r in recommend_outfits(starter_items("male"), 21, 21, 60, 0, False, 8, "등교", 0, 0, 3, later=later):
+            assert r["carry"] is None and not any("쯤 체감" in t for t in r["reasons"])
+    for r in recommend_outfits(starter_items("male"), 21, 21, 60, 0, False, 8, "등교", 0, 0, 3):
+        assert r["carry"] is None and "later_effective_temp" not in r["components"]
+
+
+def test_later_suggests_warmer_outer_when_wearing_light_one():
+    items = ITEMS + [{"id": 5, "name": "울 코트", "category": "아우터", "subcategory": "코트", "color": "gray",
+                      "warmth": 4, "rain_ok": 0}]
+    windbreaker_outfit = [x for x in items if x["id"] in (1, 2, 3, 4)]
+    out = recommend(items, 20, 20, 60, 0, False, 8, "등교", 0, 0, 5,
+                    later={"temperature": 6, "apparent_temperature": 6, "label": "저녁"})
+    r = next(r for r in out["results"] if {p["id"] for p in r["pieces"]} == {p["id"] for p in windbreaker_outfit})
+    assert r["carry"]["name"] == "울 코트"
+    assert any("바람막이보다 울 코트가 더 따뜻해요" in t for t in r["reasons"])

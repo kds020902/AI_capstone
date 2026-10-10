@@ -29,6 +29,9 @@ INCOMPATIBLE_PAIRS = {
         ("코트", "기능성 티셔츠"), ("코트", "러닝화"), ("코트", "반바지"),
         ("로퍼", "조거팬츠"), ("로퍼", "기능성 티셔츠"),
         ("원피스", "러닝화"), ("셔츠원피스", "러닝화"), ("니트원피스", "러닝화"),
+        ("구두", "조거팬츠"), ("구두", "반바지"), ("구두", "레깅스"), ("구두", "기능성 티셔츠"), ("구두", "후드티"),
+        ("힐", "조거팬츠"), ("힐", "기능성 티셔츠"), ("힐", "레깅스"),
+        ("블레이저", "레깅스"), ("블레이저", "슬리퍼"),
     ]
 }
 
@@ -78,3 +81,35 @@ def rule_for(subcategory):
 def main_category_for_subcategory(subcategory):
     r = rule_for(subcategory)
     return r["main_category"] if r else None
+
+
+# ---------------------------------------------------------------- 계절
+# 계절마다 낮의 대표 유효 기온(℃). 옷 종류의 착용 기온 범위가 이 중 하나라도 품으면 그 계절 옷으로 본다
+# (봄·가을은 쌀쌀할 때와 선선할 때 두 값). 규칙표만으로 정해지므로 사용자가 따로 입력하지 않아도 된다.
+SEASON_TEMPS = {"여름": (28,), "봄·가을": (11, 16), "겨울": (0,)}
+SEASONS = list(SEASON_TEMPS)
+
+
+def seasons_for(subcategory):
+    """옷 종류로 정한 계절 목록 (규칙표에 없는 종류는 사계절)."""
+    r = rule_for(subcategory)
+    if r is None:
+        return list(SEASONS)
+    return [s for s, temps in SEASON_TEMPS.items() if any(r["min_temp"] <= t <= r["max_temp"] for t in temps)]
+
+
+def manual_seasons(item):
+    """사용자가 직접 고른 계절 ('여름|겨울' 형식으로 저장). 없으면 빈 목록."""
+    return [s for s in SEASONS if s in (item.get("seasons") or "").split("|")]
+
+
+def item_seasons(item):
+    return manual_seasons(item) or seasons_for(item.get("subcategory"))
+
+
+def season_label(seasons):
+    return "사계절" if len(seasons) == len(SEASONS) else ", ".join(seasons)
+
+
+def current_season(month):
+    return "여름" if month in (6, 7, 8) else "겨울" if month in (12, 1, 2) else "봄·가을"

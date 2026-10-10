@@ -61,6 +61,7 @@ section.panel { padding-top: 18px; display: grid; gap: 16px; }
 /* 날씨 입력 */
 .weather { display: grid; gap: 14px; }
 .wgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+[hidden] { display: none !important; }
 .field { display: grid; gap: 6px; min-width: 0; }
 .field .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .field .val { font-family: var(--mono); font-weight: 600; font-size: 1.05rem; }
@@ -76,6 +77,28 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 /* 경고 */
 .warns { display: grid; gap: 8px; }
+.verdict { border-radius: 8px; padding: 9px 12px; font-size: 0.92rem; background: var(--accent-soft); color: var(--ink); }
+.verdict.dup, .verdict.none { background: var(--warn-soft); color: var(--warn); }
+.verdict.gap { border-left: 4px solid var(--good); }
+.cand { display: grid; gap: 10px; }
+.cand .head { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center; }
+.cand .head .thumb, .cand .head .sw.big { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 1px solid var(--line); grid-row: span 2; }
+.cells { width: 100%; border-collapse: collapse; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+.cells th, .cells td { border: 1px solid var(--line); padding: 5px 6px; text-align: center; }
+.cells th { color: var(--muted); font-weight: 600; background: var(--sunk); }
+.cells td.up { color: var(--good); font-weight: 600; }
+.cells-wrap { overflow-x: auto; }
+.cand .head .nm { font-weight: 600; }
+.cand .head .meta { font-size: 0.82rem; color: var(--muted); }
+.cand-acts { grid-row: span 2; display: flex; gap: 6px; align-items: center; }
+@media (max-width: 560px) {
+  .cand .head { grid-template-columns: auto 1fr; }
+  .cand .head .thumb, .cand .head .sw.big { grid-row: 1 / 3; grid-column: 1; }
+  .cand .head .nm { grid-row: 1; grid-column: 2; }
+  .cand .head .meta { grid-row: 2; grid-column: 2; }
+  .cand-acts { grid-row: 3; grid-column: 1 / -1; }
+  .tab { padding: 10px 8px; }
+}
 .warn { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 9px 12px; font-size: 0.92rem; }
 
 /* 코디 카드 */
@@ -92,6 +115,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .tag .sw { grid-row: span 2; width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line); }
 .tag .role { font-size: 0.7rem; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
 .tag .nm { font-weight: 500; overflow-wrap: anywhere; }
+.tag.carry { border-style: dashed; background: var(--surface); }
 .reasons { margin: 0; padding-left: 18px; color: var(--ink); display: grid; gap: 3px; font-size: 0.93rem; }
 .bars { display: grid; gap: 6px; }
 .bar { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 0.85rem; }
@@ -114,6 +138,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .item .meta { font-size: 0.8rem; color: var(--muted); grid-column: 2 / 3; }
 .item .ctl { grid-row: 1 / span 2; grid-column: 3; display: grid; gap: 4px; justify-items: end; }
 .dots { letter-spacing: 1px; color: var(--warm); font-size: 0.75rem; }
+.item select.mini { font-size: 0.75rem; padding: 2px 4px; max-width: 120px; }
+.tidy { display: grid; gap: 10px; }
 .switch { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--muted); cursor: pointer; }
 .linkbtn { border: 0; background: none; color: var(--bad); cursor: pointer; font-size: 0.8rem; padding: 0; }
 
@@ -160,6 +186,7 @@ footer a { color: var(--accent); }
       <button class="tab" role="tab" id="t-rec" aria-controls="p-rec" aria-selected="true">오늘의 추천</button>
       <button class="tab" role="tab" id="t-closet" aria-controls="p-closet" aria-selected="false">내 옷장<span class="count" id="closet-count"></span></button>
       <button class="tab" role="tab" id="t-photo" aria-controls="p-photo" aria-selected="false">사진으로 추가</button>
+      <button class="tab" role="tab" id="t-shop" aria-controls="p-shop" aria-selected="false">사기 전에</button>
       <button class="tab" role="tab" id="t-settings" aria-controls="p-settings" aria-selected="false">설정</button>
     </nav>
   </header>
@@ -182,6 +209,13 @@ footer a { color: var(--accent); }
             <input type="range" id="in-app" min="-20" max="42" step="0.5">
           </div>
         </div>
+        <div class="row later">
+          <label class="switch" style="font-size:0.95rem;color:var(--ink)"><input type="checkbox" id="in-late"> 저녁 늦게까지 밖에 있어요</label>
+          <div class="field" id="later-field" hidden style="flex:1;min-width:200px">
+            <div class="head"><label for="in-later">저녁 체감온도</label><span class="val" id="v-later"></span></div>
+            <input type="range" id="in-later" min="-20" max="42" step="0.5">
+          </div>
+        </div>
         <div class="row">
           <span class="label">외출 목적</span>
           <div class="seg" id="purposes" role="group" aria-label="외출 목적"></div>
@@ -200,6 +234,13 @@ footer a { color: var(--accent); }
         <div class="row">
           <button class="btn" id="go-photo">사진으로 옷 추가</button>
         </div>
+      </div>
+      <div class="block tidy">
+        <div class="row">
+          <span class="label">계절</span>
+          <div class="seg" id="season-filter" role="group" aria-label="계절로 보기"></div>
+        </div>
+        <div class="row" id="tidy"></div>
       </div>
       <div id="groups" class="panel" style="padding:0"></div>
     </section>
@@ -230,10 +271,21 @@ footer a { color: var(--accent); }
             <label>이름<input type="text" id="f-name" placeholder="예: 네이비 후드티" autocomplete="off"></label>
             <label class="inline"><input type="checkbox" id="f-rain"> 비 오는 날 입어도 괜찮아요</label>
             <div class="row"><button class="btn primary" type="submit" id="f-save">옷장에 추가</button>
+              <button class="btn" type="button" id="f-cand">구매 후보로 맞춰보기</button>
               <span class="muted" style="font-size:0.85rem">사진 없이 직접 골라서 추가해도 돼요.</span></div>
           </form>
         </div>
       </div>
+    </section>
+
+    <!-- 사기 전에 맞춰보기 -->
+    <section class="panel" id="p-shop" role="tabpanel" aria-labelledby="t-shop" hidden>
+      <div class="block field">
+        <p class="muted" style="margin:0;font-size:0.9rem">쇼핑몰 상품 사진이나 캡처를 '사진으로 추가'에서 올리고 <b>구매 후보로 맞춰보기</b>를 누르면, 옷장에 넣지 않고 지금 옷장과 맞춰 봐요.</p>
+        <div class="row"><span class="label">계절</span><div class="seg" id="shop-season" role="group" aria-label="코디를 볼 계절"></div></div>
+        <div class="row"><span class="label">외출 목적</span><div class="seg" id="shop-purpose" role="group" aria-label="코디를 볼 외출 목적"></div></div>
+      </div>
+      <ol class="outfits" id="shop-list"></ol>
     </section>
 
     <!-- 설정 -->
@@ -258,7 +310,7 @@ footer a { color: var(--accent); }
 
   <footer>
     <span>추천: 날씨 60% · 비 25% · 색상 15% · 외출 목적에 안 맞는 옷은 규칙표로 먼저 거름</span>
-    <span>사진 분류: EfficientNet-B0 · 33종 · 검증 정확도 85.4% (폰 사진 87.8%) · 브라우저 안에서 계산</span>
+    <span>사진 분류: EfficientNet-B0 · 42종 · 검증 정확도 83.8% (폰 사진 87.5%) · 브라우저 안에서 계산</span>
     <span>날씨 자동 조회와 기록 저장은 설치형 앱에서 쓸 수 있어요 · <a href="https://github.com/kds020902/AI_capstone" target="_blank" rel="noopener">GitHub에서 전체 앱 받기</a></span>
   </footer>
 </div>
@@ -283,7 +335,7 @@ footer a { color: var(--accent); }
   const THERMAL = [["추위를 잘 탐", 1, 0], ["추위를 조금 탐", 0.6, 0.1], ["보통", 0, 0], ["더위를 조금 탐", 0.1, 0.6], ["더위를 잘 탐", 0, 1]];
   const PRESETS = [
     { label: "한겨울", t: -5, a: -9, rain: false }, { label: "쌀쌀한 날", t: 12, a: 11, rain: false },
-    { label: "봄비", t: 14, a: 12, rain: true }, { label: "초여름", t: 23, a: 24, rain: false }, { label: "한여름", t: 31, a: 34, rain: false },
+    { label: "봄비", t: 14, a: 12, rain: true }, { label: "일교차 큰 날", t: 21, a: 21, rain: false, late: true, l: 9 }, { label: "초여름", t: 23, a: 24, rain: false }, { label: "한여름", t: 31, a: 34, rain: false },
   ];
   const WARMTH_LABEL = ["", "1 · 아주 얇음", "2 · 얇음", "3 · 보통", "4 · 두꺼움", "5 · 아주 두꺼움"];
   const STORE = "ai-closet-trial-v1";
@@ -304,7 +356,7 @@ footer a { color: var(--accent); }
   const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* 무시 */ } };
 
   // ---------------------------------------------------------------- 탭
-  const TABS = { rec: "t-rec", closet: "t-closet", photo: "t-photo", settings: "t-settings" };
+  const TABS = { rec: "t-rec", closet: "t-closet", photo: "t-photo", shop: "t-shop", settings: "t-settings" };
   function show(name) {
     for (const [k, id] of Object.entries(TABS)) {
       const on = k === name;
@@ -312,6 +364,7 @@ footer a { color: var(--accent); }
       $("p-" + k).hidden = !on;
     }
     if (name === "photo") ensureModel();
+    if (name === "shop") renderShop();
   }
   for (const [k, id] of Object.entries(TABS)) $(id).addEventListener("click", () => show(k));
   $("go-photo").addEventListener("click", () => show("photo"));
@@ -333,15 +386,17 @@ footer a { color: var(--accent); }
 
   function syncWeatherInputs() {
     const w = state.weather;
+    if (typeof w.l !== "number") w.l = w.a - 6;  // 예전에 저장된 상태에는 저녁 기온이 없음
     $("in-temp").value = w.t; $("in-app").value = w.a; $("in-rain").checked = w.rain;
-    $("v-temp").textContent = `${w.t}℃`; $("v-app").textContent = `${w.a}℃`;
+    $("in-late").checked = !!w.late; $("later-field").hidden = !w.late; $("in-later").value = w.l;
+    $("v-temp").textContent = `${w.t}℃`; $("v-app").textContent = `${w.a}℃`; $("v-later").textContent = `${w.l}℃`;
     for (const b of $("presets").children) b.setAttribute("aria-pressed", +b.dataset.i === w.preset);
     for (const b of $("purposes").children) b.setAttribute("aria-pressed", b.dataset.p === w.purpose);
   }
   $("presets").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
     const p = PRESETS[+b.dataset.i];
-    Object.assign(state.weather, { t: p.t, a: p.a, rain: p.rain, preset: +b.dataset.i });
+    Object.assign(state.weather, { t: p.t, a: p.a, rain: p.rain, late: !!p.late, l: p.late ? p.l : p.a - 6, preset: +b.dataset.i });
     update();
   });
   $("purposes").addEventListener("click", (e) => {
@@ -351,21 +406,25 @@ footer a { color: var(--accent); }
   $("in-temp").addEventListener("input", (e) => { state.weather.t = +e.target.value; state.weather.preset = -1; update(); });
   $("in-app").addEventListener("input", (e) => { state.weather.a = +e.target.value; state.weather.preset = -1; update(); });
   $("in-rain").addEventListener("change", (e) => { state.weather.rain = e.target.checked; state.weather.preset = -1; update(); });
+  $("in-late").addEventListener("change", (e) => { state.weather.late = e.target.checked; state.weather.preset = -1; update(); });
+  $("in-later").addEventListener("input", (e) => { state.weather.l = +e.target.value; state.weather.preset = -1; update(); });
 
   const fmt = (v) => (Math.round(v * 10) / 10).toString().replace("-", "−");
-  function tagHtml(p, role) {
-    return `<span class="tag"><span class="sw" style="background:${swatch(p.color)}"></span>` +
+  function tagHtml(p, role, cls = "") {
+    return `<span class="tag ${cls}"><span class="sw" style="background:${swatch(p.color)}"></span>` +
       `<span class="role">${esc(ROLE[role] || role)}</span><span class="nm">${esc(p.name)}</span></span>`;
   }
   function renderRec() {
     const w = state.weather, [, cold, heat] = THERMAL[state.thermal];
     const items = state.items.filter((x) => x.active);
     const out = C.recommend(items, { temperature: w.t, apparent: w.a, rain: w.rain, purpose: w.purpose, cold, heat,
-      excludeKeys: state.disliked, seed: `${state.gender}-${today}` });
+      excludeKeys: state.disliked, seed: `${state.gender}-${today}`,
+      later: w.late ? { temperature: w.l, apparent: w.l, label: "저녁" } : null });
     const ctx = out.context;
     const adj = ctx.adjustments.map(([l, d]) => `<span>${esc(l)} <b>${d > 0 ? "+" : ""}${fmt(d)}℃</b></span>`).join("");
     $("thermo").innerHTML = `<span>체감 <b>${fmt(ctx.baseTemp)}℃</b></span>${adj || "<span class='muted'>보정 없음</span>"}` +
-      `<span>→ 기준 <span class="eff">${fmt(ctx.eff)}℃</span>로 추천</span>`;
+      `<span>→ 기준 <span class="eff">${fmt(ctx.eff)}℃</span>로 추천</span>` +
+      (ctx.later ? `<span>저녁 체감 <b>${fmt(ctx.later.baseTemp)}℃</b> → 기준 <b>${fmt(ctx.later.eff)}℃</b></span>` : "");
     $("warns").innerHTML = out.warnings.map((m) => `<div class="warn">${esc(m)}</div>`).join("");
     if (!out.results.length) {
       $("outfits").innerHTML = `<li class="block empty">추천할 코디가 없어요. 내 옷장에서 상의·하의·신발을 보유로 켜 두세요.</li>`;
@@ -379,7 +438,7 @@ footer a { color: var(--accent); }
       return `<li class="block outfit">
         <div class="top"><span class="rank">${i + 1}위</span><span class="pct">${(r.score * 100).toFixed(1)}%</span>
           <span class="muted num" style="font-size:0.82rem">보온 ${r.components.actual_warmth.toFixed(2)} / 목표 ${r.components.target_warmth.toFixed(2)}</span></div>
-        <div class="tags">${r.pieces.map((p, j) => tagHtml(p, roles[j])).join("")}</div>
+        <div class="tags">${r.pieces.map((p, j) => tagHtml(p, roles[j])).join("")}${r.carry ? tagHtml(r.carry, "저녁 대비", "carry") : ""}</div>
         <ul class="reasons">${r.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
         <div class="bars">${bars}</div>
         <div class="acts"><button class="btn" type="button" data-dislike="${C.outfitKey(r.pieces)}">이 조합 별로예요</button></div>
@@ -395,26 +454,59 @@ footer a { color: var(--accent); }
 
   // ---------------------------------------------------------------- 내 옷장
   const dots = (n) => "●".repeat(n) + "○".repeat(5 - n);
+  const SEASON_OPTS = [["여름", "여름"], ["봄·가을", "봄·가을"], ["겨울", "겨울"], ["여름|봄·가을", "여름·봄·가을"],
+    ["봄·가을|겨울", "봄·가을·겨울"], ["여름|봄·가을|겨울", "사계절"]];
+  const seasonNow = C.currentSeason(new Date().getMonth() + 1);
+  const tidySeason = () => (C.SEASONS.includes(state.closetSeason) ? state.closetSeason : seasonNow);
+  function seasonSelect(x) {
+    const cur = C.manualSeasons(x).join("|");
+    return `<select class="mini" data-season="${x.id}" aria-label="${esc(x.name)} 계절">` +
+      `<option value="">자동 · ${esc(C.seasonLabel(C.seasonsFor(x.subcategory)))}</option>` +
+      SEASON_OPTS.map(([v, l]) => `<option value="${v}"${v === cur ? " selected" : ""}>${l}</option>`).join("") + "</select>";
+  }
   function renderCloset() {
     const act = state.items.filter((x) => x.active).length;
     $("closet-count").textContent = act;
     $("closet-summary").textContent = `${state.items.length}벌 중 ${act}벌을 추천에 쓰고 있어요. 없는 옷은 '보유'를 끄세요.`;
+    const filter = state.closetSeason || "전체";
+    $("season-filter").innerHTML = ["전체", ...C.SEASONS].map((v) =>
+      `<button type="button" data-sf="${v}" aria-pressed="${v === filter}">${v}</button>`).join("");
+    const ts = tidySeason();
+    const off = state.items.filter((x) => x.active && !C.itemSeasons(x).includes(ts));
+    const back = state.items.filter((x) => !x.active && C.itemSeasons(x).includes(ts));
+    $("tidy").innerHTML = `<span class="muted">지금은 ${seasonNow}</span>` +
+      `<button class="btn" type="button" data-tidy="off"${off.length ? "" : " disabled"}>${ts}에 안 입는 옷 ${off.length}벌 넣어두기</button>` +
+      `<button class="btn" type="button" data-tidy="on"${back.length ? "" : " disabled"}>넣어 둔 ${ts} 옷 ${back.length}벌 꺼내기</button>`;
     $("groups").innerHTML = DATA.MAIN_CATEGORIES.map((cat) => {
-      const list = state.items.filter((x) => x.category === cat);
+      const list = state.items.filter((x) => x.category === cat && (filter === "전체" || C.itemSeasons(x).includes(filter)));
       if (!list.length) return "";
       return `<div class="block group"><h3>${cat}<span class="muted num" style="font-size:0.8rem">${list.length}</span></h3><div class="items">` +
         list.map((x) => `<div class="item${x.active ? "" : " off"}">
           ${x.thumb ? `<img class="thumb" src="${x.thumb}" alt="">` : `<span class="sw big" style="background:${swatch(x.color)}"></span>`}
           <span class="nm">${esc(x.name)}</span>
-          <span class="meta">${esc(x.subcategory)} · ${esc(colorKo(x.color))} · <span class="dots" title="두께 ${x.warmth}/5">${dots(x.warmth)}</span> · 비 ${x.rain_ok ? "O" : "X"}</span>
+          <span class="meta">${esc(x.subcategory)} · ${esc(colorKo(x.color))} · <span class="dots" title="두께 ${x.warmth}/5">${dots(x.warmth)}</span> · 비 ${x.rain_ok ? "O" : "X"} · ${esc(C.seasonLabel(C.itemSeasons(x)))}</span>
           <span class="ctl"><label class="switch" for="own-${x.id}"><input type="checkbox" id="own-${x.id}" data-toggle="${x.id}" ${x.active ? "checked" : ""}> 보유</label>
+          ${seasonSelect(x)}
           ${x.starter ? "" : `<button class="linkbtn" type="button" data-del="${x.id}">삭제</button>`}</span>
         </div>`).join("") + "</div></div>";
     }).join("");
   }
   $("groups").addEventListener("change", (e) => {
-    const id = e.target.dataset.toggle; if (!id) return;
-    const it = state.items.find((x) => x.id === +id); it.active = e.target.checked; update();
+    const { toggle, season } = e.target.dataset;
+    if (toggle) { state.items.find((x) => x.id === +toggle).active = e.target.checked; update(); }
+    if (season) { const v = e.target.value; state.items.find((x) => x.id === +season).seasons = v ? v.split("|") : null; update(); }
+  });
+  $("season-filter").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-sf]"); if (!b) return;
+    state.closetSeason = b.dataset.sf; update();
+  });
+  $("tidy").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tidy]"); if (!b) return;
+    const ts = tidySeason(), putAway = b.dataset.tidy === "off";
+    const moved = state.items.filter((x) => (putAway ? x.active && !C.itemSeasons(x).includes(ts) : !x.active && C.itemSeasons(x).includes(ts)));
+    moved.forEach((x) => { x.active = !putAway; }); update();
+    toast(putAway ? `${ts}에 안 입는 옷 ${moved.length}벌을 넣어 뒀어요. 추천에서 빠져요.` : `${ts} 옷 ${moved.length}벌을 꺼냈어요.`,
+      () => { moved.forEach((x) => { x.active = putAway; }); update(); });
   });
   $("groups").addEventListener("click", (e) => {
     const b = e.target.closest("[data-del]"); if (!b) return;
@@ -447,15 +539,82 @@ footer a { color: var(--accent); }
   function markCand(sub) { for (const b of $("cands").children) b.setAttribute("aria-pressed", b.dataset.sub === sub); }
   $("cands").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { applySub(b.dataset.sub); markCand(b.dataset.sub); } });
 
-  $("add-form").addEventListener("submit", (e) => {
-    e.preventDefault();
+  function formItem() {
     const sub = $("f-sub").value, r = DATA.RULES[sub];
     const name = $("f-name").value.trim() || `${KO[$("f-color").value]} ${sub}`;
-    state.items.push({ id: state.nextId++, name, category: r.main_category, subcategory: sub, color: $("f-color").value,
-      warmth: +$("f-warmth").value, rain_ok: $("f-rain").checked, material: "", active: true, starter: false, thumb });
-    update();
-    toast(`${name}을(를) 옷장에 추가했어요.`);
+    return { id: state.nextId++, name, category: r.main_category, subcategory: sub, color: $("f-color").value,
+      warmth: +$("f-warmth").value, rain_ok: $("f-rain").checked, material: "", active: true, starter: false, thumb };
+  }
+  $("add-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const it = formItem();
+    state.items.push(it); update();
+    toast(`${it.name}을(를) 옷장에 추가했어요.`);
     resetPhoto();
+  });
+  $("f-cand").addEventListener("click", () => {
+    const it = formItem();
+    (state.candidates ||= []).unshift(it); update();
+    toast(`${it.name}을(를) 구매 후보로 두고 옷장과 맞춰 봤어요.`);
+    resetPhoto(); show("shop");
+  });
+
+  // ---------------------------------------------------------------- 사기 전에 맞춰보기
+  const VERDICT_LABEL = { dup: "비슷한 옷 있음", none: "맞춰 입을 옷 없음", gap: "옷장 빈 곳을 채움", fit: "잘 어울림" };
+  const shopSeason = () => state.shopSeason || seasonNow;
+  const shopPurpose = () => state.shopPurpose || DATA.PURPOSES[0];
+  function renderShop() {
+    if ($("p-shop").hidden) return;  // 계산이 무거워 보이는 동안만 다시 그림
+    const cands = state.candidates || [];
+    $("shop-season").innerHTML = C.SEASONS.map((v) => `<button type="button" data-ss="${v}" aria-pressed="${v === shopSeason()}">${v}</button>`).join("");
+    $("shop-purpose").innerHTML = DATA.PURPOSES.map((v) => `<button type="button" data-sp="${v}" aria-pressed="${v === shopPurpose()}">${v}</button>`).join("");
+    if (!cands.length) {
+      $("shop-list").innerHTML = `<li class="block empty">아직 구매 후보가 없어요. '사진으로 추가'에서 상품 사진을 올리고 '구매 후보로 맞춰보기'를 눌러 보세요.</li>`;
+      return;
+    }
+    const items = state.items.filter((x) => x.active), [, cold, heat] = THERMAL[state.thermal];
+    const byId = new Map(items.map((x) => [x.id, x]));
+    $("shop-list").innerHTML = cands.map((c) => {
+      const r = C.candidateReport(c, items, { cold, heat });
+      const gain = new Set(r.improves.map((x) => `${x.season}|${x.purpose}`));
+      const rows = C.SEASONS.map((s) => `<tr><th>${s}</th>` + DATA.PURPOSES.map((p) => {
+        const cell = r.cells[`${s}|${p}`], up = gain.has(`${s}|${p}`);
+        return `<td class="${up ? "up" : ""}">${cell.best === null ? "–" : `${(cell.best * 100).toFixed(0)}${up ? " ▲" : ""}`}</td>`;
+      }).join("") + "</tr>").join("");
+      const cell = r.cells[`${shopSeason()}|${shopPurpose()}`];
+      const outfits = cell.results.length ? cell.results.map((o) => {
+        const roles = C.roles(o.pieces);
+        return `<div class="tags"><span class="pct" style="font-size:0.9rem">${(o.score * 100).toFixed(0)}점</span>` +
+          o.pieces.map((p, j) => tagHtml(p, p.id === DATA.CANDIDATE_ID ? "사려는 옷" : roles[j], p.id === DATA.CANDIDATE_ID ? "carry" : "")).join("") + "</div>";
+      }).join("") : `<p class="muted" style="margin:0">${shopSeason()} · ${shopPurpose()}에는 이 옷으로 만들 코디가 없어요.</p>`;
+      const partners = r.partners.map((i) => byId.get(i)).filter(Boolean).map((x) => x.name);
+      return `<li class="block cand">
+        <div class="head">${c.thumb ? `<img class="thumb" src="${c.thumb}" alt="">` : `<span class="sw big" style="background:${swatch(c.color)}"></span>`}
+          <span class="nm">${esc(c.name)}</span>
+          <span class="cand-acts"><button class="btn" type="button" data-buy="${c.id}">샀어요 · 옷장에 넣기</button>
+            <button class="linkbtn" type="button" data-cdel="${c.id}">지우기</button></span>
+          <span class="meta">${esc(c.subcategory)} · ${esc(colorKo(c.color))} · ${esc(C.seasonLabel(r.seasons))}</span></div>
+        <div class="verdict ${r.verdict[0]}"><b>${VERDICT_LABEL[r.verdict[0]]}</b> · ${esc(r.verdict[1])}</div>
+        ${r.similar.same_type.length ? `<p class="muted" style="margin:0;font-size:0.85rem">같은 종류로 가진 옷: ${esc(r.similar.same_type.map((x) => x.name).join(", "))}</p>` : ""}
+        ${partners.length ? `<p class="muted" style="margin:0;font-size:0.85rem">어울리는 내 옷 ${partners.length}벌: ${esc(partners.slice(0, 8).join(", "))}${partners.length > 8 ? " …" : ""}</p>` : ""}
+        <div class="cells-wrap"><table class="cells"><caption class="muted" style="text-align:left;font-size:0.8rem;padding-bottom:4px">상황별 최고 코디 점수 (– 입기 어려움 · ▲ 이 옷이 있으면 점수가 오름)</caption>
+          <tr><th></th>${DATA.PURPOSES.map((p) => `<th>${p}</th>`).join("")}</tr>${rows}</table></div>
+        <div><span class="label">${shopSeason()} · ${shopPurpose()} 코디</span>${outfits}</div>
+      </li>`;
+    }).join("");
+  }
+  $("p-shop").addEventListener("click", (e) => {
+    const t = e.target.closest("button"); if (!t) return;
+    const { ss, sp, buy, cdel } = t.dataset;
+    if (ss) state.shopSeason = ss;
+    if (sp) state.shopPurpose = sp;
+    if (buy || cdel) {
+      const idx = state.candidates.findIndex((x) => x.id === +(buy || cdel)), c = state.candidates[idx];
+      state.candidates.splice(idx, 1);
+      if (buy) { state.items.push({ ...c, active: true }); toast(`${c.name}을(를) 옷장에 넣었어요.`); }
+      else toast(`${c.name}을(를) 후보에서 지웠어요.`, () => { state.candidates.splice(idx, 0, c); update(); });
+    }
+    update();
   });
   function resetPhoto() {
     nameEdited = false; thumb = null;
@@ -463,19 +622,26 @@ footer a { color: var(--accent); }
     $("in-file").value = ""; applySub($("f-sub").value);
   }
 
-  // 대표색: 사진 가운데 영역에서 가장 많이 나오는 색 (가장자리 배경과 가슴 프린트에 덜 흔들리도록)
+  // 앱(core/vision.py dominant_color_hex)과 같은 방식: 가장자리 색(=배경)과 비슷한 픽셀을 빼고
+  // 가운데 40×40에서 가장 많은 색 구간의 평균. 남는 픽셀이 12% 미만이면(옷이 사진을 꽉 채움) 배경을 빼지 않는다
   function dominantColor(img) {
     const c = document.createElement("canvas"); c.width = c.height = 64;
     const g = c.getContext("2d"); g.drawImage(img, 0, 0, 64, 64);
-    const d = g.getImageData(12, 12, 40, 40).data, bins = new Map();
-    for (let i = 0; i < d.length; i += 4) {
-      const key = (d[i] >> 5) * 64 + (d[i + 1] >> 5) * 8 + (d[i + 2] >> 5);
-      const b = bins.get(key) || [0, 0, 0, 0];
-      b[0]++; b[1] += d[i]; b[2] += d[i + 1]; b[3] += d[i + 2];
+    const d = g.getImageData(0, 0, 64, 64).data, px = (x, y) => { const i = (y * 64 + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    const border = [];
+    for (let k = 0; k < 64; k++) border.push(px(k, 0), px(k, 63), px(0, k), px(63, k));
+    const median = (j) => { const v = border.map((p) => p[j]).sort((a, b) => a - b), m = v.length >> 1; return (v[m - 1] + v[m]) / 2; };
+    const bg = [median(0), median(1), median(2)], center = [];
+    for (let y = 12; y < 52; y++) for (let x = 12; x < 52; x++) center.push(px(x, y));
+    const fg = center.filter((p) => Math.hypot(p[0] - bg[0], p[1] - bg[1], p[2] - bg[2]) > 28);
+    const bins = new Map();
+    for (const p of fg.length >= center.length * 0.12 ? fg : center) {
+      const key = (p[0] >> 5) * 64 + (p[1] >> 5) * 8 + (p[2] >> 5), b = bins.get(key) || [0, 0, 0, 0];
+      b[0]++; b[1] += p[0]; b[2] += p[1]; b[3] += p[2];
       bins.set(key, b);
     }
-    let best = null;
-    for (const b of bins.values()) if (!best || b[0] > best[0]) best = b;
+    let bestKey = -1, best = null;  // 장수가 같으면 구간 번호가 작은 쪽 (파이썬 argmax와 같게)
+    for (const [key, b] of bins) if (!best || b[0] > best[0] || (b[0] === best[0] && key < bestKey)) { best = b; bestKey = key; }
     const hex = "#" + [best[1], best[2], best[3]].map((v) => Math.round(v / best[0]).toString(16).padStart(2, "0")).join("");
     return C.hexToName(hex) || "gray";
   }
@@ -605,7 +771,7 @@ footer a { color: var(--accent); }
     for (const r of $("thermals").querySelectorAll("input")) r.checked = +r.value === state.thermal;
   }
 
-  function update() { syncWeatherInputs(); renderRec(); renderCloset(); renderSettings(); save(); }
+  function update() { syncWeatherInputs(); renderRec(); renderCloset(); renderShop(); renderSettings(); save(); }
   update();
   if (TABS[location.hash.slice(1)]) show(location.hash.slice(1));
 })();

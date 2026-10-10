@@ -11,4 +11,4 @@ GUIDES = {
 }
 def get_care_guide(material):
     key = (material or "").strip().lower()
-    return {"text": GUIDES.get(key, GUIDES["other"]), "source": "MVP 데모 가이드 / 실제 제품 라벨 우선"}
+    return {"text": GUIDES.get(key, GUIDES["other"]), "source": "일반 세탁 가이드 / 실제 제품 라벨 우선"}

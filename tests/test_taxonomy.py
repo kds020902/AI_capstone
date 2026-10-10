@@ -2,7 +2,10 @@
 import csv
 
 from core.catalog import FEMALE_STARTER, MALE_STARTER
-from core.taxonomy import LAYER_PAIRS, MAIN_CATEGORIES, PURPOSES, RULES, SUBCATEGORY_TO_MAIN, ROOT
+from core.taxonomy import (
+    LAYER_PAIRS, MAIN_CATEGORIES, PURPOSES, ROOT, RULES, SEASONS, SUBCATEGORY_TO_MAIN, current_season, item_seasons,
+    season_label, seasons_for,
+)
 
 
 def test_no_path_characters_in_class_names():
@@ -54,3 +57,29 @@ def test_starter_has_no_style_field():
     """튜플 = (이름, 대분류, 세부분류, 색상, 두께, 비 적합, 소재)."""
     for row in MALE_STARTER + FEMALE_STARTER:
         assert len(row) == 7 and row[3] not in ("casual", "formal", "sporty"), row
+
+
+def test_every_type_has_a_season():
+    for name in RULES:
+        assert seasons_for(name), name
+
+
+def test_seasons_follow_common_sense():
+    assert seasons_for("반팔 티셔츠") == ["여름"] and seasons_for("샌들") == ["여름"]
+    assert seasons_for("패딩") == ["겨울"]
+    assert seasons_for("긴팔 티셔츠") == ["봄·가을"] and seasons_for("후드집업") == ["봄·가을"]
+    assert seasons_for("코트") == ["봄·가을", "겨울"] and seasons_for("니트") == ["봄·가을", "겨울"]
+    assert seasons_for("청바지") == SEASONS and season_label(SEASONS) == "사계절"
+    assert seasons_for("없는 종류") == SEASONS
+
+
+def test_manual_seasons_override_type():
+    item = {"subcategory": "반팔 티셔츠", "seasons": "봄·가을|여름|이상한값"}
+    assert item_seasons(item) == ["여름", "봄·가을"]          # 순서는 SEASONS 기준, 모르는 값은 무시
+    assert item_seasons({"subcategory": "반팔 티셔츠", "seasons": ""}) == ["여름"]
+    assert season_label(["봄·가을", "겨울"]) == "봄·가을, 겨울"
+
+
+def test_current_season_by_month():
+    assert [current_season(m) for m in range(1, 13)] == (
+        ["겨울", "겨울"] + ["봄·가을"] * 3 + ["여름"] * 3 + ["봄·가을"] * 3 + ["겨울"])

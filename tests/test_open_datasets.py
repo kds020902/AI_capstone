@@ -3,7 +3,7 @@ import pytest
 
 from core.taxonomy import MAIN_CATEGORIES, SUBCATEGORY_TO_MAIN
 from scripts.open_datasets import (
-    F200K_RULES, GRIGOREV, KREAM_RULES, f200k_label, fpi_label, kream_label, utz_label,
+    F200K_RULES, GRIGOREV, KREAM_RULES, f200k_label, fpi_label, hnm_label, kream_label, utz_label,
 )
 
 VALID = set(SUBCATEGORY_TO_MAIN) | set(MAIN_CATEGORIES)
@@ -31,7 +31,13 @@ def test_every_rule_targets_a_known_class():
     ("top, Lacoste Paris Long Sleeve Polo Dark Green, a photography of", "폴로"),
     ("top, Lacoste Cable Crewneck Sweater Green, a photography of", "니트"),       # crewneck이어도 니트
     ("top, Millo Jacquard Knit Blouson Dark Gray, a photography of", "상의"),      # 니트 소재 재킷
-    ("top, IAB Studio Zip-Up Hoodie Gray - 22FW, a photography of", "상의"),
+    ("top, IAB Studio Zip-Up Hoodie Gray - 22FW, a photography of", "후드집업"),
+    ("top, Nike Sportswear Club Fleece Pullover Hoodie Black, a photography of", "후드티"),   # 기모 원단 ≠ 플리스
+    ("outer, Patagonia Classic Retro-X Fleece Jacket Natural, a photography of", "플리스"),
+    ("outer, Nike Tech Fleece Full Zip Hoodie Black, a photography of", "후드집업"),        # 테크 플리스 = 스웨트 원단
+    ("outer, The North Face Nuptse Hooded Zip-Up Jacket Black, a photography of", "패딩"),  # 후드+지퍼여도 패딩이 먼저
+    ("top, Our Legacy Turtleneck Knit Black, a photography of", "터틀넥"),
+    ("bottom, Nike Pro Dri-FIT Leggings Black, a photography of", "레깅스"),
     ("bottom, C.P. Company Light Fleece Mixed Cargo Shorts Blue, a photography of", "반바지"),
     ("bottom, Nanamica Cargo Pants Beige, a photography of", "카고팬츠"),
     ("bottom, Waviness Rain Slub Denim Pants Blue Indigo, a photography of", "청바지"),
@@ -57,6 +63,14 @@ def test_kream(text, expected):
     ({"articleType": "Sports Shoes", "usage": "Sports", "gender": "Women",
       "productDisplayName": "Puma Women White Running Shoes"}, "러닝화"),
     ({"articleType": "Watches", "usage": "Casual", "gender": "Men", "productDisplayName": "Titan Men Watch"}, None),
+    ({"articleType": "Tshirts", "usage": "Casual", "gender": "Men",
+      "productDisplayName": "Locomotive Men Polo Neck Red T-shirt"}, "폴로"),           # Myntra의 polo neck = 폴로 카라
+    ({"articleType": "Formal Shoes", "usage": "Formal", "gender": "Men",
+      "productDisplayName": "Red Tape Men Black Formal Shoes"}, "구두"),
+    ({"articleType": "Flip Flops", "usage": "Casual", "gender": "Men", "productDisplayName": "Puma Men Black Flip Flops"},
+     "슬리퍼"),
+    ({"articleType": "Heels", "usage": "Casual", "gender": "Women", "productDisplayName": "Catwalk Women Gold Heels"},
+     None),                                                                              # 대부분 굽 있는 샌들
 ])
 def test_fpi(row, expected):
     assert fpi_label(row) == expected
@@ -83,8 +97,33 @@ def test_f200k(row, expected):
     (("Shoes", "Sneakers and Athletic Shoes", "Lacoste", "Leather"), "스니커즈"),
     (("Shoes", "Loafers", "Cole Haan", "Leather"), "로퍼"),
     (("Boots", "Ankle", "Bass", "Full-grain leather"), "부츠"),
-    (("Shoes", "Oxfords", "ECCO", "Leather"), "신발"),
-    (("Sandals", "Flat", "Teva", "Synthetic"), None),
+    (("Shoes", "Oxfords", "ECCO", "Leather"), "구두"),
+    (("Shoes", "Heels", "Nine West", "Leather"), "힐"),
+    (("Shoes", "Flats", "Steve Madden", "Leather"), "플랫슈즈"),
+    (("Sandals", "Flat", "Teva", "Synthetic"), "샌들"),
+    (("Slippers", "Slipper Flats", "UGG", "Sheepskin"), None),    # 실내화
 ])
 def test_utzappos(args, expected):
     assert utz_label(*args) == expected
+
+
+@pytest.mark.parametrize("row, expected", [
+    ({"product_type_name": "Hoodie", "prod_name": "ZIP HOOD", "index_group_name": "Divided",
+      "detail_desc": "Jacket in sweatshirt fabric with a lined drawstring hood and a zip down the front."}, "후드집업"),
+    ({"product_type_name": "Jacket", "prod_name": "Falcon parka", "index_group_name": "Ladieswear",
+      "detail_desc": "Padded parka in woven fabric with a lined hood and a zip down the front."}, "패딩"),
+    ({"product_type_name": "Jacket", "prod_name": "Milla Pile Jacket", "index_group_name": "Ladieswear",
+      "detail_desc": "Jacket in soft pile with a stand-up collar and a zip down the front."}, "플리스"),
+    ({"product_type_name": "Jacket", "prod_name": "Lee Parka", "index_group_name": "Menswear",
+      "detail_desc": "Parka in cotton twill with a hood lined in soft pile."}, None),          # 안감만 파일
+    ({"product_type_name": "Sweater", "prod_name": "Ellen polo-neck", "index_group_name": "Ladieswear",
+      "detail_desc": "Fine-knit jumper with a polo neck and long sleeves."}, "터틀넥"),       # 영국식 polo neck
+    ({"product_type_name": "Sandals", "prod_name": "Miller slider", "index_group_name": "Menswear",
+      "detail_desc": "Sliders with a wide strap."}, "슬리퍼"),
+    ({"product_type_name": "Leggings/Tights", "prod_name": "Control Top 50 den 1p Tights", "index_group_name": "Ladieswear",
+      "detail_desc": "Tights."}, None),
+    ({"product_type_name": "T-shirt", "prod_name": "Kids tee", "index_group_name": "Baby/Children",
+      "detail_desc": "T-shirt in cotton jersey with short sleeves."}, None),
+])
+def test_hnm(row, expected):
+    assert hnm_label(row) == expected

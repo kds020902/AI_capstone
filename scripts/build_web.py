@@ -99,7 +99,7 @@ def export_model(checkpoint=ROOT / "models" / "clothing_classifier.pt"):
 
 
 def closet_data():
-    from core import catalog, colors, recommender as R, taxonomy as T
+    from core import catalog, colors, recommender as R, shopping, taxonomy as T
     return {
         "MAIN_CATEGORIES": T.MAIN_CATEGORIES, "PURPOSES": T.PURPOSES,
         "RULES": {k: {**v, "blocked_purposes": sorted(v["blocked_purposes"])} for k, v in T.RULES.items()},
@@ -113,6 +113,9 @@ def closet_data():
         "TARGET_CURVE": R.TARGET_CURVE, "THERMAL_SHIFT": R.THERMAL_SHIFT, "EXERCISE_SHIFT": R.EXERCISE_SHIFT,
         "RAIN_SHIFT": R.RAIN_SHIFT, "OUTER_REQUIRED_AT": R.OUTER_REQUIRED_AT, "LAYER_MAX_TEMP": R.LAYER_MAX_TEMP,
         "WARMTH_TOLERANCE": R.WARMTH_TOLERANCE, "MAX_COMBOS": R.MAX_COMBOS,
+        "LATER_DROP": R.LATER_DROP, "LATER_GAP": R.LATER_GAP,
+        "SEASONS": T.SEASONS, "SEASON_TEMPS": {k: list(v) for k, v in T.SEASON_TEMPS.items()},
+        "CANDIDATE_ID": shopping.CANDIDATE_ID, "IMPROVE_MIN": shopping.IMPROVE_MIN,
     }
 
 
