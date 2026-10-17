@@ -1,7 +1,7 @@
 from datetime import date
 from pathlib import Path
+import io
 import sqlite3
-import time
 
 import pandas as pd
 import streamlit as st
@@ -10,22 +10,23 @@ from PIL import Image
 from core import db
 from core.care import get_care_guide
 from core.colors import COLOR_KO, normalize_color
+from core.config import UnsafeKeyError, cloud_settings, get_setting
+from core.media import LocalMedia
 from core.recommender import recommend, explain_score_breakdown
 from core.shopping import candidate_report
 from core.taxonomy import (
     MAIN_CATEGORIES, NUM_SUBCATEGORIES, PURPOSES, RULES, SEASONS, SUBCATEGORIES, current_season, item_seasons,
     main_category_for_subcategory, manual_seasons, season_label, seasons_for,
 )
+from core.tryon import MAX_GARMENTS, space_addresses, tryon_default, tryon_kind, tryon_link, tryon_order, tryon_supported
 from core.vision import classify_clothing_image, dominant_color_hex, dominant_color_name, model_status
 from core.weather import CITY_PRESETS, RETURN_HOURS, coldest_until, get_current_weather
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT / "data" / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 APP_NAME = "AI 옷장"
 st.set_page_config(page_title=APP_NAME, page_icon="👕", layout="wide")
-db.init_db()
 
 for key, value in {
     "user_id": None,
@@ -38,11 +39,121 @@ for key, value in {
 }.items():
     st.session_state.setdefault(key, value)
 
+# ------------------------------------------------------------------ 저장소: 로컬(SQLite) 또는 공개 배포(Supabase)
+try:
+    CLOUD = cloud_settings()
+except UnsafeKeyError as e:
+    st.error(str(e))
+    st.stop()
+TRYON_SPACE_URL = get_setting("TRYON_SPACE_URL")
+WEB_TRIAL_URL = get_setting("WEB_TRIAL_URL")
+
+
+def cloud_login_gate(settings):
+    """로그인 전이면 로그인/가입 화면을 그리고 멈춘다. 로그인했으면 (store, media)."""
+    from core import cloud_auth
+    from core.cloud_store import CloudStore
+    from core.media import SupabaseMedia
+
+    if "sb_client" not in st.session_state:
+        st.session_state.sb_client = cloud_auth.make_client(settings)
+    client = st.session_state.sb_client
+    user = cloud_auth.current_user(client)
+    if user is None:
+        st.title(f"👕 {APP_NAME}")
+        st.caption("날씨·외출 목적·체질에 맞춰 내 옷장 속 옷으로 코디를 추천해요. 내 옷장은 로그인한 나만 볼 수 있어요.")
+        tab_in, tab_up = st.tabs(["로그인", "회원가입"])
+        with tab_in, st.form("login"):
+            email = st.text_input("이메일", key="login_email")
+            pw = st.text_input("비밀번호", type="password", key="login_pw")
+            if st.form_submit_button("로그인", type="primary"):
+                ok, msg = cloud_auth.sign_in(client, email.strip(), pw)
+                (st.success if ok else st.error)(msg)
+                if ok:
+                    st.rerun()
+        with tab_up, st.form("signup"):
+            email2 = st.text_input("이메일", key="signup_email")
+            pw2 = st.text_input("비밀번호 (6자 이상)", type="password", key="signup_pw")
+            pw3 = st.text_input("비밀번호 확인", type="password", key="signup_pw2")
+            if st.form_submit_button("가입하기", type="primary"):
+                if pw2 != pw3:
+                    st.error("비밀번호 확인이 달라요.")
+                else:
+                    ok, msg = cloud_auth.sign_up(client, email2.strip(), pw2)
+                    (st.success if ok else st.info)(msg)
+                    if ok:
+                        st.rerun()
+        st.caption("무료 체험 서비스예요 (비상업·학습·시연용). 사진과 기록은 내 계정에만 저장돼요.")
+        st.stop()
+    st.session_state.auth_email = user.email
+    st.session_state.user_id = str(user.id)
+    return CloudStore(client, user.id), SupabaseMedia(client, user.id)
+
+
+if CLOUD:
+    store, media = cloud_login_gate(CLOUD)
+else:
+    store, media = db, LocalMedia(UPLOAD_DIR)
+    store.init_db()
+
 
 def current_user():
     if not st.session_state.user_id:
         return None
-    return db.get_user(st.session_state.user_id)
+    return store.get_user(st.session_state.user_id)
+
+
+def show_image(ref, **kwargs):
+    data = media.read(ref)
+    if data:
+        st.image(data, **kwargs)
+        return True
+    return False
+
+
+def upload_bytes(uploaded, rgb=False):
+    """업로드 파일 → (바이트, 확장자). rgb=True 면 예전처럼 RGB로 다시 저장 (구매 후보 사진)."""
+    suffix = Path(uploaded.name).suffix.lower() or ".jpg"
+    if not rgb:
+        return uploaded.getvalue(), suffix
+    buf = io.BytesIO()
+    fmt = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}.get(suffix, "JPEG")
+    Image.open(uploaded).convert("RGB").save(buf, format=fmt)
+    return buf.getvalue(), suffix
+
+
+@st.dialog("가상 착용(예시)", width="large")
+def tryon_dialog(items):
+    """Hugging Face ZeroGPU Space(가상 착용)를 이 창 안에 띄우고, 고른 옷 사진을 10분짜리 서명 주소로 넘긴다."""
+    supported = tryon_supported(items)
+    choices = tryon_default(supported)
+    if len(supported) > 1:
+        picked = st.multiselect("입혀 볼 옷 (최대 2벌, 상의 → 하의 순서로 입혀요)", list(range(len(supported))),
+                                default=[supported.index(x) for x in choices], max_selections=MAX_GARMENTS,
+                                format_func=lambda i: f"{supported[i]['name']} ({supported[i]['category']})")
+        choices = tryon_order([supported[i] for i in picked])
+    garments = [(media.signed_url(x.get("image_path"), seconds=600), tryon_kind(x.get("category"))) for x in choices]
+    embed, page = space_addresses(TRYON_SPACE_URL)
+    st.caption("사람 사진에 옷을 입혀 보는 AI 예시 이미지예요. 실제 사이즈·핏은 반영되지 않아요.")
+    if any(g is None for g, _ in garments):
+        st.info("사진이 없거나 넘길 수 없는 옷이 있어요 (스타터 옷장·로컬 실행 등). 아래 창에서 옷 사진을 직접 올려 주세요.")
+    st.link_button("새 창(Hugging Face)에서 열기 · 권장", tryon_link(page, garments), type="primary")
+    st.caption("새 창에서는 내 무료 GPU 사용량으로 실행돼요 (하루 비로그인 약 2분, Hugging Face 무료 계정 로그인 시 약 5분, "
+               "첫 사용 24시간 뒤 다시 채워짐). 아래 창은 바로 써 볼 수 있지만 Hugging Face 로그인이 전달되지 않아 "
+               "사용량이 더 빨리 바닥날 수 있어요. 무료 GPU라 대기열이 생길 수 있어요.")
+    if hasattr(st, "iframe"):      # 새 Streamlit (components.iframe 은 없어질 예정)
+        st.iframe(tryon_link(embed, garments), height=820)
+    else:
+        import streamlit.components.v1 as components
+        components.iframe(tryon_link(embed, garments), height=820, scrolling=True)
+    st.caption("올린 사람 사진은 AI 옷장 DB에 저장하지 않아요. 옷 사진 주소는 10분 동안만 열려요.")
+
+
+def tryon_button(items, key):
+    """가상 착용 Space 주소가 설정돼 있고, 입힐 수 있는 옷(상의·하의·원피스·아우터)이 있을 때만 버튼을 보인다."""
+    if TRYON_SPACE_URL and tryon_supported(items):
+        if st.button("👗 가상 착용(예시)", key=f"tryon_{key}"):
+            tryon_dialog(items)
 
 
 def gender_ko(g):
@@ -86,15 +197,26 @@ def thermal_label(cold, heat):
 
 # ------------------------------------------------------------------ 사이드바
 st.sidebar.title(f"👕 {APP_NAME}")
-users = db.list_users()
-if users:
-    options = {f"{u['name']} · {gender_ko(u['gender'])} (ID {u['id']})": u["id"] for u in users}
-    labels = list(options)
-    idx = next((i for i, lb in enumerate(labels) if options[lb] == st.session_state.user_id), 0)
-    selected = st.sidebar.selectbox("사용자", labels, index=idx)
-    st.session_state.user_id = options[selected]
+if CLOUD:
+    st.sidebar.caption(f"로그인: {st.session_state.get('auth_email') or '-'}")
+    if st.sidebar.button("로그아웃"):
+        from core import cloud_auth
+        cloud_auth.sign_out(st.session_state.sb_client)
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.rerun()
+    if not current_user():
+        st.sidebar.info("프로필에서 내 정보를 먼저 저장하세요.")
 else:
-    st.sidebar.info("프로필에서 사용자를 먼저 생성하세요.")
+    users = store.list_users()
+    if users:
+        options = {f"{u['name']} · {gender_ko(u['gender'])} (ID {u['id']})": u["id"] for u in users}
+        labels = list(options)
+        idx = next((i for i, lb in enumerate(labels) if options[lb] == st.session_state.user_id), 0)
+        selected = st.sidebar.selectbox("사용자", labels, index=idx)
+        st.session_state.user_id = options[selected]
+    else:
+        st.sidebar.info("프로필에서 사용자를 먼저 생성하세요.")
 
 # 사용자를 바꾸면 이전 사용자의 추천·AI 분류 결과를 비운다 (안 비우면 다른 사람의 추천이 저장될 수 있음)
 if st.session_state.active_user_id != st.session_state.user_id:
@@ -108,6 +230,8 @@ page = st.sidebar.radio("메뉴", ["홈", "프로필", "내 옷장", "오늘의 
 st.sidebar.divider()
 status = model_status()
 st.sidebar.caption(f"의류 분류: {status['classifier']}")
+if WEB_TRIAL_URL:
+    st.sidebar.link_button("설치 없는 웹 체험판", WEB_TRIAL_URL)
 
 # ------------------------------------------------------------------ 홈
 if page == "홈":
@@ -117,9 +241,9 @@ if page == "홈":
     if user:
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("프로필", f"{user['name']} · {gender_ko(user['gender'])}")
-        c2.metric("등록 의류", db.count_wardrobe_items(user["id"]))
-        c3.metric("추천 세션", db.count_recommendation_sessions(user["id"]))
-        acc = db.top3_acceptance_rate(user["id"])
+        c2.metric("등록 의류", store.count_wardrobe_items(user["id"]))
+        c3.metric("추천 세션", store.count_recommendation_sessions(user["id"]))
+        acc = store.top3_acceptance_rate(user["id"])
         c4.metric("Top 3 수용", "-" if acc is None else f"{acc*100:.1f}%")
         st.info(
             "스타터 옷장은 실제 소유 여부를 대신 확정하는 기능이 아닙니다. "
@@ -127,30 +251,39 @@ if page == "홈":
         )
     else:
         st.warning("프로필을 생성하세요.")
+    if CLOUD:
+        with st.expander("무료 체험 서비스 안내"):
+            st.markdown(
+                "- 비상업·학습·시연용 캡스톤 프로젝트예요. 광고·결제가 없어요.\n"
+                "- 무료 서버라 한동안 아무도 안 쓰면 잠들어요. 처음 접속이 느리면 깨우는 중이에요.\n"
+                "- 날씨는 Open-Meteo 무료 API를 써요. 불러오기 실패 시 '수동 입력'으로 추천받을 수 있어요.\n"
+                "- 가상 착용은 무료 GPU를 여러 사람이 나눠 쓰는 방식이라 대기와 하루 사용량 제한이 있어요."
+            )
 
 # ------------------------------------------------------------------ 프로필
 elif page == "프로필":
     st.title("프로필")
-    with st.form("create_user"):
-        st.subheader("새 사용자")
-        name = st.text_input("이름 / 닉네임")
-        gender_label = st.radio("성별", ["남성", "여성"], horizontal=True)
-        gender = "male" if gender_label == "남성" else "female"
-        thermal = st.radio("체감 성향", THERMAL_OPTIONS, index=2, horizontal=True)
-        cold, heat = THERMAL_TO_SENSITIVITY[thermal]
+    if not CLOUD or current_user() is None:
+        with st.form("create_user"):
+            st.subheader("내 정보" if CLOUD else "새 사용자")
+            name = st.text_input("이름 / 닉네임")
+            gender_label = st.radio("성별", ["남성", "여성"], horizontal=True)
+            gender = "male" if gender_label == "남성" else "female"
+            thermal = st.radio("체감 성향", THERMAL_OPTIONS, index=2, horizontal=True)
+            cold, heat = THERMAL_TO_SENSITIVITY[thermal]
 
-        if st.form_submit_button("사용자 생성", type="primary"):
-            if not name.strip():
-                st.error("이름을 입력하세요.")
-            else:
-                try:
-                    uid = db.create_user(name.strip(), gender, cold, heat)
-                except sqlite3.IntegrityError:
-                    st.error(f"'{name.strip()}'은(는) 이미 있는 이름입니다. 다른 이름을 입력하세요.")
+            if st.form_submit_button("저장" if CLOUD else "사용자 생성", type="primary"):
+                if not name.strip():
+                    st.error("이름을 입력하세요.")
                 else:
-                    st.session_state.user_id = uid
-                    st.success("사용자를 생성했습니다.")
-                    st.rerun()
+                    try:
+                        uid = store.create_user(name.strip(), gender, cold, heat)
+                    except sqlite3.IntegrityError:
+                        st.error(f"'{name.strip()}'은(는) 이미 있는 이름입니다. 다른 이름을 입력하세요.")
+                    else:
+                        st.session_state.user_id = uid
+                        st.success("저장했습니다." if CLOUD else "사용자를 생성했습니다.")
+                        st.rerun()
 
     user = current_user()
     if user:
@@ -163,7 +296,7 @@ elif page == "프로필":
             thermal2 = st.radio("체감 성향", THERMAL_OPTIONS, index=THERMAL_OPTIONS.index(current_thermal), horizontal=True)
             cold2, heat2 = THERMAL_TO_SENSITIVITY[thermal2]
             if st.form_submit_button("설정 저장"):
-                db.update_user(user["id"], gender2, cold2, heat2)
+                store.update_user(user["id"], gender2, cold2, heat2)
                 st.success("저장했습니다.")
                 st.rerun()
 
@@ -179,18 +312,18 @@ elif page == "내 옷장":
     tab1, tab2, tab3 = st.tabs(["옷장 목록", "30개 스타터 옷장", "사진으로 직접 추가"])
 
     with tab1:
-        items = db.list_wardrobe_items(user["id"], active_only=True)
+        items = store.list_wardrobe_items(user["id"], active_only=True)
         season_now = current_season(date.today().month)
         with st.expander(f"계절 정리 · 지금은 {season_now}"):
             season = st.radio("계절", SEASONS, index=SEASONS.index(season_now), horizontal=True, key="tidy_season")
             off = [x for x in items if season not in item_seasons(x)]
-            back = [x for x in db.list_inactive_items(user["id"]) if season in item_seasons(x)]
+            back = [x for x in store.list_inactive_items(user["id"]) if season in item_seasons(x)]
             c1, c2 = st.columns(2)
             if c1.button(f"{season}에 안 입는 옷 {len(off)}벌 넣어두기", disabled=not off):
-                db.set_items_active([x["id"] for x in off], user["id"], False)
+                store.set_items_active([x["id"] for x in off], user["id"], False)
                 st.rerun()
             if c2.button(f"넣어 둔 옷 중 {season} 옷 {len(back)}벌 꺼내기", disabled=not back):
-                db.set_items_active([x["id"] for x in back], user["id"], True)
+                store.set_items_active([x["id"] for x in back], user["id"], True)
                 st.rerun()
             st.caption("넣어 둔 옷은 추천에 쓰지 않아요. 아래 '넣어 둔 옷'에서 한 벌씩 꺼낼 수도 있어요.")
 
@@ -214,8 +347,7 @@ elif page == "내 옷장":
             for i, item in enumerate(filtered):
                 with cols[i % 3]:
                     with st.container(border=True):
-                        if item["image_path"] and Path(item["image_path"]).exists():
-                            st.image(item["image_path"])
+                        show_image(item["image_path"])
                         st.markdown(f"### {item['name']}")
                         st.caption(
                             f"{item['category']} / {item.get('subcategory') or '세부분류 없음'} · "
@@ -225,25 +357,26 @@ elif page == "내 옷장":
                         st.write(f"색상: {item['color'] or '-'} · 비 적합: {'O' if item['rain_ok'] else 'X'}")
                         if item.get("material"):
                             st.caption(f"세탁: {get_care_guide(item['material'])['text']}")
+                        tryon_button([item], f"item_{item['id']}")
                         with st.popover("계절 수정"):
                             picked = st.multiselect("입는 계절", SEASONS, default=item_seasons(item),
                                                     key=f"season_{item['id']}")
                             if st.button("저장", key=f"season_save_{item['id']}"):
                                 same_as_auto = picked == seasons_for(item.get("subcategory"))
-                                db.update_item_seasons(item["id"], user["id"], None if same_as_auto else picked)
+                                store.update_item_seasons(item["id"], user["id"], None if same_as_auto else picked)
                                 st.rerun()
                             st.caption(f"자동: {season_label(seasons_for(item.get('subcategory')))} (옷 종류 기준). "
                                        "전부 지우고 저장하면 자동으로 돌아가요.")
                         c_a, c_b = st.columns(2)
                         if c_a.button("비활성화", key=f"off_{item['id']}"):
-                            db.deactivate_item(item["id"], user["id"])
+                            store.deactivate_item(item["id"], user["id"])
                             st.rerun()
                         if c_b.button("삭제", key=f"del_{item['id']}"):
-                            db.soft_delete_item(item["id"], user["id"])
+                            store.soft_delete_item(item["id"], user["id"])
                             st.rerun()
 
         # 비활성화한 옷 다시 활성화
-        inactive = db.list_inactive_items(user["id"])
+        inactive = store.list_inactive_items(user["id"])
         with st.expander(f"넣어 둔 옷 · 비활성화 ({len(inactive)}개)"):
             if not inactive:
                 st.caption("넣어 둔 옷이 없습니다.")
@@ -252,7 +385,7 @@ elif page == "내 옷장":
                 c_a.write(f"{item['name']} · {item['category']} / {item.get('subcategory') or '-'} · "
                           f"{season_label(item_seasons(item))}")
                 if c_b.button("다시 활성화", key=f"on_{item['id']}"):
-                    db.reactivate_item(item["id"], user["id"])
+                    store.reactivate_item(item["id"], user["id"])
                     st.rerun()
 
     with tab2:
@@ -262,7 +395,7 @@ elif page == "내 옷장":
             "실제로 보유하지 않은 항목은 목록에서 비활성화/삭제하세요."
         )
         if st.button("프로필 성별 기준 30개 추가", type="primary"):
-            added = db.add_starter_wardrobe(user["id"])
+            added = store.add_starter_wardrobe(user["id"])
             st.success(f"{added}개를 추가했습니다. 이미 있던 이름은 중복 추가하지 않았습니다.")
             st.rerun()
 
@@ -313,13 +446,12 @@ elif page == "내 옷장":
                 elif uploaded is None:
                     st.error("사진을 업로드하세요.")
                 else:
-                    suffix = Path(uploaded.name).suffix.lower() or ".jpg"
-                    path = UPLOAD_DIR / f"{user['id']}_{int(time.time()*1000)}{suffix}"
-                    path.write_bytes(uploaded.getvalue())
+                    data, suffix = upload_bytes(uploaded)
+                    path = media.save(user["id"], "", data, suffix)
                     ai = st.session_state.last_ai_result or {}
-                    db.create_wardrobe_item(
+                    store.create_wardrobe_item(
                         user["id"], name.strip(), category, subcategory, color.strip(),
-                        warmth, rain_ok, material, str(path), "",
+                        warmth, rain_ok, material, path, "",
                         ai.get("category") if ai.get("ok") else None,
                         ai.get("subcategory") if ai.get("ok") else None,
                         ai.get("confidence") if ai.get("ok") else None,
@@ -335,7 +467,7 @@ elif page == "오늘의 추천":
     if not user:
         st.warning("사용자를 생성하세요.")
         st.stop()
-    items = db.list_wardrobe_items(user["id"], active_only=True)
+    items = store.list_wardrobe_items(user["id"], active_only=True)
     cats = {x["category"] for x in items}
     if not (("상의" in cats and "하의" in cats and "신발" in cats) or ("원피스" in cats and "신발" in cats)):
         st.warning("상의+하의+신발 또는 원피스+신발 조합이 필요합니다.")
@@ -396,16 +528,16 @@ elif page == "오늘의 추천":
         out = recommend(
             items, temperature, apparent, humidity, precipitation, rain, wind,
             purpose, cold, heat, 3,
-            exclude_keys=db.disliked_item_sets(user["id"]),
+            exclude_keys=store.disliked_item_sets(user["id"]),
             seed=f"{user['id']}-{date.today().isoformat()}",  # 같은 날엔 같은 결과, 날마다 동점 코디가 바뀜
             later=later,
         )
-        sid = db.create_recommendation_session(
+        sid = store.create_recommendation_session(
             user["id"], purpose, temperature, apparent,
             humidity, precipitation, rain, wind, source
         )
         for rank, result in enumerate(out["results"], 1):
-            result["recommendation_id"] = db.save_recommendation(sid, rank, result)
+            result["recommendation_id"] = store.save_recommendation(sid, rank, result)
         st.session_state.recommendations = out["results"]
         st.session_state.recommendation_session_id = sid
         st.session_state.rec_meta = {"warnings": out["warnings"], "context": out["context"]}
@@ -437,16 +569,17 @@ elif page == "오늘의 추천":
                 with st.expander("점수 근거"):
                     st.dataframe(pd.DataFrame(explain_score_breakdown(result["components"], purpose)),
                                  hide_index=True, use_container_width=True)
+                tryon_button(result["pieces"], f"rec_{rid}")
                 c1, c2, c3 = st.columns(3)
                 if c1.button("이 코디 저장", key=f"s_{rid}"):
-                    db.save_outfit(user["id"], rid)
-                    db.complete_recommendation_session(st.session_state.recommendation_session_id)
+                    store.save_outfit(user["id"], rid)
+                    store.complete_recommendation_session(st.session_state.recommendation_session_id)
                     st.success("코디를 저장했습니다.")
                 if c2.button("👍 좋아요", key=f"l_{rid}"):
-                    db.upsert_feedback(user["id"], rid, rating="like")
+                    store.upsert_feedback(user["id"], rid, rating="like")
                     st.toast("좋아요를 기록했습니다.")
                 if c3.button("👎 별로", key=f"d_{rid}"):
-                    db.upsert_feedback(user["id"], rid, rating="dislike")
+                    store.upsert_feedback(user["id"], rid, rating="dislike")
                     st.toast("다음 추천부터 이 조합은 제외합니다.")
 
                 with st.expander("착용 후 피드백"):
@@ -457,7 +590,7 @@ elif page == "오늘의 추천":
                     rating = st.slider("코디 만족도", 1, 5, 3, key=f"r_{rid}")
                     worn = st.checkbox("실제로 착용함", key=f"w_{rid}")
                     if st.button("피드백 저장", key=f"f_{rid}"):
-                        db.upsert_feedback(user["id"], rid, worn=worn, thermal_feedback=thermal, satisfaction=rating)
+                        store.upsert_feedback(user["id"], rid, worn=worn, thermal_feedback=thermal, satisfaction=rating)
                         st.success("저장했습니다.")
 
 # ------------------------------------------------------------------ 사기 전에 맞춰보기
@@ -467,8 +600,8 @@ elif page == "사기 전에 맞춰보기":
     user = current_user()
     if not user:
         st.stop()
-    items = db.list_wardrobe_items(user["id"], active_only=True)
-    candidates = db.list_candidates(user["id"])
+    items = store.list_wardrobe_items(user["id"], active_only=True)
+    candidates = store.list_candidates(user["id"])
 
     with st.expander("구매 후보 추가", expanded=not candidates):
         up = st.file_uploader("상품 사진 또는 캡처 (JPG/PNG)", type=["jpg", "jpeg", "png"], key="cand_upload")
@@ -501,9 +634,9 @@ elif page == "사기 전에 맞춰보기":
         if st.button("구매 후보로 저장", type="primary", disabled=not cand_name.strip()):
             path = ""
             if up:
-                path = str(UPLOAD_DIR / f"cand_{user['id']}_{int(time.time() * 1000)}{Path(up.name).suffix.lower()}")
-                Image.open(up).convert("RGB").save(path)
-            db.create_candidate(user["id"], cand_name.strip(), main_category_for_subcategory(cand_sub), cand_sub,
+                data, suffix = upload_bytes(up, rgb=True)
+                path = media.save(user["id"], "cand_", data, suffix)
+            store.create_candidate(user["id"], cand_name.strip(), main_category_for_subcategory(cand_sub), cand_sub,
                                 cand_color, cand_warmth, cand_rain, image_path=path, link=cand_link.strip(),
                                 ai_subcategory=ai_sub, ai_confidence=cand_ai.get("confidence") if cand_ai else None)
             st.rerun()
@@ -523,8 +656,9 @@ elif page == "사기 전에 맞춰보기":
         rep = cached_candidate_report(cand, items, cold, heat)
         with st.container(border=True):
             c_img, c_body = st.columns([1, 3])
-            if cand["image_path"] and Path(cand["image_path"]).exists():
-                c_img.image(cand["image_path"])
+            with c_img:
+                show_image(cand["image_path"])
+                tryon_button([cand], f"cand_{cand['id']}")
             with c_body:
                 st.markdown(f"### {cand['name']}")
                 st.caption(f"{cand['category']} / {cand['subcategory']} · {COLOR_KO.get(normalize_color(cand['color']), cand['color'])} · "
@@ -551,11 +685,11 @@ elif page == "사기 전에 맞춰보기":
                 st.caption(f"{view_season} · {view_purpose}에는 이 옷으로 만들 코디가 없어요.")
             c_a, c_b = st.columns(2)
             if c_a.button("샀어요 · 옷장에 넣기", key=f"buy_{cand['id']}"):
-                db.buy_candidate(cand["id"], user["id"])
+                store.buy_candidate(cand["id"], user["id"])
                 st.toast(f"{cand['name']}을(를) 옷장에 넣었어요.")
                 st.rerun()
             if c_b.button("후보에서 지우기", key=f"cdel_{cand['id']}"):
-                db.delete_candidate(cand["id"], user["id"])
+                store.delete_candidate(cand["id"], user["id"])
                 st.rerun()
 
 # ------------------------------------------------------------------ 저장 코디
@@ -564,7 +698,7 @@ elif page == "저장 코디":
     user = current_user()
     if not user:
         st.stop()
-    saved = db.list_saved_outfits(user["id"])
+    saved = store.list_saved_outfits(user["id"])
     if not saved:
         st.info("저장된 코디가 없습니다.")
     for row in saved:
@@ -579,12 +713,12 @@ elif page == "KPI·데이터":
     user = current_user()
     if not user:
         st.stop()
-    stats = db.user_kpi_stats(user["id"])
+    stats = store.user_kpi_stats(user["id"])
     c1, c2 = st.columns(2)
     c1.metric("추천 세션", stats["completed_sessions"])
     c2.metric("Top 3 수용률", "-" if stats["top3_acceptance_rate"] is None else f"{stats['top3_acceptance_rate']*100:.1f}%")
 
-    logs = db.export_user_logs(user["id"])
+    logs = store.export_user_logs(user["id"])
     if not logs.empty:
         st.dataframe(logs, use_container_width=True, hide_index=True)
         st.download_button("추천 로그 CSV", logs.to_csv(index=False).encode("utf-8-sig"),

@@ -1,0 +1,6 @@
+[server]
+# 휴대폰 원본 사진(보통 3~10MB)은 충분히 받고, 무료 서버 메모리를 지키기 위해 그 이상은 막는다.
+maxUploadSize = 20
+
+[browser]
+gatherUsageStats = false

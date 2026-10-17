@@ -1,3 +1,4 @@
 -r requirements.txt
-torch>=2.2
-torchvision>=0.17
+# Linux(x86_64, Python 3.11~3.13)는 requirements.txt 에 CPU 전용 PyTorch 가 이미 들어 있다. 그 밖의 환경은 여기서 설치.
+torch>=2.2 ; sys_platform != "linux" or platform_machine != "x86_64" or python_version < "3.11" or python_version > "3.13"
+torchvision>=0.17 ; sys_platform != "linux" or platform_machine != "x86_64" or python_version < "3.11" or python_version > "3.13"

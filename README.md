@@ -31,6 +31,19 @@ python -m http.server -d web 8000
 
 브라우저에서 `http://localhost:8000` 을 엽니다. 분류기를 다시 학습했다면 `python scripts/build_web.py` 로 페이지를 다시 만듭니다.
 
+## 무료 공개 배포
+
+설치 없이 주소 하나로 쓰는 공개 서비스로 올릴 수 있습니다 (모두 무료 요금제). 단계별 안내는 [`DEPLOY.md`](DEPLOY.md).
+
+- 앱: Streamlit Community Cloud · 로그인·DB·옷 사진: Supabase (사용자별 접근 제한) · 가상 착용(예시): Hugging Face ZeroGPU Space (`tryon_space/`) · 웹 체험판: GitHub Pages
+- 설정 이름: `SUPABASE_URL`, `SUPABASE_KEY`(공개용 키만), `TRYON_SPACE_URL`(선택), `WEB_TRIAL_URL`(선택) — 예시는 `.streamlit/secrets.toml.example`
+- 이 설정이 없으면 위 실행 방법 그대로 로컬 모드(로그인 없음, SQLite)로 동작합니다.
+- 공개 배포 작업 전의 저장소 전체는 `이전버전/AI옷장_배포전_74c3210.zip` 에 압축해 두었습니다.
+- 무료 요금제라 잠들기(앱 12시간·Supabase 1주일 무활동)와 가상 착용 하루 사용량 제한이 있습니다. 자세한 한도는 `DEPLOY.md` 5절.
+
+시험: `pip install -r requirements-dev.txt` 후 `pytest` (Supabase 대신 가짜 백엔드로 두 계정 분리·화면 흐름까지 확인).
+PostgreSQL 이 있으면 `AI_CLOSET_TEST_PG_DSN` 을 설정해 `supabase/schema.sql` 의 접근 정책(RLS)도 실제 DB에서 확인합니다.
+
 ## 데이터 출처
 
 옷 사진 분류기 학습에 쓴 공개 데이터셋 (총 34,137장, 42종 · 받는 방법과 라벨 규칙은 `scripts/open_datasets.py`)
@@ -47,3 +60,4 @@ python -m http.server -d web 8000
 
 - [ImageNet 사전학습 EfficientNet-B0](https://pytorch.org/vision/stable/models/generated/torchvision.models.efficientnet_b0.html) (torchvision) — 분류기의 출발점이 되는 사전학습 모델, 이 위에 위 사진들로 추가 학습
 - [Open-Meteo](https://open-meteo.com/) (비상업 무료, 데이터 CC BY 4.0) — 앱에서 현재 기온·체감온도·습도·강수·풍속을 불러오는 날씨 API
+- [CatVTON](https://github.com/Zheng-Chong/CatVTON) (CC BY-NC-SA 4.0) — 가상 착용(예시) 기능에서 쓰는 외부 공개 사전학습 모델. 직접 학습하지 않았고 비상업·시연용으로만 사용

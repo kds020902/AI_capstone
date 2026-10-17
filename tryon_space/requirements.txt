@@ -1,0 +1,17 @@
+# Gradio 와 spaces 는 Space 가 README 의 sdk_version 으로 미리 설치한다
+torch==2.9.1
+torchvision==0.24.1
+diffusers==0.41.0
+transformers==5.19.0
+accelerate==1.15.0
+huggingface_hub==1.33.0
+fvcore==0.1.5.post20221221
+cloudpickle==3.1.2
+omegaconf==2.4.0
+pycocotools==2.0.11
+av==18.1.0
+opencv-python-headless
+scikit-image
+matplotlib
+scipy
+requests

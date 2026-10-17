@@ -1,5 +1,17 @@
-streamlit>=1.36
+# 배포에서 시험한 버전으로 고정 (Streamlit 1.66 은 Python 3.11 이상). Python 3.10 은 예전처럼 1.40 이상.
+streamlit==1.66.0 ; python_version >= "3.11"
+streamlit>=1.40 ; python_version < "3.11"
 pandas>=2.0
 numpy>=1.24
 Pillow>=10.0
 requests>=2.31
+supabase==2.33.0
+
+# 공개 배포(Streamlit Community Cloud, Linux)에서 사진 AI 분류를 쓰기 위한 CPU 전용 PyTorch.
+# GPU용 기본 패키지보다 훨씬 작다. Windows·macOS 에서는 이 줄들이 건너뛰어지고, requirements-ai.txt 로 설치한다.
+torch @ https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp311-cp311-manylinux_2_28_x86_64.whl ; sys_platform == "linux" and platform_machine == "x86_64" and python_version == "3.11"
+torch @ https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl ; sys_platform == "linux" and platform_machine == "x86_64" and python_version == "3.12"
+torch @ https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl ; sys_platform == "linux" and platform_machine == "x86_64" and python_version == "3.13"
+torchvision @ https://download.pytorch.org/whl/cpu/torchvision-0.24.1%2Bcpu-cp311-cp311-manylinux_2_28_x86_64.whl ; sys_platform == "linux" and platform_machine == "x86_64" and python_version == "3.11"
+torchvision @ https://download.pytorch.org/whl/cpu/torchvision-0.24.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl ; sys_platform == "linux" and platform_machine == "x86_64" and python_version == "3.12"
+torchvision @ https://download.pytorch.org/whl/cpu/torchvision-0.24.1%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl ; sys_platform == "linux" and platform_machine == "x86_64" and python_version == "3.13"

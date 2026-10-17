@@ -11,3 +11,5 @@ raw/
 open_csv/
 dataset_sub/
 dataset_main/
+.streamlit/secrets.toml
+.env
