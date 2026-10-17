@@ -38,6 +38,23 @@ def test_cloud_settings_from_env(monkeypatch):
     assert s["url"] == "https://abc.supabase.co"
 
 
+@pytest.mark.parametrize("pasted", [
+    "https://supabase.com/dashboard/project/qskvxjpfqnurmjwwtaor",          # 대시보드 주소를 그대로 붙여 넣은 경우
+    "https://supabase.com/dashboard/project/qskvxjpfqnurmjwwtaor/settings/api",
+    " https://qskvxjpfqnurmjwwtaor.supabase.co/rest/v1/ ",
+    "https://qskvxjpfqnurmjwwtaor.supabase.co",
+])
+def test_supabase_url_paste_mistakes_are_fixed(pasted):
+    assert config.normalize_supabase_url(pasted) == "https://qskvxjpfqnurmjwwtaor.supabase.co"
+
+
+def test_html_reply_explains_wrong_url():
+    from core import cloud_auth
+    err = ValueError("1 validation error for User Invalid JSON: expected value at line 1 column 1 "
+                     "[type=json_invalid, input_value=b'<!DOCTYPE html><html la...', input_type=bytes]")
+    assert "SUPABASE_URL" in cloud_auth._msg(err)
+
+
 @pytest.mark.parametrize("key", [_jwt({"role": "service_role"}), "sb_secret_abcdef"])
 def test_server_only_keys_are_refused(monkeypatch, key):
     monkeypatch.setenv("SUPABASE_URL", "https://abc.supabase.co")

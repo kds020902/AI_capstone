@@ -29,6 +29,9 @@ def _msg(e):
         return "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요."
     if "email address not authorized" in low:
         return "지금은 이메일 인증 메일을 보낼 수 없는 설정이에요. 관리자에게 알려 주세요."
+    if "<!doctype html" in low or "<html" in low or "json_invalid" in low:   # API 대신 웹페이지가 왔다
+        return ("Supabase 주소(SUPABASE_URL)가 잘못된 것 같아요. 관리자에게 알려 주세요. "
+                "https://프로젝트ID.supabase.co 형식이어야 해요.")
     return f"처리하지 못했어요: {text}"
 
 

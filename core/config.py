@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 
 
 class UnsafeKeyError(ValueError):
@@ -53,9 +54,22 @@ def check_public_key(key):
     return key
 
 
+_DASHBOARD = re.compile(r"^https?://(?:app\.)?supabase\.com/dashboard/project/([a-z0-9]+)", re.I)
+
+
+def normalize_supabase_url(url):
+    """대시보드 주소(https://supabase.com/dashboard/project/<id>/...)나 API 경로가 붙은 주소를
+    프로젝트 주소 https://<id>.supabase.co 로 바꾼다. 흔한 붙여 넣기 실수를 받아 준다."""
+    url = url.strip().rstrip("/")
+    m = _DASHBOARD.match(url)
+    if m:
+        return f"https://{m.group(1).lower()}.supabase.co"
+    return re.sub(r"/(?:rest|auth|storage)/v1(?:/.*)?$", "", url)
+
+
 def cloud_settings():
     """{"url", "key"} 또는 None(로컬 모드)."""
     url, key = get_setting("SUPABASE_URL"), get_setting("SUPABASE_KEY")
     if not url or not key:
         return None
-    return {"url": url.rstrip("/"), "key": check_public_key(key)}
+    return {"url": normalize_supabase_url(url), "key": check_public_key(key)}
