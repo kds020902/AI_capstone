@@ -44,6 +44,18 @@ python -m http.server -d web 8000
 시험: `pip install -r requirements-dev.txt` 후 `pytest` (Supabase 대신 가짜 백엔드로 두 계정 분리·화면 흐름까지 확인).
 PostgreSQL 이 있으면 `AI_CLOSET_TEST_PG_DSN` 을 설정해 `supabase/schema.sql` 의 접근 정책(RLS)도 실제 DB에서 확인합니다.
 
+## 개발 문서
+
+| 문서 | 내용 |
+|---|---|
+| [`docs/mvp.md`](docs/mvp.md) | MVP 범위 (필수 / 있으면 좋음 / 제외), 초기 성공 기준 |
+| [`docs/prd.md`](docs/prd.md) | 화면·기능, 추천·판정 규칙, 예외 처리, 수용 기준 |
+| [`docs/tech-spec.md`](docs/tech-spec.md) | 기술 스택, 시스템 구조, DB·권한, 외부 API, AI 구성, 배포 |
+| [`docs/test-plan.md`](docs/test-plan.md) | 시험 방법, 결과 기록, 미검증 항목 |
+| [`TASKS.md`](TASKS.md) | 개발 작업 목록과 완료 기준 |
+| [`CLAUDE.md`](CLAUDE.md) | AI 코딩 도구 작업 지침 (가이드의 AGENTS.md 역할) |
+| [`DEPLOY.md`](DEPLOY.md) | 무료 공개 배포 방법과 무료 한도 |
+
 ## 데이터 출처
 
 옷 사진 분류기 학습에 쓴 공개 데이터셋 (총 34,137장, 42종 · 받는 방법과 라벨 규칙은 `scripts/open_datasets.py`)
