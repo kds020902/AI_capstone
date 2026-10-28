@@ -8,7 +8,7 @@ import pytest
 from PIL import Image
 
 from core import config
-from core.media import SB_PREFIX, LocalMedia, SupabaseMedia
+from core.media import SB_PREFIX, LocalMedia, SupabaseMedia, open_upright
 from core.tryon import space_addresses, tryon_default, tryon_kind, tryon_link, tryon_order, tryon_supported
 from tests.fake_supabase import FakeBackend, signed_in_client
 
@@ -74,6 +74,24 @@ def test_local_media_round_trip(tmp_path):
     assert ref.endswith(".png") and "cand_7_" in ref
     assert m.read(ref) == b"abc" and m.read(str(tmp_path / "none.jpg")) is None
     assert m.read(SB_PREFIX + "x/y.jpg") is None and m.signed_url(ref) is None
+
+
+def _phone_jpeg(orientation):
+    """가로 40×20으로 저장하고 회전 정보만 붙인 폰 사진 흉내. 왼쪽 끝이 빨강."""
+    img = Image.new("RGB", (40, 20), "white")
+    img.paste((255, 0, 0), (0, 0, 8, 20))
+    exif = Image.Exif()
+    exif[0x0112] = orientation   # 6 = 시계 방향으로 90도 돌려서 보라는 뜻
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", exif=exif)
+    return buf.getvalue()
+
+
+def test_open_upright_applies_phone_rotation():
+    img = open_upright(io.BytesIO(_phone_jpeg(6)))
+    assert img.mode == "RGB" and img.size == (20, 40)
+    assert img.getpixel((10, 2))[1] < 100 and img.getpixel((10, 37))[1] > 200   # 왼쪽 빨강 → 위쪽
+    assert open_upright(io.BytesIO(_phone_jpeg(1))).size == (40, 20)
 
 
 def test_supabase_media_saves_small_jpeg_in_own_folder():

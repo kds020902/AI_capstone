@@ -3,7 +3,8 @@ import pytest
 
 from core.taxonomy import MAIN_CATEGORIES, SUBCATEGORY_TO_MAIN
 from scripts.open_datasets import (
-    F200K_RULES, GRIGOREV, KREAM_RULES, f200k_label, fpi_label, hnm_label, kream_label, utz_label,
+    F200K_RULES, GRIGOREV, KREAM_RULES, collect, f200k_label, fpi_label, hnm_label, kream_label, load_grigorev_relabel,
+    utz_label,
 )
 
 VALID = set(SUBCATEGORY_TO_MAIN) | set(MAIN_CATEGORIES)
@@ -14,6 +15,25 @@ def test_every_rule_targets_a_known_class():
     labels |= {lab for rules in F200K_RULES.values() for lab, _, _ in rules}
     labels |= set(GRIGOREV.values())
     assert labels <= VALID, labels - VALID
+
+
+def test_grigorev_relabel_table():
+    table = load_grigorev_relabel()
+    assert len(table) == 1033 and set(table.values()) <= set(SUBCATEGORY_TO_MAIN)
+    assert len(load_grigorev_relabel(split="train")) == 841 and len(load_grigorev_relabel(split="test")) == 192
+
+
+def test_grigorev_relabel_overrides_mixed_labels_and_keeps_test_out(tmp_path):
+    root = tmp_path / "grigorev"
+    root.mkdir()
+    image = next(iter(load_grigorev_relabel(split="train")))
+    held = next(iter(load_grigorev_relabel(split="test")))
+    (root / "images.csv").write_text("image,sender_id,label,kids\n"
+                                     f"{image},1,Longsleeve,False\n{held},1,Pants,False\n"
+                                     "other,1,Longsleeve,False\nt,1,T-Shirt,False\n",
+                                     encoding="utf-8")
+    labels = {path.stem: label for path, label, _ in collect("grigorev", tmp_path)}
+    assert labels == {image: load_grigorev_relabel()[image], "other": "상의", "t": "반팔 티셔츠"}   # 시험용 사진은 빠짐
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -41,6 +61,13 @@ def test_every_rule_targets_a_known_class():
     ("bottom, C.P. Company Light Fleece Mixed Cargo Shorts Blue, a photography of", "반바지"),
     ("bottom, Nanamica Cargo Pants Beige, a photography of", "카고팬츠"),
     ("bottom, Waviness Rain Slub Denim Pants Blue Indigo, a photography of", "청바지"),
+    ("outer, Arc'teryx Beta LT Jacket Black, a photography of", "바람막이"),
+    ("outer, Human Made Coach Jacket Black, a photography of", "바람막이"),
+    ("outer, Nike NSW Essential Long Coach Jacket Cream - Asia, a photography of", "아우터"),   # 긴 코치 코트
+    ("outer, Palace Ultra Relax Track Jacket Black - 23SS, a photography of", "아우터"),       # 트랙 재킷 ≠ 바람막이
+    ("outer, Wacko Maria Fatigue Jacket Khaki, a photography of", "야상·필드재킷"),
+    ("top, Patagonia Lightweight Synchilla Snap-T Fleece Pullover Oatmeal Heather, a photography of", "플리스"),
+    ("top, Jordan 23 Engineered Half Zip Fleece Black - Asia, a photography of", "상의"),     # 스웨트 원단 하프집업
 ])
 def test_kream(text, expected):
     assert kream_label(text) == expected

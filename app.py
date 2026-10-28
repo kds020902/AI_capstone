@@ -5,13 +5,12 @@ import sqlite3
 
 import pandas as pd
 import streamlit as st
-from PIL import Image
 
 from core import db
 from core.care import get_care_guide
 from core.colors import COLOR_KO, normalize_color
 from core.config import UnsafeKeyError, cloud_settings, get_setting
-from core.media import LocalMedia
+from core.media import LocalMedia, open_upright
 from core.recommender import recommend, explain_score_breakdown
 from core.shopping import candidate_report
 from core.taxonomy import (
@@ -118,7 +117,7 @@ def upload_bytes(uploaded, rgb=False):
         return uploaded.getvalue(), suffix
     buf = io.BytesIO()
     fmt = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}.get(suffix, "JPEG")
-    Image.open(uploaded).convert("RGB").save(buf, format=fmt)
+    open_upright(uploaded).save(buf, format=fmt)
     return buf.getvalue(), suffix
 
 
@@ -404,7 +403,7 @@ elif page == "내 옷장":
         uploaded = st.file_uploader("JPG/PNG", type=["jpg", "jpeg", "png"])
         color_guess = ""
         if uploaded:
-            image = Image.open(uploaded).convert("RGB")
+            image = open_upright(uploaded)
             st.image(image, width=300)
             color_guess = dominant_color_name(image) or ""
             st.write(f"대표색 추정: `{color_guess}` ({dominant_color_hex(image)})")
@@ -607,7 +606,7 @@ elif page == "사기 전에 맞춰보기":
         up = st.file_uploader("상품 사진 또는 캡처 (JPG/PNG)", type=["jpg", "jpeg", "png"], key="cand_upload")
         cand_ai, cand_color = None, ""
         if up:
-            cand_image = Image.open(up).convert("RGB")
+            cand_image = open_upright(up)
             st.image(cand_image, width=220)
             cand_color = dominant_color_name(cand_image) or ""
             ai_key = f"cand_ai_{up.file_id}"  # 다시 그릴 때마다 분류하지 않도록

@@ -1,0 +1,1034 @@
+image,label,source_label,split
+00149032-3dd6-426e-9bc0-d53032536a42,패딩,Outwear,test
+00588f87-cda1-46d7-93be-71f0fa889895,가디건,Longsleeve,test
+0098b1c0-bd39-41c2-a172-17066bc9fd26,맨투맨,Longsleeve,train
+0098b991-e36e-4ef1-b5ee-4154b21e2a92,조거팬츠,Pants,train
+00f6e504-7c27-438e-a5d7-bc65e557bb2b,구두,Shoes,test
+01420fed-89b3-4801-9d91-af5507322fa3,패딩,Outwear,train
+0142c777-baf8-4500-add9-6641b95b90ec,니트,Longsleeve,train
+0257eb81-f3d3-4704-8299-8b6ab20f1ed4,카고팬츠,Pants,train
+030a5708-f6d7-441f-86ee-0b51b33f3f51,청바지,Pants,train
+039efa01-ec03-4e7f-90c2-47a768b1418d,니트,Longsleeve,train
+03a43dea-405e-4a11-9716-2f790a95f699,조거팬츠,Pants,train
+03b5fa92-c65d-4b45-820b-967e85f41ee2,조거팬츠,Pants,train
+041cea74-d96a-45ff-a8e2-d311ee0f21d8,청바지,Pants,train
+046b4028-ff00-4df3-a69e-d652c357e497,조거팬츠,Pants,train
+049e77f5-2a28-457a-9d27-2edb3da2fd7f,맨투맨,Longsleeve,train
+04dd77eb-4233-4a57-9b0e-3136ecf6967e,힐,Shoes,test
+04fa06fb-d71a-4293-9804-fe799375a682,샌들,Shoes,test
+05004de9-8929-45b4-92a6-c881be04e5cc,긴팔 티셔츠,Longsleeve,train
+0577a46b-53d1-4de1-a0e9-bec8992a6f59,조거팬츠,Pants,test
+05a5ad6f-6a04-4d4f-9bd1-16f3c3485ec5,가디건,Longsleeve,train
+05e280ef-53d9-497f-be09-e83c549f0a14,조거팬츠,Pants,test
+060062e8-b564-4aaa-8d9e-18e735915e37,니트,Longsleeve,train
+062752a8-2cbd-434f-b850-4a4f85c32cb3,레깅스,Pants,train
+066d2e84-6701-4bc7-a301-5beb2fed70f0,니트,Longsleeve,test
+06c96380-f7bc-46ca-a3fc-9288181f1f69,긴팔 티셔츠,Longsleeve,train
+0814ab03-e394-403a-9718-5ee0ee19f150,긴팔 티셔츠,Longsleeve,train
+081b5ec1-13a6-43c8-991f-9ad2020f646a,청바지,Pants,train
+08973288-3d8b-4c07-9f2d-ce1392da54be,청바지,Pants,test
+08f602bc-a030-4f73-b0fb-0ddd986840aa,청바지,Pants,test
+097b9af0-483a-4b41-991c-3468877db077,코트,Outwear,train
+0982f691-f2ce-469b-b81e-6842b914632c,청바지,Pants,train
+098d55e4-996c-460c-811a-862d68ca9245,터틀넥,Longsleeve,train
+09c08576-09d6-4878-a6f5-3087ccc57a9e,블라우스,Longsleeve,train
+09cd286c-0fab-45b9-9152-322f32275ef7,조거팬츠,Pants,train
+09f0db06-5f01-468b-bb60-54a3093f7c27,플랫슈즈,Shoes,train
+0a671f9d-d105-4ec9-8642-f4f228f8a90f,터틀넥,Longsleeve,test
+0a7e5fe0-d592-40e6-b9b8-75aac9a2d685,레깅스,Pants,test
+0a86d893-93f1-4a52-8c42-07bb9f439833,패딩,Outwear,train
+0c224954-0e0f-4caa-82c8-cf9581e89336,청바지,Pants,train
+0c2eb9ff-7f26-492d-9957-0d845669685f,조거팬츠,Pants,train
+0c4fe429-cc94-49a1-b6b3-6660957db97b,니트,Longsleeve,train
+0c6f89cd-30f6-4b44-bda5-0ba8d90e6717,바람막이,Outwear,train
+0cb3a527-be77-4ba9-9430-c097a45d4db5,코트,Outwear,train
+0cb4fc9c-7d38-4f11-95ea-71b61d0ae54c,패딩,Outwear,train
+0ccc318a-7d69-4d7f-a442-aac1f88bc453,청바지,Pants,train
+0d0bb91d-01d7-45df-827d-da96bbc44b15,청바지,Pants,test
+0d3b1b5a-3d8d-406f-b953-5b506b8f5665,맨투맨,Longsleeve,train
+0d73e759-eeaa-43ab-98d4-196b6974c41e,패딩,Outwear,train
+0dd87e47-ca85-4d5c-9fd1-59f5a01eb656,슬리퍼,Shoes,train
+0dfec862-c49f-430b-a6ef-c7ceb187225e,조거팬츠,Pants,train
+0e14e000-69f7-4f11-a686-b98209cbff1d,니트,Longsleeve,train
+0e27351a-13d0-41a6-b731-4090b368d656,조거팬츠,Pants,test
+0e3d71f8-7677-4cd4-ba24-4788c3890ac1,청바지,Pants,train
+0e684087-83bf-4153-90f4-6f7ba6f25338,청바지,Pants,train
+0e6871ee-7246-48ad-a356-a7fdde9878d2,구두,Shoes,train
+0f4d9494-612a-48f8-be05-e47f4fc54d54,니트,Longsleeve,test
+0fd66046-0879-42ab-be2e-a919c8a82aab,슬리퍼,Shoes,train
+0fe5eeb6-316f-4f60-b604-8a1b25e23433,청바지,Pants,train
+103926d8-d84b-4cc4-97c9-2bdb9b82f728,슬랙스,Pants,test
+1042a9df-2411-4f6c-b156-1d0d94e2f6ed,레깅스,Pants,test
+107dd572-7136-4eac-a255-1883467e6a62,맨투맨,Longsleeve,test
+10d807a5-fdbd-4b90-a70d-8e58c4d981d3,힐,Shoes,train
+10f4ac8d-9d8d-4a59-88dc-5e085d61aa48,청바지,Pants,test
+110dcf71-51c7-4b18-9a45-5d3dc1fef6d8,구두,Shoes,test
+1121fe44-166c-4d44-b0f0-0491c672a910,긴팔 티셔츠,Longsleeve,train
+119518b0-abfc-49a1-88dc-016f2dbd17ff,조거팬츠,Pants,test
+11aa05f3-ac70-490a-9e87-4de486ede646,청바지,Pants,train
+11bd32f7-4455-4d17-9607-031854e8db1f,가디건,Longsleeve,train
+11f2ff4e-6b43-4071-b5b1-2036ec0fe8fe,긴팔 티셔츠,Longsleeve,train
+1238d068-c9e6-4b79-a8cc-7a2b30f9770d,터틀넥,Longsleeve,train
+1267fb67-35a0-4eda-965e-c13669cc868a,니트,Longsleeve,train
+129287b2-e3ab-45f8-b0aa-cd0fa1e6864c,청바지,Pants,train
+12a89984-f366-4020-9eeb-922c00127951,청바지,Pants,test
+12bfe0f0-accc-4539-ab51-53f63534938e,조거팬츠,Pants,train
+12f7dcc1-a830-4a57-8d6e-088cb0ae4d08,카고팬츠,Pants,train
+132e5fa5-ed38-4293-8dff-20727b6b5ac2,부츠,Shoes,train
+136ce333-cac2-4e57-816f-8b213fd35e9c,슬리퍼,Shoes,train
+143ea97f-a2fd-4a68-851d-a31e5ba8a92b,조거팬츠,Pants,train
+14625df7-84a3-435c-90a7-e57a9dce3888,청바지,Pants,train
+1468e9b6-1856-4cfa-aefd-3bfc3e59d4e3,터틀넥,Longsleeve,train
+14b0095b-c8d8-4b1a-8402-c690e3c8c857,긴팔 티셔츠,Longsleeve,train
+14b030c6-7721-42c3-acdf-a4b2f9fad919,니트,Longsleeve,train
+14ca9980-a105-41be-adbd-ac337db9b829,패딩,Outwear,train
+14f765fd-d3f6-4c9f-8f91-df9562102171,코트,Outwear,train
+1559340f-aa0c-409a-8ac2-fc7e1a5b6c22,청바지,Pants,train
+15839171-a64e-4526-a4fa-314a7b2c72fc,스니커즈,Shoes,train
+15a12b0f-7b37-4731-b4fe-1e1fbd6b384f,패딩,Outwear,train
+15a64aac-f93a-4aee-9bca-24b94eccdfbe,슬리퍼,Shoes,test
+161e35df-93d4-4b30-817e-de03c8c1d55a,바람막이,Outwear,train
+16d5fbeb-bc4b-43ab-9bc6-89a385d42dd3,긴팔 티셔츠,Longsleeve,train
+16e5d441-1398-411e-b013-0374019e32a3,맨투맨,Longsleeve,train
+16ebb1d5-e781-49bc-8461-f2b1b9226c20,긴팔 티셔츠,Longsleeve,train
+16f2e166-c38a-4171-a5b2-e9f5c55fafc3,청바지,Pants,train
+173a13ad-affd-4406-803a-643ee75cd029,조거팬츠,Pants,test
+1789bd08-1ac8-46d6-bf28-0919e083ef56,터틀넥,Longsleeve,train
+17a8b1aa-5aaa-47ac-8de1-5d2c9d0f83f1,긴팔 티셔츠,Longsleeve,train
+17bebe65-17cc-42b3-885f-4e6c64a16f26,청바지,Pants,train
+17e48b37-4d0f-4899-b506-235cf166c621,샌들,Shoes,train
+17f835b2-a006-42a3-8ce8-d16b593a8d11,스니커즈,Shoes,train
+1823c84a-dc6f-4edc-ae75-b54303132369,가디건,Longsleeve,train
+186eb9e1-79fa-4aba-97c8-f2da0e6a2413,긴팔 티셔츠,Longsleeve,train
+188eaa2d-1a69-49b1-a9fb-7b3789ac93b4,조거팬츠,Pants,train
+18a573de-219f-44de-8dc9-0a64422e4f99,청바지,Pants,train
+18e81896-42c0-495c-a8f0-41e7fc486411,니트,Longsleeve,train
+18ed7f47-b091-4eb0-ae81-89f2ef139a9b,코트,Outwear,test
+1911309c-7ff5-456e-a3de-d3dd9de4c7bc,카고팬츠,Pants,test
+1983f48a-882b-4bae-9eba-5f0373a317a7,맨투맨,Longsleeve,test
+19931b17-d23d-4b7a-91f8-ca5cbebf8a7c,청바지,Pants,test
+19c31480-4d55-472e-ae52-a2df4e33c7ea,니트,Longsleeve,test
+19ff0603-c52b-4d27-a9b9-cfd9da5e9f35,청바지,Pants,train
+1a01d836-be46-421a-a86a-52a338eccb17,맨투맨,Longsleeve,train
+1a08f33a-2ff4-4fb8-920b-8ff514bcdda8,청바지,Pants,train
+1ac2a1f2-8715-4719-9ba1-87256fb4b9cf,맨투맨,Longsleeve,train
+1ad60e4e-c2ea-4e4c-9e86-48cf27674802,니트,Longsleeve,test
+1b065c3c-0679-40af-9924-8de9986fdf66,청바지,Pants,test
+1b499ee5-b290-43d5-ae17-05d5b38c4f9c,가디건,Longsleeve,train
+1b5f2882-e33e-4efc-b469-bcf87b9f53ed,조거팬츠,Pants,train
+1b66c18a-6866-4e0e-a580-f0e65a23bd10,후드집업,Longsleeve,train
+1b93822d-09f4-41e6-b31b-964cc104ba71,니트,Longsleeve,train
+1bb71a5d-a665-4d72-9e06-b7892a8a7e92,조거팬츠,Pants,test
+1c8e4388-c6db-42d7-9f9d-3311b1f9204d,코트,Outwear,train
+1c9a6bc0-d29e-4e2b-8d00-d19e4d77a380,청바지,Pants,train
+1ca03195-b1e8-4c47-85de-81a942ea561e,청바지,Pants,train
+1caba263-088a-448a-be6d-30072c29af09,슬랙스,Pants,train
+1d407629-87e5-4702-b9fc-e3b19de93570,조거팬츠,Pants,test
+1d419bc1-c0a7-40b3-b0c3-c36bc62a0f47,패딩,Outwear,train
+1d42c614-19d5-4515-8ef9-0bf551a601c0,청바지,Pants,train
+1d887da7-8102-488b-b0f0-ff8c9d507926,샌들,Shoes,test
+1dfecdb8-7146-4b58-9d8c-f77971233343,니트,Longsleeve,test
+1e3ce182-d152-4476-8b6c-be3be197debf,슬리퍼,Shoes,train
+1e48d32e-e88a-4435-b06a-c9fb20697647,가디건,Longsleeve,train
+1e9ba1e2-eefe-4853-ab05-63598cb144f1,청바지,Pants,train
+1edf84fb-5bd8-4eeb-b4df-e908b76a5ca2,후드티,Longsleeve,train
+1f2c3551-4c76-433e-8c9f-8093b94f02bf,긴팔 티셔츠,Longsleeve,train
+1f56142e-9b39-4dc3-86ff-06fd5c7ee774,맨투맨,Longsleeve,train
+1faab1ac-d8d4-4711-adbb-7812d7513d41,청바지,Pants,test
+1fae808a-2c24-4790-8514-fd39e1a67219,블라우스,Longsleeve,train
+1fe43e89-0e78-4667-881b-3feb27a63ce3,패딩,Outwear,test
+201d7c0c-4e6f-47c9-bb55-44890164c6a7,조거팬츠,Pants,train
+2057e208-3431-4fc7-91e6-b1b5dee502fb,패딩,Outwear,train
+206b6566-5e0d-4a73-8117-7f55124f1a95,부츠,Shoes,train
+20e44d00-fc8c-46d9-9349-c931850ec57a,터틀넥,Longsleeve,train
+20e5a129-ac26-4ec2-9bf1-f63427503929,가디건,Longsleeve,train
+2116e249-2f93-4f3e-9fff-e55ea9464cd6,긴팔 티셔츠,Longsleeve,train
+21183cf1-c20b-4a86-8e86-ab5ca9b26c06,긴팔 티셔츠,Longsleeve,train
+2126322b-b4eb-4410-988a-9261155c017a,청바지,Pants,train
+2153199f-0a48-4334-bb12-51e07486b5c0,니트,Longsleeve,train
+2160a577-406a-4812-ada2-2a3cb30c2ba8,봄버재킷,Outwear,train
+2174d585-e8cf-43ce-bb61-de1567c74fd5,샌들,Shoes,train
+21a06a8f-583d-40c5-b5f8-2b735af0f8e5,레깅스,Pants,train
+21b775d5-45f8-4258-8b77-1cc6757c2a82,긴팔 티셔츠,Longsleeve,train
+21d5734b-6bb8-4fe2-92fb-187bf8eed730,긴팔 티셔츠,Longsleeve,test
+21f0effd-0560-46c1-8486-4d9f1310abcb,긴팔 티셔츠,Longsleeve,train
+22010881-1ce3-4244-91de-e32574240a3e,패딩,Outwear,train
+223939a1-c2a0-41c7-8956-fb1b6370ebeb,청바지,Pants,train
+226616d8-6ace-49c5-a81c-d229b5471351,니트,Longsleeve,train
+226e8676-f121-4601-a544-a204fc0541c2,가디건,Longsleeve,test
+22be984f-afa6-45a1-8895-a60e045f3382,힐,Shoes,train
+22c96e26-25e3-4c08-916e-fe756b1b558c,플랫슈즈,Shoes,train
+22d0ec9a-ff45-4c64-8f2f-76ca9f1ad164,스니커즈,Shoes,train
+22d1bf2d-56ff-4094-adcd-0ce3a47e69a1,니트,Longsleeve,test
+230f2a65-e3ab-4be0-84cb-ee4fd3ce60b3,샌들,Shoes,train
+2329e4c9-1172-4379-94de-091621a56a40,플랫슈즈,Shoes,test
+233d3ebd-4f21-4715-9601-ae5ed74e98a7,패딩,Outwear,train
+23c7e9ee-9826-49e4-9466-b30db885ab6e,긴팔 티셔츠,Longsleeve,train
+23de0982-0629-49e2-b638-dc028f2ca3d0,니트,Longsleeve,train
+23fc9080-d15c-4183-8b28-98cf54aaba1c,블라우스,Longsleeve,train
+240bafc9-4c27-4d14-975a-4efe38c26cc8,스니커즈,Shoes,train
+24c1d77c-5ce2-4b5c-be2c-1aeccae3efe2,니트,Longsleeve,train
+252363a7-81a6-41dc-b468-e009177ff176,맨투맨,Longsleeve,train
+253dc2b9-f49e-4f55-9917-c9005c29bbd9,부츠,Shoes,train
+255ee0ad-e971-4f9d-ae12-1270c70f4b1a,바람막이,Outwear,train
+25ab31fb-d1c4-4f48-a99e-743f2ef942fa,니트,Longsleeve,train
+26855ed0-1556-4579-aea7-46a91d1736c0,청바지,Pants,train
+26ac7ba6-1aa0-4dd7-a9e9-2562a9679332,청바지,Pants,train
+26acb9ef-2576-439e-821c-340a3be1eaee,청바지,Pants,train
+271405dc-caae-4414-9e88-56463a546e61,청바지,Pants,train
+271e6068-6525-4034-8e7e-cb6007932a18,청바지,Pants,train
+276db6ba-6a50-499f-8a3d-7ede222493df,청바지,Pants,train
+27be613c-d612-422a-94d8-d24db3efe1eb,긴팔 티셔츠,Longsleeve,train
+2884d941-ccc9-4eac-b7d7-b9996126a9c8,청바지,Pants,train
+28f849c5-36f2-4f23-9f0f-7fbdd3e93d61,긴팔 티셔츠,Longsleeve,train
+29e42d8d-ea01-40d3-b82b-002c4343ed93,맨투맨,Longsleeve,train
+2a2e7f21-0d3d-4730-8e42-45dfc0489c4b,맨투맨,Longsleeve,train
+2a30b135-f0ce-45d3-ab59-6bfa92e0abd3,봄버재킷,Outwear,test
+2abc4569-7d77-4fb3-af8c-cab6421b5cf9,긴팔 티셔츠,Longsleeve,train
+2adfd297-5e23-449b-bb28-b35a361b4645,청바지,Pants,train
+2b12ad64-97e5-4500-ad2e-f74ea31eacbb,니트,Longsleeve,train
+2b41ceef-e71c-4229-86fc-e7b50a6ef8c5,가디건,Longsleeve,train
+2b45bc2e-32e9-45db-b34b-aad93113745d,후드티,Longsleeve,train
+2be7652b-3fed-47c7-a0e6-d9fb9fd7d23b,니트,Longsleeve,train
+2c050ddf-2681-4a03-9d0f-3b96b9cd5fe5,긴팔 티셔츠,Longsleeve,train
+2d2b50e7-cf87-49fb-9981-c0e364005332,터틀넥,Longsleeve,train
+2d77ba82-6ebd-4cb0-8e3b-338414051968,구두,Shoes,train
+2d88dcfb-2418-49fa-82b2-b5d4500ed542,조거팬츠,Pants,train
+2dc14f11-7be1-4f03-a1c9-f8407f92d958,청바지,Pants,train
+2dc56ede-fae7-4a74-9ba1-e7084e21d142,긴팔 티셔츠,Longsleeve,test
+2dfbea36-6802-473c-b948-60a1e6181534,로퍼,Shoes,train
+2dff871a-a18a-4ab7-bbd2-cfdd1544b3fa,슬랙스,Pants,train
+2e2caac6-b1a0-4466-a998-0fa5f1554818,니트,Longsleeve,train
+2e4a6e78-3040-4796-8e6b-7ecbb5118150,니트,Longsleeve,train
+2e688422-7be9-415a-94e6-488065873b40,긴팔 티셔츠,Longsleeve,train
+2e6adbec-b34f-4c40-b59a-cafc84658797,청바지,Pants,train
+2edb1db6-cd17-41d2-88e0-ba34801b656d,패딩,Outwear,train
+2ef038be-5743-46fe-afa3-cfefec5fbf35,청바지,Pants,test
+2f09caed-4396-4123-a97d-797b57dddc9b,니트,Longsleeve,train
+2f891a3a-b53c-4619-92a0-51236080811c,블라우스,Longsleeve,train
+300963e8-f469-471c-a7dd-9eed99ddad4f,청바지,Pants,train
+303bb705-52f9-4f1d-9b8c-8a514157f5d6,맨투맨,Longsleeve,train
+30b6fd9b-d172-4d5d-a1c1-c36d23f769dd,슬리퍼,Shoes,train
+3108045a-9975-4ad8-b5ed-e0a065e5d397,패딩,Outwear,train
+31300080-1a75-43ad-a301-4c45cfdde876,맨투맨,Longsleeve,train
+3131d235-b604-4170-b078-bc1d86f26943,니트,Longsleeve,train
+3132e018-4cc7-4767-a2b6-0ac61321809a,터틀넥,Longsleeve,train
+31c0316b-d4b5-4c93-809d-a7d97f6c077a,가디건,Longsleeve,train
+32662cf1-4440-459c-b55c-0ba39b71f768,로퍼,Shoes,train
+32f7bb4b-cf54-4b56-bf99-77eeb1d68bc5,가디건,Longsleeve,test
+32fb1933-5783-4496-80d9-856482b481a5,청바지,Pants,test
+3310d6ef-3e28-4a4d-9311-b9e47f0216b3,니트,Longsleeve,train
+3395d7f5-fe79-448e-abec-fb6879feeddf,바람막이,Outwear,train
+33f8afe9-fe61-4b50-9d84-4d48d47f0916,터틀넥,Longsleeve,train
+341e1658-0cba-4ac2-aa39-e5b174e318fd,니트,Longsleeve,test
+34b616af-5ac8-45ba-a4cc-d73de11df0de,청바지,Pants,train
+35707ebd-0264-4bbf-b5f2-a33c5c4bff4d,구두,Shoes,train
+357fd0d6-e474-4a40-a8fe-e80a6d5082f7,가디건,Longsleeve,train
+35cd43b4-009a-492d-b786-c31d26b99098,청바지,Pants,test
+361ad3bb-6814-4924-8144-dbb0d65214c7,긴팔 티셔츠,Longsleeve,test
+368ef683-0c8c-4ba1-a73b-d784b851165a,터틀넥,Longsleeve,train
+36b4e957-021d-4a48-aaea-25dff54e162c,니트,Longsleeve,train
+36bde3bf-3a55-4a16-baf9-d34f4f5ae19a,블레이저,Longsleeve,train
+3723b671-6846-4d22-af73-fc655eb52093,터틀넥,Longsleeve,test
+37a0cfa8-0f10-405a-8d48-838a3d687620,조거팬츠,Pants,train
+3872c0d9-f77d-47e5-a2cf-6457b2652126,청바지,Pants,train
+38935bd7-2d76-4895-9cb2-9ef80d2a5383,플랫슈즈,Shoes,train
+389f4e3c-3ffb-463d-9f15-95b50b3ebde6,니트,Longsleeve,train
+38bec7b5-9585-4cee-acb9-dcbb09d0b118,캔버스화,Shoes,train
+38bf9790-f653-453b-96b4-72a298413eb7,플리스,Longsleeve,train
+38e03d31-8068-4d73-82ac-c66334f907a5,청바지,Pants,train
+3a15b3b8-d643-4e94-bf21-81bbb35c773a,니트,Longsleeve,train
+3a5f03b9-9afb-4fd4-bc3e-2eb56f83801d,로퍼,Shoes,train
+3a8bad5b-d630-4413-b5cf-badb68cbc2d0,맨투맨,Longsleeve,train
+3b062efe-02a6-4e19-a280-739f366d1d92,긴팔 티셔츠,Longsleeve,train
+3b956cdc-695c-4ee9-bb33-a01136872221,셔츠,Longsleeve,train
+3c4df256-fc57-4379-8368-0c1fa0effcae,캔버스화,Shoes,train
+3c9c2f96-3e55-4c75-9a21-bbbc6c7d96e7,맨투맨,Longsleeve,test
+3cf61c2b-7afa-4e63-8cbf-c163290dc67b,슬리퍼,Shoes,train
+3d7484b1-69da-4e8d-924b-34dba9083e73,청바지,Pants,train
+3d7a04ef-f6c9-4461-9db2-b2c87b3aa481,코트,Outwear,test
+3de45082-17de-47da-b096-216dc834b15b,청바지,Pants,test
+3ebf66af-1f51-4e17-ba48-6e256d1595e5,슬리퍼,Shoes,train
+3f3f3c92-5af3-4339-a142-4f9f3e099484,바람막이,Outwear,test
+3f76d021-c94f-499f-9607-8f24fa1e526b,조거팬츠,Pants,train
+408e739b-59a4-4417-9f57-b9ed513eae0c,청바지,Pants,train
+4099acf4-21f3-434d-a10b-1bccad17039b,니트,Longsleeve,test
+4125a2d5-d084-4bde-94ce-819f7f39185f,청바지,Pants,train
+41302a0b-5faf-48a9-9b40-33885d28a7a6,스니커즈,Shoes,train
+41cfafee-f6cd-4061-852c-9cb236ea9d26,청바지,Pants,train
+425050a8-15a4-432f-8454-7e81a6ea1116,캔버스화,Shoes,train
+42518e91-c969-49f5-ac68-dfe394d7451e,야상·필드재킷,Outwear,train
+427d9739-ea21-4885-b9c2-31ccde4af5f0,긴팔 티셔츠,Longsleeve,train
+428ce15c-34b7-4b44-a7fe-fbf1d10343f6,후드티,Longsleeve,train
+42c30a48-5e35-4117-847d-66cad1383955,블라우스,Longsleeve,train
+42cf9e7a-1ad2-4b91-9691-a65511341c05,치노팬츠,Pants,train
+42d817a7-45f8-4dfc-848f-a8cb124e1878,바람막이,Outwear,train
+4307c9e2-0edb-4b7b-a098-b959c7a0ef1e,코트,Outwear,test
+43b09cd1-a863-40ff-91a4-6b33e39db7b4,긴팔 티셔츠,Longsleeve,train
+445ec205-7346-463a-aa21-83c282fc0e04,조거팬츠,Pants,train
+446df066-edee-4c69-90d7-5013bcc72cf2,봄버재킷,Outwear,train
+454fd50e-89eb-412b-b16c-17f1730ed9b5,캔버스화,Shoes,train
+459ec559-7f45-4906-95d7-d449d5eadfdf,바람막이,Outwear,test
+461d4185-cece-42e3-91f4-86a1331aab31,후드집업,Longsleeve,train
+46ad1df5-6575-45fd-b38d-240841f8f494,맨투맨,Longsleeve,train
+46b316a6-236e-471f-9d72-fea1d7f10dbc,니트,Longsleeve,train
+47106cae-9eee-4147-bcd1-458f2f00fd3d,청바지,Pants,train
+471f46a6-09d5-48c1-a9ea-83617c1fc294,청바지,Pants,train
+47408816-4d1f-4e11-adba-84dc27a3b9bf,슬랙스,Pants,train
+4797602a-efe9-438d-859a-3db113007ef9,슬리퍼,Shoes,train
+49431f72-6423-4fd9-953b-d55bf8f4830a,긴팔 티셔츠,Longsleeve,test
+4997d170-1266-4b3b-9a16-37322c9fb2ba,후드집업,Longsleeve,train
+4a462955-116b-4011-a81c-281658dfcc32,레깅스,Pants,train
+4abdc9ad-fc79-4ea8-8d09-337a4f50c6e6,니트,Longsleeve,train
+4b59aac5-4659-4d41-bdb1-b18f413f70fc,니트,Longsleeve,train
+4ba6deca-32d4-414a-8ccc-42bee703520d,청바지,Pants,train
+4be01935-1fff-4595-aac4-b0a0963b4706,부츠,Shoes,train
+4bf111e5-8a3a-4ed8-a771-cbac8841552c,니트,Longsleeve,train
+4c471b57-0825-4544-8bc3-6ec241c2baca,부츠,Shoes,train
+4c51bd55-f355-4b98-8c83-14e6241a1447,니트,Longsleeve,test
+4c9dc9d8-07a9-40c8-89b0-33c9e51e87ef,청바지,Pants,train
+4cc4e673-fecd-4e4e-a7eb-f2efd39a5291,청바지,Pants,train
+4cd7315a-395b-4958-b8e5-e38f09b3c6b2,니트,Longsleeve,train
+4cf8f135-48d4-49e9-9bd6-1c00759b9d3b,플랫슈즈,Shoes,train
+4d14f447-f8b9-4633-bbc2-c5ce154a0389,맨투맨,Longsleeve,train
+4db9a529-f976-4702-8016-51ec367fefc5,니트,Longsleeve,train
+4dc09b5c-9009-4e75-8432-150b0fab4aac,플랫슈즈,Shoes,train
+4e0f02de-645d-4615-a13b-749d8027c85b,긴팔 티셔츠,Longsleeve,train
+4e3ea56c-e4e4-4ac4-9981-3491f62a7815,니트,Longsleeve,train
+4e6276b7-564c-4a32-9218-13cfc9148263,청바지,Pants,train
+4f240f86-4530-44ad-aae1-4e2d781ad6be,조거팬츠,Pants,test
+4f9521b3-9cad-4cb2-bf9e-34bd0b10b068,청바지,Pants,train
+5081af53-6dd0-454b-be59-e9575b031f98,조거팬츠,Pants,train
+509f9576-1fcd-4941-8188-7a3a50a3ef75,맨투맨,Longsleeve,train
+50f6bd8d-cf7a-4cb7-a1e8-190618947ef4,러닝화,Shoes,train
+5103e71c-1a7c-4781-966e-4e4aa54514c7,후드집업,Longsleeve,train
+510f1ddc-4984-4c98-8485-a22193eda539,조거팬츠,Pants,train
+511cbfa4-cc0c-416f-9e8b-c4e3fb16b9df,청바지,Pants,train
+5183e257-3970-4267-b96a-246e6053e920,긴팔 티셔츠,Longsleeve,train
+5195e000-d919-4ebb-81b8-1e646224d231,힐,Shoes,train
+51b5e26f-be7c-476f-a3dc-98b7dff6f3a7,청바지,Pants,train
+51c73057-ed52-4bf3-afa8-34a015301565,구두,Shoes,train
+51c9d43b-439e-4846-882f-8ef26062fcb9,플랫슈즈,Shoes,train
+51e600b8-da42-434b-8953-c6fb890121a0,슬리퍼,Shoes,train
+51efa1c1-991e-4f4f-bc07-76a879dca148,조거팬츠,Pants,test
+5272341c-6438-491d-ab64-44db18de7e28,패딩,Outwear,train
+5280b156-7db0-47f2-918c-6b0b6592955b,맨투맨,Longsleeve,train
+52ce573c-7d58-466d-a4a4-4ab256a175a6,청바지,Pants,train
+52dcabd0-e02a-499e-9a2a-6f85dc3aa65c,맨투맨,Longsleeve,train
+5309ce8a-f957-4618-8605-31d9382b515e,청바지,Pants,train
+530c78c5-4fda-4abe-9f01-8d329524ab4f,샌들,Shoes,train
+531a0307-e3d4-4ab5-b488-12932fd218f9,긴팔 티셔츠,Longsleeve,train
+537e330a-d61b-486c-bb78-f0ca67bf0562,조거팬츠,Pants,train
+53c2539d-a472-4a71-88d8-6c0aaf0fe1eb,조거팬츠,Pants,train
+540e1bec-cdda-45b2-91ef-66df33ee50c0,긴팔 티셔츠,Longsleeve,train
+548cf305-3a9a-4f23-8939-578d957a680a,가디건,Longsleeve,train
+549efe03-629e-4620-9fe2-4ed3a9d856fd,청바지,Pants,train
+54a7aa48-feef-4689-93ba-cc475f93c4e7,긴팔 티셔츠,Longsleeve,test
+54c33892-0e6c-4e82-b0e5-64a9e7c9d25c,청바지,Pants,train
+552b44a7-0eeb-47a0-8a63-2f1f1d5f78ff,후드집업,Longsleeve,train
+554316b9-05a9-4d28-9b5d-2455e78f82b8,청바지,Pants,train
+562fcdc1-cda7-40cd-bb7b-9b2c908d0931,스니커즈,Shoes,train
+5641733d-73ff-4ba6-9cfe-5212b1f190be,바람막이,Outwear,train
+56669566-8bd7-43ff-bf0a-e9790bb38007,바람막이,Outwear,train
+56a45826-246b-4a6d-9a5e-60772500cbb8,러닝화,Shoes,train
+56f8579b-7609-499c-b95e-6be249d855d3,청바지,Pants,test
+5720381c-a7d8-465a-9395-1f55a5d51b6f,긴팔 티셔츠,Longsleeve,train
+576ea34f-b4e3-4269-b99d-e97343549a8a,긴팔 티셔츠,Longsleeve,train
+579227a4-f635-454e-8b9e-a1e72b03acb6,바람막이,Outwear,train
+5795a645-45b8-423a-887a-f8af020fa08d,조거팬츠,Pants,train
+57dec82b-f2fc-47e1-8d0d-0509622d8fb3,청바지,Pants,train
+582f7f10-e2bb-4cc4-9fb7-829e71dc0f02,니트,Longsleeve,train
+58d93bfc-5218-4009-ba26-530abf687c2c,청바지,Pants,train
+58e81b94-b56b-4cab-85aa-c5990a81c249,청바지,Pants,train
+59225f02-287d-4f5a-8b0a-a9749ddd9d9d,청바지,Pants,train
+5923677d-f3c1-461a-9e77-73858ad2dcbe,구두,Shoes,train
+594f21c3-76f2-47e6-bb94-9975a455742a,청바지,Pants,test
+595f609d-253c-49e5-bd5b-3c45dc61f2a0,청바지,Pants,train
+59633c7c-cbdb-407f-97d8-d59fdd57f120,청바지,Pants,train
+598fb3d5-2ffc-44f1-af7a-1346edafc364,부츠,Shoes,train
+599975b1-cf40-4fd7-ba10-da037ec968d8,청바지,Pants,test
+59ef7298-1528-4dfd-bacd-2d7d7786805d,청바지,Pants,train
+5a79eb85-4d0b-4801-a584-cbf5c0946a1d,레깅스,Pants,train
+5ab4696e-91fc-4bae-9fc5-39291b1b29a4,블라우스,Longsleeve,test
+5af25198-5449-4f01-8155-21192662397c,니트,Longsleeve,test
+5bafda7e-d269-49e4-b2bb-a7a769f061f5,슬리퍼,Shoes,train
+5c1b7a77-1fa3-4af8-9722-cd38e45d89da,맨투맨,Longsleeve,train
+5c2349f3-defa-4924-adf7-f28b144e39b2,맨투맨,Longsleeve,train
+5cb0fa87-7669-44bd-94a7-4bcdec2049ad,카고팬츠,Pants,train
+5d11e46b-e897-4d03-bc7d-455e49800edf,맨투맨,Longsleeve,train
+5d147b66-5238-4ed0-9c6f-c68286fea4ad,슬리퍼,Shoes,train
+5d4e1c72-615e-49b5-84ad-f52d18d665d2,터틀넥,Longsleeve,train
+5d772eec-4af3-4f6b-9615-6b1c75b1adb2,조거팬츠,Pants,train
+5dcc789c-2acf-425d-8f8a-a94c87acd1cc,청바지,Pants,train
+5e1c56ce-c32c-4056-9278-864773ae2024,가디건,Longsleeve,train
+5e2e84d2-2031-4039-ad99-943480201f71,블라우스,Longsleeve,train
+5ea28e5a-f527-4954-b17c-a129b64e3f77,니트,Longsleeve,train
+5ecf5607-c36b-4185-9981-652804e04c8d,바람막이,Outwear,train
+5edb09de-3bc8-405d-bee9-f0286cea7ecf,니트,Longsleeve,train
+5f838a1c-6ab5-4629-a7cb-4a4755d408bb,플랫슈즈,Shoes,train
+5fea042c-f2ac-4523-a813-fc0eae2d9472,부츠,Shoes,train
+601199d6-dea6-4cef-9178-e341f8b44649,조거팬츠,Pants,train
+6013aef0-6c67-4877-8bcd-1c56553f0c07,부츠,Shoes,train
+6017e83a-f717-48d6-8f68-f4b614c215a8,터틀넥,Longsleeve,train
+604486df-573b-4eb7-9c78-7b0a5b1b7392,로퍼,Shoes,train
+60580369-4ec6-41bb-8e5d-b48a4d20e0c0,코트,Outwear,train
+6072c8c3-88ed-4f70-85df-3d1ffa6b2e83,니트,Longsleeve,train
+60923f19-292b-4523-a5ac-48339d155a0d,코트,Outwear,train
+60fa30d6-562c-4227-8cc2-5536d7d77887,바람막이,Outwear,train
+610bc298-714b-4a48-bffe-aedd8863cba8,바람막이,Outwear,train
+6190369c-a306-4fb6-801e-98ddcbe21435,스니커즈,Shoes,train
+6361debd-1437-4d04-acc2-f9dae8157d5c,긴팔 티셔츠,Longsleeve,test
+63eee68f-b61a-4901-b24d-384ef76b726d,청바지,Pants,test
+643ca1b2-c14d-4c18-b7d6-5502cff8c689,가디건,Longsleeve,train
+648efd0f-909a-4d07-8ce1-f11a8dceb9cb,슬리퍼,Shoes,train
+64c5d20e-7cec-4965-8c50-315389f44b22,청바지,Pants,train
+64e29a42-7110-4435-9278-e85a4327b1fd,후드집업,Outwear,test
+65059343-23ae-4f9a-8fca-872af5d9ed37,니트,Longsleeve,train
+65368501-a7a8-4552-9035-7e812b9b4828,구두,Shoes,train
+65550f31-b44f-462e-aec4-6dda5e478930,청바지,Pants,train
+661fff77-f427-4963-8d3a-2783343c547c,카고팬츠,Pants,train
+6636b9ca-c163-48a6-9def-4f66c70685e2,터틀넥,Longsleeve,train
+665eb04c-f6ca-41b1-93c7-390124f21243,데님재킷,Outwear,train
+668afec1-96d0-4080-8b98-77096adaa5f8,플리스,Longsleeve,train
+66d29c71-268b-45b8-9ee9-67b280d5f52e,패딩,Outwear,train
+672924da-6d6a-422c-907d-2b5ba69b0ea7,부츠,Shoes,train
+6743890e-7ecd-4d7a-ab44-c38bb7f4dfaf,긴팔 티셔츠,Longsleeve,train
+675319cc-b2f9-4b92-a126-472d4bcefdee,니트,Longsleeve,train
+681ea190-f72b-4bdc-8854-93a1dc1209a7,긴팔 티셔츠,Longsleeve,train
+68228a47-2453-4cf3-bdf6-72bfdd39c58b,청바지,Pants,test
+685ae610-4c8d-421c-8a6e-22c64ba3ad02,코트,Outwear,train
+686d1d11-67ac-4acd-bd9d-d744774ec7a0,긴팔 티셔츠,Longsleeve,train
+68f2a5c0-bd17-4181-9e09-108811ab4744,청바지,Pants,train
+6911b9c4-e3f6-4ff0-9451-610dce3c6ebf,러닝화,Shoes,test
+693cf00e-0465-4645-9779-d9f42aae09bd,슬리퍼,Shoes,train
+6a138e8a-2e88-4f9c-ade1-4898e63d8825,니트,Longsleeve,train
+6ab4969c-d43e-4e7d-abb5-a5020bffcf91,청바지,Pants,test
+6b184036-28e9-43fb-93b7-1282efa405c8,청바지,Pants,train
+6b1c9f42-c52e-4690-836d-d62e66d48ccb,샌들,Shoes,train
+6b7e076a-5c7b-46c4-8847-3be2efcc1cb4,긴팔 티셔츠,Longsleeve,train
+6bad7aae-a2dc-4ac6-806c-247db740393a,터틀넥,Longsleeve,train
+6bdd35ce-9285-4580-8755-4c8f4bd9b724,부츠,Shoes,train
+6c02ba6f-ca72-4b8c-b7c4-a2fb0c14bfb5,슬랙스,Pants,train
+6c66f632-4242-49bf-ad70-9cffec4c0a03,니트,Longsleeve,train
+6c677bce-2564-46d4-8ca0-c372250aeaf4,플리스,Longsleeve,test
+6cd51968-dcac-492c-8466-5dbc52176bcc,청바지,Pants,train
+6cd85576-a3f5-4c47-98ab-5a236ec392ad,청바지,Pants,train
+6d23eb97-0558-46f1-97a8-499dd450bf28,니트,Longsleeve,train
+6d36bed9-c236-4bc0-81af-99bc657419bc,플랫슈즈,Shoes,train
+6d89acf9-e8b0-4231-9915-2854adb7a223,플리스,Longsleeve,train
+6e199a44-ee88-4a58-ace4-b6d926d82e6d,긴팔 티셔츠,Longsleeve,train
+6e4581ed-c575-4d31-8aa4-9814bd6672a3,터틀넥,Longsleeve,test
+6e519c22-3cdf-4dfe-8859-529a20e68748,패딩,Outwear,train
+6e69a725-ea5d-4097-83c9-7397e135988b,긴팔 티셔츠,Longsleeve,train
+6e6e425d-7f74-4dfb-8c28-bf6fc4a3f81f,청바지,Pants,train
+6e70492a-b2c9-4fcd-8bd4-5395af5a9e26,청바지,Pants,train
+6e760bca-6591-4208-a785-27b7c8d69ca8,니트,Longsleeve,train
+6e857a40-68f4-471f-a19d-1b787f1f52bf,터틀넥,Longsleeve,train
+6ecd5726-a6af-4b6e-9334-df0101ea202a,치노팬츠,Pants,train
+6f16e53a-4a25-4c8e-9dbf-705c682b1f87,로퍼,Shoes,train
+6f2e047c-673a-4d8a-ba75-f3ba4b23f22a,청바지,Pants,train
+6f620707-3a67-4a98-99c5-694763f3404f,청바지,Pants,train
+6ff7b140-076c-411f-93cb-faa60b1cc583,긴팔 티셔츠,Longsleeve,train
+707cf964-a067-412a-a562-ac5a1112f81b,청바지,Pants,train
+70d6fdd0-4a24-429f-a00c-dc946a90f9e3,스니커즈,Shoes,train
+70fd429b-73ec-4b4a-9173-2b6efbe7d6ee,니트,Longsleeve,test
+7110460a-44eb-4bea-a477-e533a80f0db2,니트,Longsleeve,train
+7155bc52-d5f2-42a2-9caa-0f485a02f5bc,니트,Longsleeve,test
+7183e0de-c9e1-45bf-9d89-9319afc727ec,바람막이,Outwear,train
+7231edea-0db3-491f-a8c8-69143254073d,가디건,Longsleeve,train
+7253c29e-932d-4669-b834-e3070730f788,니트,Longsleeve,train
+725f2fc9-230b-4bcb-807b-6a757cefdf37,청바지,Pants,train
+72f1e164-bfe8-482b-9bc6-a5b37f26fc8a,청바지,Pants,train
+73580d79-4fce-47f6-a6c3-433b32622774,패딩,Outwear,test
+735b2cb6-8cd8-4103-8e8e-85888a6acb71,슬랙스,Pants,train
+73724d60-78b2-4bdd-84b0-a25d8c772beb,니트,Longsleeve,train
+738f5342-3cd6-4565-b6c9-be12d2bf311f,청바지,Pants,train
+73c325ed-47ba-4df3-9b04-d8acab202244,로퍼,Shoes,train
+744d66e4-d0cd-4422-9ab5-50f4db15eb7d,힐,Shoes,train
+74be6d25-8e2d-4189-ab13-725af704fe41,카고팬츠,Pants,train
+74e2adaf-72e7-405c-8e79-7dd804353143,조거팬츠,Pants,train
+74f16421-14fd-43de-9883-cbc02819336e,패딩,Outwear,train
+7523e98d-3dd3-4206-8073-4610b3bc9901,니트,Longsleeve,train
+752639b8-8c71-44dd-8700-aa1bff42277d,터틀넥,Longsleeve,test
+75557d1e-b607-4918-82d0-b3f14f31d5a7,샌들,Shoes,train
+75912d0d-f9b5-450d-9260-87f192a06731,스니커즈,Shoes,train
+75b7e88f-093d-453a-9238-a91e18ef80f5,러닝화,Shoes,train
+7614aedf-0a27-4ad8-973d-2a17a067d540,가디건,Longsleeve,train
+76649754-ab0b-44ef-a9b6-8f42f7e91047,슬리퍼,Shoes,train
+76acd48d-65c7-43db-8de2-925297e0b66d,부츠,Shoes,test
+76bf8091-4b76-41f9-b7a8-825747e4f39d,스니커즈,Shoes,train
+771e9fc4-5698-4cb6-99c0-764c7f611646,청바지,Pants,train
+78043895-d366-406a-a5a2-18d865e87ada,조거팬츠,Pants,train
+78c51dc2-9140-445c-b7aa-3a3d0234100c,샌들,Shoes,train
+78ca5eae-827e-4966-9fee-420e85cf95e2,패딩,Outwear,test
+78ddd6f1-8d25-4e0b-b2d7-b28d55c77fe0,청바지,Pants,test
+79c670d3-6f98-4ba2-a9b9-7ae9bfc53f61,터틀넥,Longsleeve,train
+79d4c066-7c31-444c-b6e5-20121fefb24f,니트,Longsleeve,train
+79e3574b-361d-4c3a-b311-85c4ee1e784b,조거팬츠,Pants,test
+79f47126-3c60-4f15-b4e0-a52307b61590,패딩,Outwear,train
+79f4f25d-000c-4440-9ac8-2094a90a0fed,청바지,Pants,train
+7a09572b-9cad-42b2-a19a-a64a5bddd371,플리스,Longsleeve,train
+7a11318e-f52c-495d-b337-ad513ef93ed2,긴팔 티셔츠,Longsleeve,train
+7a20924e-30a3-49e9-8d9f-417c163ea444,긴팔 티셔츠,Longsleeve,train
+7a6e7ddb-ac03-4d78-9d71-75320e5913da,청바지,Pants,test
+7a84a64a-4fb5-4aa4-8835-96aa2a8dedcf,스니커즈,Shoes,test
+7b0722e4-ecae-4332-9971-eb3ee433d748,레깅스,Pants,train
+7b104d7f-8dcf-4452-bc5a-e236723c66cf,맨투맨,Longsleeve,test
+7b80b05f-2abf-4c9a-97f9-3319af822e1d,치노팬츠,Pants,train
+7bb0226b-f068-4b46-9e40-1e5110319fcd,러닝화,Shoes,train
+7c771a4b-57b5-4eeb-905c-4665d7c8c082,봄버재킷,Outwear,train
+7c893b08-35be-4a0a-be3d-800d861319df,바람막이,Outwear,train
+7cad8857-e522-4cc5-9985-caa87bb3d300,힐,Shoes,train
+7d0a2ea3-e1ef-40d7-9d37-542778df3340,슬리퍼,Shoes,train
+7d565210-268b-4ed4-a729-bfa4b9ba163b,청바지,Pants,train
+7dc1ee94-a507-4160-96d4-276364e31c3c,플랫슈즈,Shoes,train
+7dd5a8f9-4b36-41fc-84b2-3a3c96a1e7aa,패딩,Outwear,test
+7e020806-9182-44e5-a9a2-89a88f06f047,슬리퍼,Shoes,train
+7e43962c-1287-4463-b6bd-964fefe51a32,가디건,Longsleeve,train
+7e4b6429-1db3-42d2-a114-18020dffded7,청바지,Pants,train
+7e970ea2-6f5e-484b-a0d0-ed8da34d78fd,슬리퍼,Shoes,train
+7eb185de-28ed-45bc-9696-47b0a70e9066,후드티,Longsleeve,train
+7eb1dd4c-e663-468d-b8ec-fb2d277ad499,청바지,Pants,train
+7edeb7bd-7eb2-4d89-b281-f24f14247660,긴팔 티셔츠,Longsleeve,test
+7eed8816-32bc-441b-8f7a-aa6ac2557ce5,슬랙스,Pants,train
+7f17b410-d375-409e-b5b3-010122df5748,긴팔 티셔츠,Longsleeve,test
+7f3e1f42-5068-4fde-9355-f27c25423bb8,플랫슈즈,Shoes,test
+7fa97b45-380a-4c9c-8de4-522976cb4972,청바지,Pants,train
+7fcb9c5b-958a-4407-a8f8-6377979bbf32,청바지,Pants,test
+7fe5d50c-ff63-40f1-8629-f61937c859de,니트,Longsleeve,train
+8030ef80-857e-4485-a29d-af320acde3cf,슬리퍼,Shoes,train
+807f09b8-99a2-461c-bc8e-93db42ab3b12,레깅스,Pants,train
+80c77dd2-8dfb-4674-9c83-aa36f86c6794,터틀넥,Longsleeve,train
+80ea2b05-080f-45f8-afe7-5a09b5071144,바람막이,Outwear,train
+81c52306-df14-4e69-af05-775fce77e7e4,야상·필드재킷,Outwear,train
+8232d894-43f1-4adb-8622-5df9d65929c6,샌들,Shoes,train
+82387448-c860-4b92-b055-a9ae4d060ef9,청바지,Pants,train
+826a22c6-1634-4e46-aeab-cb182db7be85,코트,Outwear,train
+82942b72-fef2-4c9a-bf64-70525f95a654,청바지,Pants,train
+82ab179c-395f-4cf2-888a-4cb8f454a580,가디건,Longsleeve,train
+82bc7f17-9e89-4fc5-802b-3b3e54e7d303,맨투맨,Longsleeve,train
+82d149a0-7102-4382-886d-797eb011467b,슬리퍼,Shoes,train
+82fb6d56-3878-40db-a274-2b4ed916a115,니트,Longsleeve,train
+82fd1225-3950-496c-8bbd-36f57007ecd5,슬리퍼,Shoes,test
+836b07af-05de-4b66-b067-7043633f4890,터틀넥,Longsleeve,train
+83a8cf9d-2453-4450-99a4-c402f0072d5f,청바지,Pants,train
+8486c6c9-0af0-49c4-a1dd-7caec3b34075,니트,Longsleeve,train
+84a4a5a4-fb02-4009-916d-7e82d65c3e12,청바지,Pants,test
+8573543e-6d88-44a0-8b99-e338ab2808d1,패딩,Outwear,train
+85ad2170-2d05-4e43-905a-70e5a6feb013,긴팔 티셔츠,Longsleeve,test
+85bbf0ae-c8fa-408e-bf51-d2f12be45633,청바지,Pants,train
+85c26e4d-f390-4405-8686-4ce202d43b14,가디건,Longsleeve,train
+85d0c708-59b9-48d7-9416-bded3cae5c10,치노팬츠,Pants,train
+85e0ef8c-3088-4b90-9dd5-fea0f50e9234,니트,Longsleeve,train
+8637f03a-9837-48b0-a4ee-70ee3b1f4e12,가디건,Longsleeve,test
+8648344c-5acb-4f5d-93a1-7e89489489bf,샌들,Shoes,train
+8648f194-9723-4c15-987f-5f462835ba56,니트,Longsleeve,test
+86e84247-1888-4f32-8169-db7d786bed22,긴팔 티셔츠,Longsleeve,train
+873dcb7d-34db-488c-b29e-1bbf78102a23,힐,Shoes,train
+8743de52-ca70-43e5-8e3c-12a1834cb120,슬리퍼,Shoes,train
+87846aa9-86cc-404a-af2c-7e8fe941081d,긴팔 티셔츠,Longsleeve,train
+87a3d476-07dc-4ff7-af59-ec1240f95b62,스니커즈,Shoes,test
+88cdf53a-32a1-4993-99be-bac046165a2e,청바지,Pants,train
+88d7e8fc-4ab1-451a-ad6a-0d8e12f5f27f,러닝화,Shoes,train
+893c3f24-4bd7-45bc-995f-cb85847c92c5,맨투맨,Longsleeve,test
+8980b730-1f1f-4f25-b4f2-262e11ea227b,긴팔 티셔츠,Longsleeve,test
+89b99052-8133-4110-9b7e-9c152248d837,청바지,Pants,train
+8a3b06d4-6722-490e-85c9-de0eb834883d,니트,Longsleeve,train
+8a7c9d42-e734-4811-8775-dc0734fa14d1,슬랙스,Pants,train
+8aeccfc2-bab4-46f0-8de0-34036e36457d,긴팔 티셔츠,Longsleeve,train
+8b2e86f0-6cc2-4bf7-a74f-43f1d725ac0c,맨투맨,Longsleeve,train
+8b6de4c0-3f40-476d-bad4-a4ee3275176e,슬리퍼,Shoes,test
+8b731182-43f2-4251-a2e6-eb0da3f34a06,긴팔 티셔츠,Longsleeve,train
+8c098167-44ea-4d37-86a9-5f5ad67aaddc,청바지,Pants,train
+8c2759e4-2ff5-4cf8-8ac9-88501c634cae,스니커즈,Shoes,train
+8ce667f2-5df9-4104-9295-38c8b1b35556,긴팔 티셔츠,Longsleeve,train
+8d1cfb8d-6e6c-4dbe-999a-0272d986f901,긴팔 티셔츠,Longsleeve,train
+8d4775a5-5918-4836-a627-03694dd26565,긴팔 티셔츠,Longsleeve,test
+8d985e5b-eba8-4955-a94f-ce133258c52e,바람막이,Outwear,train
+8dc068c8-245a-4d42-9beb-d704fb7d3feb,플랫슈즈,Shoes,train
+8e0180ca-68ec-4c04-8283-ad6a0ce6292c,바람막이,Outwear,train
+8e276d05-4a6a-4373-a6d7-6506159ca257,청바지,Pants,test
+8e34ebaa-6919-46f3-84e0-98800a00f524,스니커즈,Shoes,train
+8e3553a1-859e-4e56-a7b5-154a0b1c2c57,플랫슈즈,Shoes,train
+8e6d9b59-cb9d-4250-9dc2-a83d93cec95b,청바지,Pants,train
+8e6e5d4e-308c-4c92-9c35-cb87618ec370,청바지,Pants,train
+8ec70fdb-7ae0-400d-bfc6-ef2ce57f05fa,청바지,Pants,train
+8f2de04f-c93e-4261-9545-690a1bf5ab9f,조거팬츠,Pants,train
+8f576f1a-839d-4fb2-a224-a4700b2d05da,긴팔 티셔츠,Longsleeve,train
+8f5774e2-9db8-43bd-8b3c-d8623f385eaa,레깅스,Pants,train
+8f6822c3-862b-4126-9a35-585569aec240,니트,Longsleeve,train
+8f8c07c7-b289-41eb-ac43-9bfb8863e0cb,바람막이,Outwear,train
+8f945c82-4d26-4c26-a525-bd785b7d73c9,스니커즈,Shoes,test
+8fdc3533-5ae0-4111-9bb9-899a9156868f,맨투맨,Longsleeve,train
+8ffd288e-9502-48fe-87ab-23063659b275,셔츠,Longsleeve,train
+9016f21f-b6d7-469e-991f-aafca7c6c9ae,스니커즈,Shoes,train
+90251c13-9c87-4c28-a7f4-fe7aee16ce87,청바지,Pants,train
+909f9c2f-3564-4a30-a891-85601707f188,니트,Longsleeve,train
+90a39c88-b6b4-4565-8e35-41959de94a9b,조거팬츠,Pants,train
+9111788c-4ef1-41ea-a3c7-95622cd94c55,스니커즈,Shoes,train
+914abed6-9cdf-4728-afa3-9d100efda766,청바지,Pants,train
+91c4b8c1-fd2f-47ea-b496-8191d36a2e3b,맨투맨,Longsleeve,train
+927451d0-6fc4-4d19-b09f-2a30fe0e3628,슬리퍼,Shoes,train
+9289eca9-ffd2-4020-890d-9fd86383bef4,니트,Longsleeve,train
+929c8097-c1c9-420a-8813-f4b25fecc416,샌들,Shoes,test
+932d783e-f31c-4521-9b0b-d93769cf539c,청바지,Pants,train
+93513387-9311-4246-980a-d91e35bab89b,플리스,Longsleeve,train
+93a6f341-bdd7-4feb-88b6-8de1512ba7df,조거팬츠,Pants,train
+93e73f8f-853f-445d-8b62-1e15bb523e36,맨투맨,Longsleeve,test
+93ffa333-f16e-4c9a-9b2c-4561413dfa32,맨투맨,Longsleeve,train
+9401f8a2-b495-4383-b5fa-cfd2c414bffb,힐,Shoes,train
+94484af7-4127-488e-8460-0868d3b838a5,힐,Shoes,train
+9484064b-9ffa-4c4d-a52c-9b3d0eac6ae6,긴팔 티셔츠,Longsleeve,train
+94d2941a-232c-414c-b0f5-89053806ce4d,조거팬츠,Pants,train
+95b40e4e-6a2d-4645-aaee-5683635ff94f,바람막이,Longsleeve,train
+9618ffb2-9d35-4455-8d9b-d47efdd1fb06,터틀넥,Longsleeve,test
+961ce467-f444-4e04-8894-0c11d838d63b,니트,Longsleeve,train
+967cd983-84e9-4812-ab2e-bdf67cc85051,조거팬츠,Pants,train
+96f5353a-dec4-40c8-a8de-45793ee98bea,청바지,Pants,train
+96fe57d0-2dff-4b05-9e7e-f9867878e236,맨투맨,Longsleeve,train
+97074b7f-706a-4c17-b875-bd9baa5bed0e,청바지,Pants,train
+973dc4ec-5548-49aa-9c42-718291432a3c,부츠,Shoes,test
+9788d16b-dc13-4f3a-aa94-d9fb00685851,맨투맨,Longsleeve,train
+97dc40b9-26ce-4607-a7c6-8177f36324f1,청바지,Pants,train
+980bcf05-03b4-4628-806e-fd141f92fe82,니트,Longsleeve,train
+984b613e-a489-4acb-bb29-de2c25a5b4a1,청바지,Pants,test
+98e89103-64e3-41db-adc0-f83726f757d5,부츠,Shoes,train
+99d655ef-8553-4c38-ac96-8e9e1abc05aa,니트,Longsleeve,train
+99df5351-ca44-4291-9fc6-844993b24280,힐,Shoes,train
+9a08cacf-dfa1-4e55-a79b-1c6a86abd76f,청바지,Pants,train
+9ae15e81-d0ca-4219-8adf-1a4231f6b98b,니트,Longsleeve,test
+9ae53cee-51b6-4255-88b9-836b9c8903f4,부츠,Shoes,train
+9b4aa622-dab1-4d43-abc5-e736e0f600fc,조거팬츠,Pants,train
+9b61a6bd-1456-459e-a5f9-00c4c1989b94,슬리퍼,Shoes,train
+9b7cb036-7107-4b17-8c90-1bd82924997b,청바지,Pants,train
+9b94e20c-7ed2-4e8d-a9c2-884e3b685770,치노팬츠,Pants,train
+9c7475ee-d095-47b6-a1e5-a83b8be68a6f,플랫슈즈,Shoes,train
+9c7bc8ac-ebf6-43f9-bdf5-6a8f21b7ea0f,터틀넥,Longsleeve,train
+9caa4c99-0d40-438c-910c-3a356dfd1a63,긴팔 티셔츠,Longsleeve,train
+9cb4943a-cf4b-467e-b39e-e4694d498fb2,긴팔 티셔츠,Longsleeve,train
+9cb9ae19-00e1-4423-a940-a65200940627,청바지,Pants,test
+9db35e36-d392-4ffd-9ef5-508b6b2cb18f,니트,Longsleeve,train
+9e042afb-d2cb-49a2-ae53-7cd54995f78d,슬리퍼,Shoes,train
+9e19f45b-b7d4-4988-948b-0bcda7d83df7,터틀넥,Longsleeve,train
+9e27ae62-9bdc-497c-b8cb-745252b6c232,샌들,Shoes,train
+9e2bd5de-c10f-4f15-bfe7-50a9081016ad,조거팬츠,Pants,train
+9e996161-5ba7-433a-a50d-2b0e871ded74,긴팔 티셔츠,Longsleeve,train
+9ed46a0d-2b44-4594-a0ee-7323c6d87919,니트,Longsleeve,train
+9f0338d5-37b9-4837-964d-d68fa08cec3b,조거팬츠,Pants,train
+9f0c5ed6-08d2-49dc-a27e-da7d9bb2e23a,조거팬츠,Pants,test
+9fb6f6da-e937-458c-90e9-5a6265ae8b6a,플랫슈즈,Shoes,test
+9fda860e-3de6-4b36-80e7-63e794902370,니트,Longsleeve,train
+9ff58614-1b66-417d-9fd5-cd929425d03b,스니커즈,Shoes,test
+a034c20c-a080-4971-bb19-d7c96f0768d6,가디건,Longsleeve,train
+a0a6a791-141f-4a5c-adab-84941f073e90,캔버스화,Shoes,train
+a0b3c989-9a44-4313-ac4c-41f85db5ea7f,긴팔 티셔츠,Longsleeve,test
+a0f299ab-2cb4-44ea-9a0b-f7d0204b49cf,청바지,Pants,train
+a1207d92-a535-4073-a23a-0ff84fd433a2,니트,Longsleeve,train
+a16d135e-9907-471b-9e5c-ac46a006764e,터틀넥,Longsleeve,train
+a16e3408-8423-4f5d-a8be-fc09a64db35c,청바지,Pants,train
+a18f1511-770a-4900-b748-691c6021a3b4,패딩,Outwear,train
+a19ddb4a-41f1-4260-a1f7-05e9d96f7b44,청바지,Pants,test
+a1d9f981-96b0-43e0-923b-d8a91274b6b3,니트,Longsleeve,train
+a28d4188-7956-4e72-b567-f4c0280b3d7e,조거팬츠,Pants,train
+a344ffde-5aaf-4901-8340-7a5a5f860991,긴팔 티셔츠,Longsleeve,train
+a36dc7ad-29ab-4c1f-9701-45143aeb5424,가디건,Longsleeve,test
+a38daaf7-f838-4ad4-9048-6fba9c8f140d,러닝화,Shoes,train
+a3afcbf4-8cfc-45ce-88ab-730bdc369cab,슬리퍼,Shoes,train
+a3c97765-78c1-4d49-9792-c19bddf27a17,스니커즈,Shoes,train
+a3e5af58-cc70-48b8-85f7-cd160ba95968,슬리퍼,Shoes,train
+a46832d2-a6fd-43e4-a447-4193f5071789,슬리퍼,Shoes,test
+a47b61e3-5a1e-428c-80d4-31837e74fa20,긴팔 티셔츠,Longsleeve,train
+a5c2284f-a7e2-4d4a-aa73-4d5ce5c1443f,패딩,Outwear,train
+a60677b2-a77f-4109-94c3-8f2fc922e1a9,맨투맨,Longsleeve,test
+a67c25d1-cada-482a-9045-a8c3d074cb98,바람막이,Outwear,train
+a6a09210-3242-4f00-820b-cda15b5383c1,긴팔 티셔츠,Longsleeve,train
+a70c4767-e12e-4630-b512-b488640915c9,터틀넥,Longsleeve,train
+a723b30f-a5a7-48c7-8bbb-24bb67a9a804,가디건,Longsleeve,test
+a77aeb1f-8140-4ec7-b91e-e67f968eb2f3,청바지,Pants,train
+a7dcbc0a-fef5-4c38-86ae-ae86190b5ff1,맨투맨,Longsleeve,train
+a88db2dc-9282-4e0f-a412-9a126b4c1b02,청바지,Pants,test
+a896e9f4-322d-4fd6-84eb-42acc7e3c344,청바지,Pants,train
+a8a1f779-0234-4c3e-9afb-2d81102fe27f,청바지,Pants,train
+a903057f-bde0-48b0-b60f-a0771ee10fea,청바지,Pants,test
+a91c9a10-7d56-4689-9911-a2905d759ec4,청바지,Pants,train
+a930e7cd-a242-4d73-861a-ecc3e4bf8aac,맨투맨,Longsleeve,train
+a9884da7-fbcf-4b78-9750-479eeac414c6,패딩,Outwear,train
+a9aa8ca4-d288-4bb0-a5da-c2af541743b0,니트,Longsleeve,train
+aa4dac98-5eb3-4aa3-a187-23f828163436,니트,Longsleeve,train
+aa8b8cd6-9979-43cd-9e3a-2fe9a40f62c1,블라우스,Longsleeve,train
+aa8c2c36-a267-4a3b-9ec4-9a0aac37683c,가디건,Longsleeve,train
+aaa2ad55-1049-4aad-925d-3ea295bc12ac,니트,Longsleeve,train
+ab70eea8-6103-4dbc-a135-8085d222f03a,힐,Shoes,train
+ab786484-bdf4-4c64-a7a7-b3d95628b56e,청바지,Pants,train
+aba9306d-e0dc-4717-915c-345ad637c4db,청바지,Pants,train
+abc84e3a-be75-4053-ac66-f0692a6d9c89,조거팬츠,Pants,train
+abea332f-bcad-413b-9d82-9e3f4bc22ffa,샌들,Shoes,train
+ac07a0bf-533e-4e22-9b8d-35cec894b207,반바지,Shoes,train
+ac0c4e52-bcd0-4a04-bba4-cb2723c65ac7,니트,Longsleeve,train
+ac18eb84-4759-4a12-b935-6f1f2a7b276d,긴팔 티셔츠,Longsleeve,train
+ad22bcd3-abd8-4b31-9605-2cc460b93e4a,청바지,Pants,test
+ad517de5-8aad-4bc1-abf7-1ed07bd78cfe,니트,Longsleeve,train
+ae1ade07-d523-480c-8d2b-09c5722f9edf,니트,Longsleeve,train
+ae36221d-b2d9-4508-ac54-fc74951133b8,맨투맨,Longsleeve,train
+ae6cf708-9abd-4422-9c4e-6cf3b6200031,바람막이,Outwear,test
+af130668-3a3c-4dbb-b7f3-8456ec286a68,청바지,Pants,train
+af25e76b-3ac6-44d2-beb5-900e5da22be4,청바지,Pants,train
+afc40786-a90b-48ed-a78f-dfb8833d065d,청바지,Pants,train
+b00f4c40-c1b2-4fcb-9380-12b1134cd3ed,슬리퍼,Shoes,train
+b076b1c5-4426-46ec-9e15-4c785586f1c9,샌들,Shoes,train
+b0d80937-504a-45b6-8c75-ab7c95738b41,청바지,Pants,test
+b0fd4976-e666-4d48-bb49-193f6c93fd77,니트,Longsleeve,train
+b1299dd2-18e7-4d59-a7dc-f6eb14686572,힐,Shoes,train
+b15f709d-f361-4dc0-a164-7dbcdf758a54,슬랙스,Pants,train
+b24c37e0-2175-445b-9801-2fd517253f2b,긴팔 티셔츠,Longsleeve,train
+b26db98a-7e79-4123-88aa-3dfc469230a6,니트,Longsleeve,train
+b2770ba5-2094-4203-8797-aa863f2cca2c,슬랙스,Pants,train
+b2986b3e-4fc1-4eb4-85b3-8a6776b659e3,맨투맨,Longsleeve,train
+b2d00753-c0bd-48f9-95f2-18a91ea62206,부츠,Shoes,train
+b2d23f7d-32af-4b91-a8c5-2cb5b6cec6b1,샌들,Shoes,train
+b2ee19d6-93f1-4688-9545-d265887f226f,코트,Outwear,train
+b33d6289-5f4f-4803-a125-01138da722b4,조거팬츠,Pants,train
+b34268f1-78ad-4e58-bc16-2aa0728c1f7b,슬리퍼,Shoes,train
+b365eac0-cf34-4db5-807e-794323d531fd,청바지,Pants,train
+b3aaf6c8-759c-4b9d-b410-990377cb7f55,봄버재킷,Outwear,train
+b4094c8d-68c9-4854-99c9-ee88ed37d6e5,긴팔 티셔츠,Longsleeve,train
+b4f801fb-27e1-4bb5-a50a-821c6a08f647,청바지,Pants,train
+b52759fc-206c-446d-ae33-1fbf1e88fcb9,청바지,Pants,train
+b571d681-dbca-42bd-8de4-3f863e8bffe7,청바지,Pants,train
+b5a38d12-747c-4e7b-8530-cb21be5742cc,조거팬츠,Pants,train
+b5b1359c-f143-4955-a523-25c240777b9b,스니커즈,Shoes,train
+b61be122-02ff-4a32-8da9-d331cbcd3cce,치노팬츠,Pants,test
+b63b4282-9892-4994-97f4-27452af0f034,터틀넥,Longsleeve,train
+b6560a66-898a-4c8b-b311-f796a3cf8d97,블라우스,Longsleeve,train
+b66fb641-9b68-4bb9-a235-bc079b6662c7,가디건,Longsleeve,train
+b6b5bd75-4e7a-4cbd-a81e-67e549b3638d,긴팔 티셔츠,Longsleeve,train
+b70c1c51-ecf2-4da0-897b-b563cb63b09f,맨투맨,Longsleeve,test
+b765f11c-24b6-4036-ace5-f35f721155a7,맨투맨,Longsleeve,train
+b77cd746-ab20-46cd-9743-cc9588027725,청바지,Pants,train
+b7869275-b3e7-4af3-a86c-871e1c044866,긴팔 티셔츠,Longsleeve,train
+b7883a04-4a25-47f0-b470-4ab70d3dd58d,슬리퍼,Shoes,train
+b7935371-743f-4ad4-9a48-fdb9d0bca9e4,힐,Shoes,train
+b7ac9688-55a5-4da2-b4f4-375dcc911760,플랫슈즈,Shoes,train
+b823a55c-cfef-4edb-9e49-be38cb2b10c9,청바지,Pants,train
+b8d2ae21-39cb-41bf-a189-0ea15d4f864a,니트,Longsleeve,train
+b8ffc654-326d-4a02-93d7-c9b20732b1e0,가디건,Longsleeve,train
+b9671bc8-ce12-4846-87e9-21c0d1298fab,봄버재킷,Outwear,train
+ba24665c-47c3-4987-b741-fa4d878c583f,청바지,Pants,test
+ba5fc3be-db69-435c-903f-43461a504421,러닝화,Shoes,train
+bbb7cf34-ca92-4471-a1e0-df0cea61e9dd,긴팔 티셔츠,Longsleeve,train
+bbd52702-8038-4658-bcab-d6ee6586dd01,러닝화,Shoes,test
+bbeabf26-aa2e-420a-a7fa-d255adaa9f9a,니트,Longsleeve,test
+bc5487b6-c695-41c9-b2a9-62df4a83c387,니트,Longsleeve,train
+bc6b2e06-d79a-4f7a-ac85-92196ce5ce4b,터틀넥,Longsleeve,train
+bc9f281c-c89c-4655-99dd-585cb1c8b6cc,슬랙스,Pants,train
+bcc238bc-3ec1-4b8e-b93d-a2e3fa730f7e,샌들,Shoes,train
+bcce8445-ab0d-4bfa-bd73-9d01a1e99d9e,긴팔 티셔츠,Longsleeve,train
+bcf7f2c7-c8ff-416e-a2a2-3219c6c36f04,패딩,Outwear,test
+bd37c451-2e49-4688-bc91-84edac27bb7c,봄버재킷,Longsleeve,train
+bd483b02-b604-4422-b474-d2c03cb2202f,힐,Shoes,train
+bd72375d-2f21-45a8-8e8f-1138b885f4c7,조거팬츠,Pants,train
+bd9d7a70-eaa4-4bc8-ad2c-15da61aae61f,슬랙스,Pants,test
+bdbbac83-99a5-40df-846c-6d8a01b020ac,슬랙스,Pants,test
+bdbe8d4b-a830-4d90-bc43-625b1ea2d0e3,바람막이,Outwear,test
+bdd8bca9-5f78-42d8-96ca-9cc1b8eed481,코트,Outwear,train
+bddcf939-7b4b-4094-ac20-fbc7a973160f,청바지,Pants,train
+be08b4a1-37cb-46c0-8287-b1d59c0b6aa6,청바지,Pants,test
+be2b21ed-aacc-42d1-b667-c28746fcd47b,조거팬츠,Pants,train
+be6e7635-72da-438b-ac43-d7eaf3d64819,긴팔 티셔츠,Longsleeve,train
+bec98d90-ef57-41a6-b188-c5561bb9f164,블라우스,Longsleeve,train
+bee076bc-ffcf-43c4-b365-c551a5a684eb,조거팬츠,Pants,train
+beea9d8c-3723-45df-8e85-1bdad1adb324,가디건,Longsleeve,train
+bf0a5434-a9ee-4f3e-83ea-139fb18d733c,코트,Outwear,train
+bf78527f-0734-44fd-a968-f6c32c12d61e,스니커즈,Shoes,train
+bf9798e2-0461-429d-bbf7-145b4f9aff15,패딩,Outwear,train
+bfac0100-acbf-4ef1-9455-680f09e170db,긴팔 티셔츠,Longsleeve,train
+bfb69b55-3621-4f2a-aab5-bae002a7be1b,맨투맨,Longsleeve,train
+c02eec7f-1fa9-437d-8369-a53f66fc6591,조거팬츠,Pants,train
+c036e488-fea9-4061-9b6a-cbb982bdf346,청바지,Pants,train
+c060dad4-b50b-44b7-a0df-151dfb781ea1,청바지,Pants,train
+c1480bd3-e7cb-421e-a58b-1b3cb7e4ff27,부츠,Shoes,train
+c17a15e5-7074-4e0c-83d4-430ac8a9dbf7,니트,Longsleeve,train
+c1a6e7af-4bad-425a-b7b7-caca5b6a35dd,패딩,Outwear,train
+c1bc116b-d8b8-4ac4-afe7-a7b94d7e0aba,청바지,Pants,train
+c202f877-27da-4f89-ac70-2aac4831d690,청바지,Pants,train
+c224d361-b064-41e3-9c21-45335e840a6f,부츠,Shoes,train
+c2927463-101a-4211-9b6b-c869fc5fdde0,블라우스,Longsleeve,train
+c2f88dd3-f4d5-4c5f-b715-f6191f1233f3,니트,Longsleeve,train
+c3580e17-9937-4131-8f15-a9c3cfaf2d33,카고팬츠,Pants,train
+c362d096-021d-4948-81ef-c2a971dc0998,조거팬츠,Pants,train
+c367894c-253b-4289-99b4-f045133b60fb,청바지,Pants,test
+c3bd5d6b-62fd-4be0-90c1-ab1a3a23c116,터틀넥,Longsleeve,test
+c3eaa0a4-4c21-4960-949d-3bfbbd99beaf,니트,Longsleeve,train
+c418c376-58bc-4937-a306-f438a1af347c,맨투맨,Longsleeve,test
+c44a5771-ab84-41da-816c-dc79a9aaffcf,맨투맨,Longsleeve,train
+c4b9d4f5-2a30-481a-8cb5-51ae0fd189de,청바지,Pants,test
+c4c88f65-413e-4e4d-95ce-d8b7670b6d5f,니트,Longsleeve,train
+c517b3ab-27e8-4471-97f0-d2a39984c8ea,가디건,Longsleeve,train
+c54291e1-4aaa-43c1-b55a-5cb81a098bdb,청바지,Pants,train
+c56cf310-3a45-44f3-96c8-d478db8f6784,청바지,Pants,train
+c575d614-707d-47f6-80b2-ecfe64ea9053,힐,Shoes,test
+c5924c48-00cc-43bd-b8a3-300a1ae7551f,청바지,Pants,train
+c5e0d38b-cfb8-4230-be76-75556947f563,청바지,Pants,train
+c60db3f4-cb91-4d84-831a-561f53976135,블라우스,Longsleeve,train
+c6256f9e-0ba4-406e-8143-96c174983f3a,니트,Longsleeve,train
+c72f789c-ccc0-4d12-9b23-8e17f68fd224,플랫슈즈,Shoes,train
+c760c76f-706d-4331-92e3-6b20e2ab791f,니트,Longsleeve,test
+c777dda3-609e-42bb-b873-5f17a5e371ad,조거팬츠,Pants,test
+c7cd0ac8-cd00-43af-a6fa-de1e177ffd32,긴팔 티셔츠,Longsleeve,train
+c7ef3028-67fd-4c06-8f5b-265be89c554d,코트,Outwear,train
+c7fed2fc-5dd4-4e43-a210-fce6c7e5c5eb,봄버재킷,Longsleeve,train
+c84dd86a-66fb-400f-a8fd-efb6a9a3ee85,반바지,Pants,train
+c8582c70-17af-4f48-a866-eac7e0572560,슬리퍼,Shoes,train
+c85ee6ca-1e04-4a64-b0b8-d01daaa4af1d,청바지,Pants,test
+c895d316-e00a-40a9-9ccf-8fb702b844aa,청바지,Pants,train
+c8c2307a-534a-4996-89a1-2615a7ec7534,슬리퍼,Shoes,test
+c8edb939-af9a-4776-96be-cabc164de820,청바지,Pants,test
+c9672bd2-9042-411e-8cc6-b089ad343a89,니트,Longsleeve,train
+c995c900-693d-4dd6-8995-43f3051ec488,조거팬츠,Pants,test
+c9a5b637-9b9d-4b0b-94f8-c799020b5a98,청바지,Pants,train
+c9ae97dd-eeb4-4ada-b7e2-b2728cf5758f,조거팬츠,Pants,train
+c9b68fc2-019a-4a4e-9709-97f75099b1e6,슬랙스,Pants,train
+c9c6c0f7-b3b4-4f72-9ba3-f65f3d024d14,터틀넥,Longsleeve,test
+c9d2ebc6-f77a-48dc-bb9d-1700c6e9b109,패딩,Outwear,train
+c9da02e3-2c97-49c2-bab7-0e4a6d0af056,구두,Shoes,train
+ca045c6f-5bb5-4e8f-ae75-b177c01e6137,부츠,Shoes,train
+ca0a9dca-4e9f-4cf9-92b1-0112b85cef59,맨투맨,Longsleeve,train
+caa33042-e586-4f39-bd29-36d03ad5a89b,맨투맨,Longsleeve,train
+cadf29a3-b15b-49fa-ab60-34534d07e6bb,스니커즈,Shoes,test
+cb8b684e-d24a-46b2-9fd8-430254d88412,긴팔 티셔츠,Longsleeve,test
+cbca741e-3bae-4ecf-9b5a-aa4d91d5dea1,니트,Longsleeve,test
+cbd639ba-fbba-4db8-87fa-5b7efd7940ab,맨투맨,Longsleeve,train
+cc0d271d-0cc4-4673-b3a2-6c5506f8a4dd,청바지,Pants,train
+cc0de3ab-d85a-45ff-93ea-d41520d09f1f,니트,Longsleeve,train
+cc34d80f-6e80-446b-b9a7-3927f857d0a4,슬리퍼,Shoes,train
+cc5dcadb-144d-4acf-9de7-fe8cda59e891,청바지,Pants,test
+cc61f831-f33b-48e4-8623-6fde2a170987,카고팬츠,Pants,train
+cc979fcf-255c-4c29-af84-573de34e8676,터틀넥,Longsleeve,train
+cca05ed1-8b64-4904-976d-da3ccff51a00,니트,Longsleeve,train
+ccb1f914-c05b-4fd5-ab90-006b8e927485,청바지,Pants,train
+ccbbfb83-ba8c-4ea5-8f9e-5ec4abbaf0e8,맨투맨,Longsleeve,train
+cd23d1f5-2066-44e5-b2f2-77ab284320a5,청바지,Pants,train
+cd6b14e7-970b-4472-9241-af346237ba75,긴팔 티셔츠,Longsleeve,train
+cd6ff00a-3441-4977-a35b-7935cd4331c0,블라우스,Longsleeve,test
+cd7835bf-e5c8-4491-bb1c-23f193438632,청바지,Pants,test
+ce02970e-c19b-42a4-ab4c-b868af097412,봄버재킷,Longsleeve,test
+ceaa1a39-4aa3-4492-a7ba-173a5f2a3fb8,맨투맨,Longsleeve,test
+cedf742b-bf77-4240-93cb-c02b6e473593,러닝화,Shoes,train
+cf6ceded-4904-4ffd-959e-bcd83ccb26f5,패딩,Outwear,train
+cfe35b59-afce-48aa-a7f8-0618aae955fd,스니커즈,Shoes,train
+cff2b443-f7ca-4771-8427-ebd1ccb7ddbd,니트,Longsleeve,test
+d00058bb-bca7-41ab-b933-4c06d7b06bb6,청바지,Pants,train
+d03275bf-bd54-4319-b036-31d7c697eed4,부츠,Shoes,train
+d0346b49-6710-4500-9394-eb19b4286b1d,청바지,Pants,train
+d039bfd4-d924-4d83-9d8a-b15595e0080a,패딩,Outwear,train
+d03aa977-8e85-4699-b050-c83390e8bd27,조거팬츠,Pants,train
+d0526ba8-6e57-45c1-95e8-d542f87d99f6,긴팔 티셔츠,Longsleeve,train
+d09be031-92c0-4b14-bb7d-6d4926d3f6e2,스니커즈,Shoes,train
+d0fcfc1e-b1ae-43c9-ac0b-c4f65467756e,청바지,Pants,train
+d10acc75-b240-4e72-822e-7f1279ed7caa,캔버스화,Shoes,test
+d119997f-3466-4948-9aec-7cc2bf5a9acc,청바지,Pants,train
+d12a6fde-d34a-4521-9752-b7a077510e41,청바지,Pants,train
+d12dea46-234b-4704-a3a6-f7f8a9d8dca1,청바지,Pants,train
+d139053f-b857-4c70-98d2-f272a2b764ad,긴팔 티셔츠,Longsleeve,train
+d1545351-af54-4eb2-b290-c2ab690fdfde,맨투맨,Longsleeve,train
+d164ed7b-853b-437f-aa37-096fc97c0e70,니트,Longsleeve,train
+d1a74979-a408-4786-abab-92b412008091,니트,Longsleeve,train
+d1ced6ee-7b6a-4152-9e9c-261db0f8f4c5,구두,Shoes,train
+d1ee3196-3069-4bd9-8a36-507bc2302d14,니트,Longsleeve,test
+d225b763-d20f-4045-999c-b9af8b794d64,긴팔 티셔츠,Longsleeve,test
+d291dfa4-b8b7-460c-ad2d-643cc67ade9c,청바지,Pants,train
+d29d1b88-0268-43cb-9674-cde9cb1e4922,패딩,Outwear,train
+d2b3f788-d449-450a-ad4f-56c322bcb681,니트,Longsleeve,train
+d2e3681b-28a2-4304-970f-0a20d5cedc8c,긴팔 티셔츠,Longsleeve,train
+d3798a33-8735-4284-b83e-bd7ce6a65319,긴팔 티셔츠,Longsleeve,train
+d3db25f4-a328-487e-94e9-472bc6f02807,러닝화,Shoes,train
+d3e084a7-7471-4a4d-8b2d-8522832839ed,슬리퍼,Shoes,test
+d47373ee-c527-43de-831f-f8006c109476,힐,Shoes,test
+d47bbb3f-ce2e-43b5-b23e-2aee3f890678,맨투맨,Longsleeve,train
+d4909b5b-faa2-4ae2-81a6-72d272a918da,터틀넥,Longsleeve,train
+d4a187ad-8edd-4b3b-aee1-d4d3904c9952,청바지,Pants,train
+d4ad2ed2-92c7-4dd9-8a3a-c641a1c90f5a,청바지,Pants,train
+d4e28f4e-4575-4183-86fd-4c71105bd426,스니커즈,Shoes,train
+d56ac277-03da-43cd-b7d2-b151b9bfa1fc,니트,Longsleeve,train
+d57a9a33-fdd7-4512-a88a-a8fb7245fad1,긴팔 티셔츠,Longsleeve,train
+d5bd0641-fa5e-4757-ae93-000a0439fd38,니트,Longsleeve,train
+d5c7bcbc-a40b-4eb4-9c9d-e2e384a12f0d,맨투맨,Longsleeve,train
+d6931665-0329-4263-8574-c36b5764ea90,후드티,Longsleeve,train
+d6e39d70-db1e-45b3-9ece-c231fa94c50e,긴팔 티셔츠,Longsleeve,train
+d7c75649-c7d1-40f5-b14d-723b7219a428,긴팔 티셔츠,Longsleeve,test
+d7fabb42-59eb-4562-967e-c86d8ec13cbd,터틀넥,Longsleeve,train
+d898c146-ef98-42ef-ad34-062d0a089673,터틀넥,Longsleeve,train
+d9218439-14f1-46fa-8c35-f17f112b08fe,샌들,Shoes,train
+d92f1cf7-38b9-4975-814b-b6c5c3112741,청바지,Pants,train
+d9c392bc-d12b-4bba-824e-4730765ff0ed,터틀넥,Longsleeve,train
+d9e84490-185d-48f9-ac16-4ef3360616d5,긴팔 티셔츠,Longsleeve,train
+da574a07-2f53-4b74-a236-16884a68893c,긴팔 티셔츠,Longsleeve,train
+da73c56d-32ac-4d66-bdb2-82c50adcdde7,로퍼,Shoes,test
+da9a24f3-3bfd-420e-9f5f-12e67662d5af,후드집업,Longsleeve,train
+dacac63f-c325-4efd-9d77-fe6592ec967f,샌들,Shoes,test
+dacfc786-5205-4cb2-8691-d73eefb7b15e,블라우스,Longsleeve,test
+dad82d38-a305-4baf-9e54-cb6b894deb11,조거팬츠,Pants,train
+dae8c9d7-d344-499e-9253-57bb2a777fe5,부츠,Shoes,train
+db2cbe05-735a-4d78-9202-d537d6a1a166,로퍼,Shoes,train
+db5aab31-c7a7-4459-9751-028dfafc9cb9,슬리퍼,Shoes,test
+dbd42bc7-1819-49bf-83b0-30844e9bc344,긴팔 티셔츠,Longsleeve,test
+dca6b87d-6ab6-4e71-9573-fc1a7831d38d,치노팬츠,Pants,train
+dca74f4d-4148-405b-b716-07581e0c2cc0,레깅스,Pants,train
+dd3f4caa-ecbf-477f-b75c-0e1746b716f9,맨투맨,Longsleeve,train
+dd56586c-e409-45b3-be62-6bd3d1bb6203,블라우스,Longsleeve,train
+dd8e154b-c81c-4d57-8f88-8199c1fc2890,청바지,Pants,train
+dde58bb3-f90a-4830-84e1-6d27fe3c16bc,청바지,Pants,train
+de127ace-68f3-4ef1-beff-f46f89a0a9f4,슬리퍼,Shoes,train
+deb04e10-cf50-4374-8a6a-9b341298b555,청바지,Pants,train
+ded0c4cd-d106-4e54-a61f-c08da89d9a8d,맨투맨,Longsleeve,test
+df002747-cc0a-4340-96ca-ead83cad11c0,가디건,Longsleeve,train
+df545cf1-5461-4745-8e32-c7e6e1247d2e,후드집업,Longsleeve,train
+df5b3286-d61b-48b6-b7b8-47b4b76353ba,봄버재킷,Outwear,train
+e0b088bd-41de-4b38-b6e8-c2d3b2bbc53c,슬리퍼,Shoes,train
+e0f4be43-6426-482b-8747-0a22d3c16d16,패딩,Outwear,train
+e1c0dde2-e9ef-42d0-a8b0-fff052011195,후드티,Longsleeve,train
+e2b0031c-9917-4043-8dde-63bee7e4495b,터틀넥,Longsleeve,test
+e2e01ea2-418c-4ce5-a638-4342f33094e3,조거팬츠,Pants,train
+e30d4ce2-f964-4b70-81bf-4b2696ee4181,청바지,Pants,train
+e31aa5e7-8b5f-442f-85e3-94225db07928,부츠,Shoes,train
+e360d7df-90fc-4de0-bc17-e8924cbe7222,슬랙스,Pants,train
+e3c6d5c9-3258-4aaa-992f-eef756c5fe20,청바지,Pants,test
+e3eac1a3-c0bb-42df-b58e-e0877207cc09,청바지,Pants,train
+e404ad46-d0b7-4079-822c-4ec304f5b5a7,긴팔 티셔츠,Longsleeve,train
+e43d8c8e-bad5-4497-abe3-88a6762bb9f0,니트,Longsleeve,train
+e4a2665e-3479-4890-aec0-fd531c555c97,긴팔 티셔츠,Longsleeve,train
+e4acdca8-db9f-4209-8c03-5739890b4899,로퍼,Shoes,test
+e580170f-d447-4d58-ac33-3d40b3771c8f,코트,Outwear,train
+e5caf86d-ae4d-4cf0-8536-f98ef53e1a44,긴팔 티셔츠,Longsleeve,train
+e5efb687-b679-4af4-af15-80e422716558,니트,Longsleeve,test
+e617f72e-6c09-48fa-a575-13997387945b,청바지,Pants,train
+e62cfe93-94cd-4c40-bd67-62ddbede6b6a,후드집업,Longsleeve,test
+e64ef0da-1f58-4294-9a86-f698be8d8097,가디건,Longsleeve,train
+e6a1b8e7-421b-4840-aa49-3d325064ca80,스니커즈,Shoes,train
+e6abee3d-9e61-4f3f-b523-3f1a1264ab8f,니트,Longsleeve,train
+e772fad7-f807-4e69-a06d-352fca754071,긴팔 티셔츠,Longsleeve,train
+e78ca83f-6aed-43a1-bfea-0cd014316a1e,조거팬츠,Pants,train
+e7a538de-a3f4-4d60-8261-c800a43e2a61,니트,Longsleeve,train
+e7b85e20-517d-457a-8ce4-5a94f853faf0,청바지,Pants,train
+e80e85bf-38da-4cd4-a136-3ebdceac7455,청바지,Pants,train
+e859f79f-37fe-4934-9996-7bf2ca6d7028,니트,Longsleeve,test
+e85b5945-e8d0-4049-84b4-22ff5907ec8e,긴팔 티셔츠,Longsleeve,train
+e902f123-8651-4b58-ba92-be8bd9663cfc,치노팬츠,Pants,train
+e9274307-85c1-480b-842c-4fdc193285c1,긴팔 티셔츠,Longsleeve,train
+e92b0f2e-dbe8-4d22-a26c-8d81640b739b,스니커즈,Shoes,test
+e938611b-9f82-4096-93ae-536ab6d7bb4d,부츠,Shoes,test
+e9607c19-d3fb-4797-ae2d-d03afca1b9ef,청바지,Pants,train
+e9925312-44f9-4869-b340-9c11e721ca2a,긴팔 티셔츠,Longsleeve,test
+e9c4090d-6f3a-4142-bd36-e5eebc57d641,슬리퍼,Shoes,test
+ea1a27dd-f340-4f24-ba49-4ec1ef5d20ee,니트,Longsleeve,train
+eaa3318c-3c73-419e-a952-7c9d0ac845d9,레깅스,Pants,train
+eb094af6-3106-48a1-9ccf-0fff46012d86,니트,Longsleeve,train
+eb1677ad-53da-4b3f-bced-e5c01a7e64bf,힐,Shoes,train
+eb1ba7ee-339c-4777-8cf4-1dedb407e54a,조거팬츠,Pants,train
+eb21f945-1035-463d-bd48-35b62d2cf288,맨투맨,Longsleeve,train
+ebaf0af5-c378-4fad-ab85-f53f53496ff5,니트,Longsleeve,train
+ebdeee05-8f12-4a46-8967-b2655abf864f,조거팬츠,Pants,train
+ec196957-56c2-4ebf-acfe-c13b620f79cc,맨투맨,Longsleeve,train
+ec2c79a8-662c-4081-a9ab-fdce6e49b730,니트,Longsleeve,train
+ec4a6e11-9ee3-4729-8d5e-894e0a8d9405,청바지,Pants,test
+ec4bc8b1-140d-4a9e-bfde-78f5710023ce,청바지,Pants,train
+ec921efb-b108-4d44-b1b0-0a8871702708,맨투맨,Longsleeve,train
+ecd45864-ec3c-4193-90c4-2bc4b3a38eb1,로퍼,Shoes,train
+ecf5dd44-9c10-4576-adfa-2850e803ad39,맨투맨,Longsleeve,train
+ed05a965-9943-4c75-9310-c8c1d0d6859e,슬랙스,Pants,train
+ed0bd341-69e8-4a25-a5e7-11d0976543ca,청바지,Pants,train
+ed2917b0-98b7-444f-b91e-9cc35d544af2,니트,Longsleeve,test
+eda342cb-4a7f-4b7b-979c-0c82992d32a9,청바지,Pants,train
+edaaace7-0a33-49c6-9ed5-1c44e9f02e9d,부츠,Shoes,train
+edd3ea28-cfe9-4100-9283-d5781d1d5d52,힐,Shoes,train
+edd62840-19a2-45f2-a5f4-662c6746fd0f,블라우스,Longsleeve,train
+ee4d62e7-6dbc-4131-a394-c199fa564250,패딩,Outwear,train
+ee9c6264-471e-4199-b56b-a709fc5f6237,청바지,Pants,train
+eecfec85-6d9f-46e1-b3e2-b54d14b9d5ad,니트,Longsleeve,train
+ef4c1f5b-e2f5-4d5d-85e7-1ada6086d44c,맨투맨,Longsleeve,train
+ef6be172-3598-490a-9ed2-26babf14c0fe,코트,Outwear,train
+ef6fad29-2423-4741-9f35-93cb421f7def,조거팬츠,Pants,train
+efae0012-7b21-4406-bd98-6d685626fab4,터틀넥,Longsleeve,train
+efbc5815-d1d4-4d85-8df2-9d9caae4300b,후드집업,Outwear,train
+eff853b4-c947-4a2d-858e-7bd44b7a44e1,니트,Longsleeve,train
+f0b546b4-0181-4be5-9abc-e49d58c4ca0d,후드티,Longsleeve,train
+f1865247-2eef-49be-b678-fbbd378d754d,니트,Longsleeve,train
+f193ccf6-820f-490f-9684-dce95800dbbd,가디건,Longsleeve,train
+f1f2c7fd-c9ad-42cf-94a9-b6b1312ed678,블라우스,Longsleeve,train
+f1f3585a-a0c9-4805-8bd7-1d5084d10463,니트,Longsleeve,train
+f2d0654b-aae0-4b40-9e32-50e499c48182,청바지,Pants,train
+f2e3fe1f-fcf1-479e-9d48-3e45f07a5447,맨투맨,Longsleeve,test
+f2ed2a21-1f1d-4c4f-b814-ea534d7bc397,니트,Longsleeve,train
+f363bfeb-9ff0-4fcb-96fe-b103e9071acd,청바지,Pants,train
+f3ca5280-6e74-44c6-ad14-f04ca1aee182,조거팬츠,Pants,train
+f4466552-b0d6-4ef4-a233-02d04a031fd1,가디건,Longsleeve,train
+f448c9bd-dbe4-4274-855a-34de2e4a86fd,부츠,Shoes,train
+f46854d0-e922-4b63-9d93-cbadb993aace,청바지,Pants,train
+f4814937-780a-467e-9acb-1e96754a928f,맨투맨,Longsleeve,train
+f4ab8ee7-6d11-409c-9c81-1a8912cd7b3a,야상·필드재킷,Outwear,train
+f4f59703-4f85-40f5-8ff4-79f2eca93684,바람막이,Outwear,train
+f50f1ab8-e2b4-4f80-9f83-8cb97b51fdea,청바지,Pants,train
+f545f01b-8f90-44f3-aae0-8efcaa439054,조거팬츠,Pants,train
+f56febf3-452e-4eb2-a514-4b18f950c807,부츠,Shoes,train
+f595e51b-e236-48bd-94c2-814391176b62,긴팔 티셔츠,Longsleeve,test
+f596ad82-1136-4acc-a7f1-6ae6e2ee4c17,맨투맨,Longsleeve,test
+f5bb1e14-cec6-436d-b13d-66a30d91e330,부츠,Shoes,train
+f5c71807-a74b-422f-b551-6ca6a1197a57,슬랙스,Pants,train
+f5eeebcb-1999-4048-af2d-9f47873458db,조거팬츠,Pants,train
+f60e1573-d7ec-44fa-9926-f230160a309a,니트,Longsleeve,train
+f60f4649-b463-4585-aeb2-e0d192b968ca,조거팬츠,Pants,train
+f63a672d-e22d-4343-8121-079768bcffe3,청바지,Pants,train
+f6486e32-eaed-45e2-b506-2a71c83d36a3,러닝화,Shoes,train
+f67ec606-35a8-4b20-a3d8-68b7a27cbbfc,패딩,Outwear,train
+f6943183-e0e0-4b1b-a11b-451941bc523f,후드티,Longsleeve,test
+f6cdc0f4-9615-4e0c-a22b-6972f6fb4e1a,청바지,Pants,train
+f6da26ee-d8a0-4086-b508-0da9c5cde1cc,청바지,Pants,train
+f6e6c873-3e0e-4048-8ebb-7ce712f37800,플리스,Longsleeve,train
+f6fbf376-874f-4a79-8736-e3767bad7a42,터틀넥,Longsleeve,train
+f72b6737-47de-4b8f-a1f0-a874d3d591b6,부츠,Shoes,test
+f744c13f-1b8f-44ef-a45c-4b8e65771901,샌들,Shoes,train
+f7b209c5-c0c1-4ff8-b643-0b0dbdd1d600,스니커즈,Shoes,train
+f7e20220-14c1-44c0-8d0b-e0ac4bf8b18b,청바지,Pants,train
+f7ffc2ea-400f-4965-b989-0b755b9db198,청바지,Pants,train
+f82e467e-0a95-4534-9120-e19730dc4e73,터틀넥,Longsleeve,train
+f84f940b-f9b2-4004-b55a-0aadfaa08e38,터틀넥,Longsleeve,train
+f87a55fb-2d0b-402b-b674-7c00a9aa4cd9,긴팔 티셔츠,Longsleeve,test
+f8a7abd7-f479-40d0-ab45-fcdaef82e1c5,샌들,Shoes,train
+f8ed83e3-5d6f-4f78-8838-2d6b8836d98b,맨투맨,Longsleeve,train
+f97dba0a-37f7-452b-9159-90d4d6757473,청바지,Pants,train
+f9aaa937-0247-4cb6-be62-d44248ef6cbc,청바지,Pants,train
+fa0fc8d4-18c7-46ee-87f4-ddc70fb050eb,데님재킷,Longsleeve,train
+fa44b5cf-4029-4460-b2c2-cf322e726c57,슬리퍼,Shoes,train
+fa5fe172-a5b0-465a-bf25-7e22e7af43cf,부츠,Shoes,test
+fa6dd14a-a6e2-4f4f-a2f4-36b610c72cd6,레깅스,Pants,train
+fa9f16fa-8b47-4b83-9567-497888652a64,코트,Outwear,train
+fab99089-ea1a-4380-988a-e700bbe73d42,패딩,Outwear,test
+fac591c6-d884-44bf-9f73-3f9dd8e39c0a,청바지,Pants,test
+fb0e4090-f7e7-424a-aa85-44daffcea9a1,스니커즈,Shoes,train
+fb59bc3a-fdb9-498c-99a6-de73d500f643,조거팬츠,Pants,train
+fb708a01-3134-4e39-9b2b-015331644cf5,맨투맨,Longsleeve,train
+fb90adff-1e63-476c-a8ad-b909a33f0069,니트,Longsleeve,test
+fbdb72f7-0d7f-4c8b-b8b3-0d90c96bffa7,청바지,Pants,test
+fbdcc9a6-1363-46a5-8df7-1cfd715420c3,긴팔 티셔츠,Longsleeve,train
+fbdddc68-0c17-47fb-a6a4-28f9564f44fb,스니커즈,Shoes,train
+fbe119df-fd65-46c0-aab7-f9f5de8878bc,패딩,Outwear,train
+fbefa9a6-5ed8-47d7-97f7-c57378457399,긴팔 티셔츠,Longsleeve,train
+fc1241ee-8540-4321-ad77-6dfc2dff7802,니트,Longsleeve,train
+fc2c397f-29cb-4524-b797-5bda35da7d18,니트,Longsleeve,test
+fc34b591-392c-4ed8-8e26-71a386e0d9b3,긴팔 티셔츠,Longsleeve,test
+fc445dc0-d718-4478-845f-a0223a74ebb8,맨투맨,Longsleeve,train
+fcb9e84b-a040-4871-891e-8c43ed40bc25,봄버재킷,Outwear,train
+fd1f8783-1118-4c87-8af4-632dbd46f0a0,니트,Longsleeve,train
+fd235c36-a30a-4aa9-8cb6-d1b0a450d737,슬리퍼,Shoes,train
+fd24aa3a-2cce-49a4-b905-a8cd33f35d91,맨투맨,Longsleeve,train
+fd2d5fd1-2572-48d1-a089-f44039543b50,청바지,Pants,train
+fe0ae2fe-9910-4f3f-a7ab-3b6400c9e0b2,청바지,Pants,train
+fe1ba208-32c7-48ad-aab9-488f33a3f983,블라우스,Longsleeve,train
+fe5529c2-a08d-47cc-8e18-f05ca21491e6,청바지,Pants,train
+febe9c7c-1551-45ae-8324-b8a5bb9fc8a3,긴팔 티셔츠,Longsleeve,train
+fee4e85e-b942-4127-bdfd-89f1d9941528,긴팔 티셔츠,Longsleeve,train
+ff231d91-0ff6-4485-98e7-a05c26f09fec,봄버재킷,Outwear,train
+ff373bf4-7782-401d-acdc-179cbd9e4683,플리스,Longsleeve,train
+ff5b1764-1272-41bf-a324-98f1b9f13fae,힐,Shoes,train
+ff83e404-50b6-4956-af52-590e0654e58a,청바지,Pants,train
+fff22e21-1b3a-474a-861d-51a92bab6cc0,청바지,Pants,train

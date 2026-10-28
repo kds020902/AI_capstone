@@ -4,7 +4,8 @@
   kream     hahminlew/kream-product-blip-captions (CC BY-NC-SA 4.0)   상품명 키워드 (한국 리셀 플랫폼 상품컷)
   fpi       benitomartin/fashion-product-images-small-384x512 (MIT)   articleType + 상품명 (Myntra 상품컷)
   f200k     Marqo/fashion200k (Apache-2.0 표기)                       category2/3 (여성복, 같은 상품의 여러 컷 중 1장만)
-  grigorev  alexeygrigorev/clothing-dataset (CC0)                     사람이 붙인 라벨 (폰 사진 — 앱 사용 환경과 가장 비슷)
+  grigorev  alexeygrigorev/clothing-dataset (CC0)                     사람이 붙인 라벨 (폰 사진 — 앱 사용 환경과 가장 비슷).
+                                                                       섞인 Longsleeve·Outwear·Pants·Shoes는 data/grigorev_relabel.csv 로 다시 나눔
   utzappos  UT-Zappos50K + meta-data.csv (연구용)                     운동화 폴더를 소재·브랜드로 세분: 캔버스 → 캔버스화,
                                                                        메시+러닝 브랜드 → 러닝화, 가죽·스웨이드 → 스니커즈
   shoe3     keremberke/shoe-classification (Public Domain)            converse 폴더 → 캔버스화
@@ -78,10 +79,15 @@ KREAM_RULES = {
         ("가디건", R("cardigan"), None),
         ("패딩", R("down", "puffer", "padded", "padding", "nuptse", "puffa", "quilted", "goose"), R("vest", "gilet")),
         ("데님재킷", R("denim jacket", "trucker jacket", "denim trucker"), R("corduroy", "leather", "fleece", "suede")),
-        ("야상·필드재킷", R("field jacket", "m-65", "m65", "military jacket", "utility jacket", "fishtail"), None),
+        ("야상·필드재킷", R("field jacket", "m-65", "m65", "military jacket", "utility jacket", "fishtail",
+                         "fatigue jacket"), None),
         ("봄버재킷", R("bomber", "ma-1", "ma1"), None),
         ("블레이저", R("blazer", "sport coat", "suit jacket"), None),
         ("바람막이", R("windbreaker", "anorak", "windrunner", "wind jacket", "shell jacket", "windshell"), None),
+        # 얇은 방수·방풍 겉옷 (레인·쉘·코치·고어텍스 재킷). 트랙 재킷은 저지 원단이라 넣지 않는다
+        ("바람막이", R("wind breaker", "rain jacket", "shell-r jacket", "coach jacket", "mountain jacket", "beta jacket",
+                    "beta lt", "beta ar", "beta sl", "alpha sv", "gore-tex jacket", "goretex jacket"),
+         R("vest", "gilet", "insulated", "parka", "fleece", "track", "long")),
         # 'Club Fleece', 'Tech Fleece'는 기모 스웨트 원단 이름이라 플리스 재킷이 아님
         ("플리스", R("fleece", "sherpa", "boa", "polartec"),
          R("vest", "gilet", "pants", "lined", "lining", "club fleece", "tech fleece")),
@@ -90,6 +96,9 @@ KREAM_RULES = {
     ],
     "top": [
         ("가디건", R("cardigan"), None),
+        # 플리스 풀오버 (Synchilla·Retro-X 등). 'Club/Tech Fleece'는 기모 스웨트라 뺀다
+        ("플리스", R("synchilla", "snap-t", "retro-x", "fleece pullover", "sherpa", "polartec"),
+         R("vest", "gilet", "club fleece", "tech fleece", "crew", "hoodie", "hooded", "pants", "sweatshirt")),
         ("후드집업", ZIP_HOOD, R("vest", "jacket")),
         ("후드티", R("hoodie", "hooded sweatshirt", "hoody"), R("zip", "zip-up", "full-zip")),
         ("터틀넥", TURTLENECK, R("vest", "cardigan", "zip", "jacket", "dress")),
@@ -235,9 +244,19 @@ def f200k_label(r):
 GRIGOREV = {
     "T-Shirt": "반팔 티셔츠", "Polo": "폴로", "Hoodie": "후드티", "Blazer": "블레이저", "Shirt": "셔츠",
     "Blouse": "블라우스", "Dress": "원피스", "Skirt": "스커트", "Shorts": "반바지",
-    # 여러 세부분류가 섞임 → 대분류만
+    # 여러 세부분류가 섞임 → 대분류만 (Longsleeve·Outwear·Pants·Shoes는 사람이 사진을 보고 나눈 data/grigorev_relabel.csv 를 먼저 쓴다)
     "Longsleeve": "상의", "Undershirt": "상의", "Top": "상의", "Pants": "하의", "Outwear": "아우터", "Shoes": "신발",
 }
+GRIGOREV_RELABEL = ROOT / "data" / "grigorev_relabel.csv"
+
+
+def load_grigorev_relabel(path=GRIGOREV_RELABEL, split=None):
+    """{사진 id: 세부분류}. 성인 Longsleeve 661·Outwear 277·Pants 605·Shoes 371장을 사진으로 보고 확실한 것만 나눈 표 (1,033장).
+    split='test' 인 192장(종류별 20%)은 학습에 넣지 않고 휴대폰 사진 시험용으로 남겨 둔다. split 을 주면 그 행만."""
+    if not Path(path).exists():
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return {r["image"]: r["label"] for r in csv.DictReader(f) if split is None or r["split"] == split}
 
 
 # ---------------------------------------------------------------- UT-Zappos50K (메타데이터로 운동화 세분)
@@ -421,10 +440,13 @@ def collect(source, raw):
         return out
     if source == "grigorev":
         root = raw / "grigorev"
+        relabel, held_out = load_grigorev_relabel(split="train"), load_grigorev_relabel(split="test")
         out = []
         with open(root / "images.csv", encoding="utf-8") as f:
             for r in csv.DictReader(f):
-                label = GRIGOREV.get(r["label"])
+                if r["image"] in held_out:   # 휴대폰 사진 시험용 (학습·검증에 넣지 않음)
+                    continue
+                label = relabel.get(r["image"]) or GRIGOREV.get(r["label"])
                 if label and r.get("kids", "").lower() != "true":
                     out.append((root / "images" / f"{r['image']}.jpg", label, r["label"]))
         return out

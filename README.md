@@ -58,12 +58,12 @@ PostgreSQL 이 있으면 `AI_CLOSET_TEST_PG_DSN` 을 설정해 `supabase/schema.
 
 ## 데이터 출처
 
-옷 사진 분류기 학습에 쓴 공개 데이터셋 (총 34,137장, 42종 · 받는 방법과 라벨 규칙은 `scripts/open_datasets.py`)
+옷 사진 분류기 학습에 쓴 공개 데이터셋 (학습·검증 총 35,108장, 42종 + 휴대폰 사진 시험 192장 · 받는 방법과 라벨 규칙은 `scripts/open_datasets.py`)
 
-- [KREAM 상품 이미지](https://huggingface.co/datasets/hahminlew/kream-product-blip-captions) (CC BY-NC-SA 4.0) — 한국 리셀 플랫폼 KREAM의 상의·하의·아우터 상품 사진, 상품명 키워드로 종류를 나눠 7,798장 사용
+- [KREAM 상품 이미지](https://huggingface.co/datasets/hahminlew/kream-product-blip-captions) (CC BY-NC-SA 4.0) — 한국 리셀 플랫폼 KREAM의 상의·하의·아우터 상품 사진, 상품명 키워드로 종류를 나눠 7,928장 사용
 - [Fashion Product Images (Myntra)](https://huggingface.co/datasets/benitomartin/fashion-product-images-small-384x512) (Kaggle 원본 MIT) — 인도 쇼핑몰 Myntra의 의류·신발 상품 사진, 상품 유형과 이름으로 6,496장 사용
 - [Fashion200k](https://huggingface.co/datasets/Marqo/fashion200k) (Apache-2.0 표기) — 여성복 쇼핑몰 사진 연구용 데이터, 원피스·재킷·레깅스 등 5,245장 사용 (같은 상품의 다른 컷은 1장만)
-- [clothing-dataset](https://github.com/alexeygrigorev/clothing-dataset) (CC0) — 사람들이 휴대폰으로 직접 찍은 옷 사진, 앱 사용 환경과 가장 비슷해 정확도 확인용으로도 쓰며 1,955장 사용
+- [clothing-dataset](https://github.com/alexeygrigorev/clothing-dataset) (CC0) — 사람들이 휴대폰으로 직접 찍은 옷 사진, 앱 사용 환경과 가장 비슷해 2,796장을 학습·검증에 쓰고 192장은 시험용으로 따로 둠. 종류가 섞여 있던 긴팔·아우터·바지·신발 묶음은 사진을 보고 다시 나눔 (`data/grigorev_relabel.csv`)
 - [UT-Zappos50K](https://vision.cs.utexas.edu/projects/finegrained/utzap50k/) (연구용) — 미국 신발 쇼핑몰 Zappos의 신발 사진 5만 장, 운동화·구두·힐·샌들 등 5,400장 사용
 - [shoe-classification](https://huggingface.co/datasets/keremberke/shoe-classification) (Public Domain) — 나이키·아디다스·컨버스 신발 사진, 컨버스 사진을 캔버스화로 237장 사용
 - [H&M 상품 이미지 128px](https://huggingface.co/datasets/multabench/core-img-reg-hnm-fashion) (Kaggle H&M 추천 대회 데이터, 비상업 연구용) — H&M 상품 사진과 설명, 후드집업·플리스·터틀넥 등을 보충하려고 7,006장 사용 (아동복 제외)
