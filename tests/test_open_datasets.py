@@ -3,8 +3,8 @@ import pytest
 
 from core.taxonomy import MAIN_CATEGORIES, SUBCATEGORY_TO_MAIN
 from scripts.open_datasets import (
-    F200K_RULES, GRIGOREV, KREAM_RULES, collect, f200k_label, fpi_label, hnm_label, kream_label, load_grigorev_relabel,
-    utz_label,
+    F200K_RULES, GRIGOREV, KREAM_RULES, collect, f200k_label, fpi_label, hnm_label, kream_label, load_extra_weak,
+    load_grigorev_relabel, utz_label,
 )
 
 VALID = set(SUBCATEGORY_TO_MAIN) | set(MAIN_CATEGORIES)
@@ -34,6 +34,17 @@ def test_grigorev_relabel_overrides_mixed_labels_and_keeps_test_out(tmp_path):
                                      encoding="utf-8")
     labels = {path.stem: label for path, label, _ in collect("grigorev", tmp_path)}
     assert labels == {image: load_grigorev_relabel()[image], "other": "상의", "t": "반팔 티셔츠"}   # 시험용 사진은 빠짐
+
+
+def test_extra_weak_classes_table():
+    rows = load_extra_weak()
+    assert len(rows) == 2645 and len({(s, k) for s, k, _ in rows}) == 2645
+    assert {s for s, _, _ in rows} == {"hnm", "f200k", "polyvore", "atlas", "kream", "fpi", "utzappos"}
+    assert {lab for _, _, lab in rows} == {"야상·필드재킷", "치노팬츠", "플리스", "후드집업", "긴팔 티셔츠", "니트원피스", "바람막이",
+                                         "터틀넥", "슬리퍼", "스니커즈", "로퍼", "셔츠원피스", "가디건"}
+    assert all(k.count("/") == 2 and k.split("/")[0].endswith(".parquet")
+               for s, k, _ in rows if s in ("polyvore", "atlas", "kream", "fpi"))
+    assert all(k.startswith("ut-zap50k-images-square/") for s, k, _ in rows if s == "utzappos")
 
 
 @pytest.mark.parametrize("text, expected", [

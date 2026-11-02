@@ -13,6 +13,8 @@ CHECKPOINT = ROOT / "models" / "clothing_classifier.pt"
 
 _MODEL_CACHE = None
 _LOAD_ERROR = None  # 체크포인트는 있는데 못 불러온 이유 (화면에 그대로 보여 준다)
+SURE_CONFIDENCE = 0.7  # 1등 확신이 이 이상이면 그대로 쓰고, 미만이면 후보 중에서 고르게 안내 (웹 체험판과 같은 기준)
+N_CANDIDATES = 3
 
 INSTALL_HINT = (
     "터미널에서 `pip install -r requirements-ai.txt` 를 실행한 뒤 앱을 다시 켜세요. "
@@ -114,17 +116,27 @@ def classify_clothing_image(image: Image.Image):
         x = transform(image.convert("RGB")).unsqueeze(0)
         with torch.no_grad():
             probs = torch.softmax(model(x), dim=1)[0]
-            idx = int(torch.argmax(probs))
-        label = canonical_subcategory(classes[idx])
 
-        subcategory = label
-        category = SUBCATEGORY_TO_MAIN.get(label)  # 규칙표에 없는 옛 클래스명이면 대분류는 비워 둠
+        # 확률 높은 순 후보 (옛 클래스명이 같은 이름으로 합쳐지면 한 번만)
+        candidates = []
+        for i in torch.argsort(probs, descending=True).tolist():
+            label = canonical_subcategory(classes[i])
+            if any(c["subcategory"] == label for c in candidates):
+                continue
+            # 규칙표에 없는 옛 클래스명이면 대분류는 비워 둠
+            candidates.append({"subcategory": label, "category": SUBCATEGORY_TO_MAIN.get(label),
+                               "confidence": float(probs[i])})
+            if len(candidates) == N_CANDIDATES:
+                break
+        best = candidates[0]
 
         return {
             "ok": True,
-            "category": category,
-            "subcategory": subcategory,
-            "confidence": float(probs[idx]),
+            "category": best["category"],
+            "subcategory": best["subcategory"],
+            "confidence": best["confidence"],
+            "candidates": candidates,
+            "sure": best["confidence"] >= SURE_CONFIDENCE,
             "model": f"EfficientNet-B0 ({task})",
         }
     except Exception as e:

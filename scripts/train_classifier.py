@@ -7,6 +7,7 @@
   python scripts/train_classifier.py --data dataset_sub --epochs 10
   python scripts/train_classifier.py --data dataset_sub --epochs 10 --unfreeze-blocks 2
   python scripts/train_classifier.py --data dataset_sub --cache-features --unfreeze-blocks 2 --epochs 15   # GPU 없을 때
+  python scripts/train_classifier.py --data dataset_sub --cache-features --unfreeze-blocks 2 --epochs 15 --aug-copies 1  # 현재 모델
 
 동작
 - 학습 전 클래스명 검사: 규칙표에 없는 클래스 폴더가 있으면 중단
@@ -16,8 +17,11 @@
 - 최고 성능 epoch의 클래스별 정확도·혼동행렬·출처별 정확도를 models/에 CSV로 저장
 - --cache-features: 사전학습 backbone으로 이미지마다 특징을 '한 번만' 뽑아 저장하고 뒷부분만 학습.
   CPU에서도 수만 장을 한 시간 안에 학습할 수 있다 (좌우 반전본도 같이 뽑아 증강).
+  --aug-copies N 이면 사진마다 무작위 변형본(90·180·270도 회전, ±20도 기울기, 자르기, 밝기·색, 흐림)을 N벌 더 뽑는다.
+  특징을 미리 뽑는 방식이라 epoch마다 새 변형을 만들지는 못하고, 정해진 변형본을 함께 학습한다.
   --unfreeze-blocks 2 와 같이 쓰면 마지막 블록 2개도 함께 학습한다 (중간 특징 맵을 저장).
   클래스 수 불균형은 손실 가중치(1/√장수)로 보정하고, 클래스 평균 정확도(macro)로 최고 epoch를 고른다.
+  매 epoch 학습 사진 표본(5,000장) 정확도도 출력한다. 검증 정확도와 차이가 크게 벌어지면 과적합이다.
   저장 형식은 일반 학습과 같아 앱(core/vision.py)이 그대로 읽는다.
 """
 from pathlib import Path
@@ -107,6 +111,21 @@ def extract_features(encode, ds, batch_size, flip, cache_path):
     return x, y
 
 
+def random_variant(norm):
+    """--aug-copies 용 무작위 변형: 돌아간 사진(90·180·270도)·기운 사진·일부만 찍힌 사진·조명 차이·흐린 사진 흉내."""
+    from torchvision import transforms as T
+    turn = T.RandomChoice([T.RandomRotation((a, a), expand=True, fill=255) for a in (90, 180, 270)])
+    return T.Compose([
+        T.RandomApply([turn], p=0.25),
+        T.RandomApply([T.RandomRotation(20, fill=255)], p=0.5),
+        T.RandomResizedCrop(224, scale=(0.6, 1.0), ratio=(0.75, 1.33)),
+        T.RandomHorizontalFlip(),
+        T.ColorJitter(0.3, 0.3, 0.3, 0.03),
+        T.RandomApply([T.GaussianBlur(5, (0.1, 1.5))], p=0.2),
+        T.ToTensor(), norm,
+    ])
+
+
 def train_cached(args, train_ds, val_ds, out, models_dir):
     """backbone 앞부분은 고정하고 출력만 한 번 저장해 둔 뒤, 뒷부분(--unfreeze-blocks 개 블록) + 분류층만 학습.
     unfreeze 0 이면 1280차원 풀링 특징 + 분류층, 2 이면 192×7×7 특징 맵(fp16) + 마지막 블록 2개 + 분류층."""
@@ -134,6 +153,17 @@ def train_cached(args, train_ds, val_ds, out, models_dir):
         print("train 특징 추출 (좌우 반전)")
         xf, yf = extract_features(encode, train_ds, args.batch_size, True, cache_dir / f"train_flip{tag}.pt")
         xtr, ytr = torch.cat([xtr, xf]), torch.cat([ytr, yf])
+    if args.aug_copies:
+        from torchvision import datasets
+        aug_ds = datasets.ImageFolder(train_ds.root, transform=random_variant(train_ds.transform.transforms[-1]))
+        for c in range(args.aug_copies):
+            # 변형은 seed 로 고정해 캐시를 다시 써도 같은 변형본이 된다 (변형 방식을 바꾸면 캐시 파일을 지울 것)
+            print(f"train 특징 추출 (무작위 변형 {c + 1})")
+            torch.manual_seed(args.seed + 1000 + c)
+            xa, ya = extract_features(encode, aug_ds, args.batch_size, False,
+                                      cache_dir / f"train_aug{c + 1}_s{args.seed}{tag}.pt")
+            xtr, ytr = torch.cat([xtr, xa]), torch.cat([ytr, ya])
+        torch.manual_seed(args.seed)   # 변형본을 새로 뽑았든 캐시에서 읽었든 같은 학습이 되도록
     print("val 특징 추출")
     xva, yva = extract_features(encode, val_ds, args.batch_size, False, cache_dir / f"val{tag}.pt")
 
@@ -155,6 +185,8 @@ def train_cached(args, train_ds, val_ds, out, models_dir):
     opt = torch.optim.AdamW(groups, weight_decay=1e-3)
     loss_fn = nn.CrossEntropyLoss(weight=class_w, label_smoothing=0.1)
     batch = 256 if n_free == 0 else 128
+    # 과적합 확인용: 반전하지 않은 학습 사진 5,000장 표본의 정확도도 매 epoch 함께 출력 (검증과 같은 평가 모드)
+    probe = torch.randperm(len(train_ds), generator=torch.Generator().manual_seed(args.seed))[:5000]
     best, best_acc, best_conf, best_pred = -1.0, 0.0, None, None
     best_head = best_tail = None
     for epoch in range(args.epochs):
@@ -170,6 +202,8 @@ def train_cached(args, train_ds, val_ds, out, models_dir):
         tail.eval()
         with torch.no_grad():
             pred = torch.cat([forward(xva[i:i + 512]).argmax(1) for i in range(0, len(yva), 512)])
+            tr_pred = torch.cat([forward(xtr[probe[i:i + 512]]).argmax(1) for i in range(0, len(probe), 512)])
+        train_acc = (tr_pred == ytr[probe]).float().mean().item()
         confusion = [[0] * k for _ in range(k)]
         for t, pr in zip(yva.tolist(), pred.tolist()):
             confusion[t][pr] += 1
@@ -179,7 +213,7 @@ def train_cached(args, train_ds, val_ds, out, models_dir):
             best_head = copy.deepcopy(head.state_dict())
             best_tail = copy.deepcopy(tail.state_dict()) if n_free else None
         if n_free or (epoch + 1) % 10 == 0 or epoch == 0:
-            print(f"epoch={epoch+1} val_acc={acc:.4f} val_macro={macro:.4f}", flush=True)
+            print(f"epoch={epoch+1} train_acc={train_acc:.4f} val_acc={acc:.4f} val_macro={macro:.4f}", flush=True)
 
     # 학습한 부분을 EfficientNet-B0 원래 구조에 넣어 앱(core/vision.py)과 같은 형식으로 저장
     if n_free:
@@ -205,6 +239,8 @@ def main():
     p.add_argument("--cache-features", action="store_true",
                    help="특징을 한 번만 뽑아 두고 분류층만 학습 (GPU 없을 때). --epochs 는 100 정도 권장")
     p.add_argument("--no-flip-aug", dest="flip_aug", action="store_false", help="--cache-features 에서 좌우 반전 증강 끄기")
+    p.add_argument("--aug-copies", type=int, default=0,
+                   help="--cache-features 에서 사진마다 무작위 변형본(회전·자르기·색·흐림)을 몇 벌 더 뽑아 함께 학습할지")
     p.add_argument("--out", type=Path, default=None, help="체크포인트 경로 (기본: models/clothing_classifier.pt)")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()

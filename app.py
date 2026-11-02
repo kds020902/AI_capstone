@@ -18,7 +18,7 @@ from core.taxonomy import (
     main_category_for_subcategory, manual_seasons, season_label, seasons_for,
 )
 from core.tryon import MAX_GARMENTS, space_addresses, tryon_default, tryon_kind, tryon_link, tryon_order, tryon_supported
-from core.vision import classify_clothing_image, dominant_color_hex, dominant_color_name, model_status
+from core.vision import SURE_CONFIDENCE, classify_clothing_image, dominant_color_hex, dominant_color_name, model_status
 from core.weather import CITY_PRESETS, RETURN_HOURS, coldest_until, get_current_weather
 
 ROOT = Path(__file__).resolve().parent
@@ -119,6 +119,22 @@ def upload_bytes(uploaded, rgb=False):
     fmt = {".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}.get(suffix, "JPEG")
     open_upright(uploaded).save(buf, format=fmt)
     return buf.getvalue(), suffix
+
+
+def ai_candidate_pick(ai, key):
+    """AI 상위 후보(최대 3개)를 고를 수 있게 보여 주고 고른 세부분류를 돌려준다.
+    1등 확신이 낮으면 후보 중에서 직접 고르도록 안내한다 (웹 체험판과 같은 70% 기준)."""
+    cands = ai.get("candidates") or [{"subcategory": ai["subcategory"], "confidence": ai["confidence"]}]
+    best = cands[0]
+    if ai.get("sure", best["confidence"] >= SURE_CONFIDENCE):
+        st.success(f"AI 판단: {best['subcategory']} ({best['confidence'] * 100:.0f}%). 자동으로 골랐어요. "
+                   "다르면 다른 후보나 아래 목록에서 고르세요.")
+    else:
+        st.warning(f"AI가 확실하지 않아요 (1등 {best['confidence'] * 100:.0f}%). "
+                   "후보 중에서 맞는 것을 골라 주세요. 없으면 아래 목록에서 직접 고르세요.")
+    conf = {c["subcategory"]: c["confidence"] for c in cands}
+    return st.radio("AI 후보", list(conf), horizontal=True, key=key,
+                    format_func=lambda sub: f"{sub} {conf[sub] * 100:.0f}%")
 
 
 @st.dialog("가상 착용(예시)", width="large")
@@ -402,26 +418,23 @@ elif page == "내 옷장":
         st.subheader("사진 업로드")
         uploaded = st.file_uploader("JPG/PNG", type=["jpg", "jpeg", "png"])
         color_guess = ""
+        ai_pick = None
         if uploaded:
             image = open_upright(uploaded)
             st.image(image, width=300)
             color_guess = dominant_color_name(image) or ""
             st.write(f"대표색 추정: `{color_guess}` ({dominant_color_hex(image)})")
             if st.button("AI 분류 시도"):
-                st.session_state.last_ai_result = classify_clothing_image(image)
+                # 어느 사진의 결과인지 같이 둔다: 사진을 바꾸면 이전 사진의 후보가 남지 않게
+                st.session_state.last_ai_result = {**classify_clothing_image(image), "file_id": uploaded.file_id}
             ai = st.session_state.last_ai_result
-            if ai:
+            if ai and ai.get("file_id") == uploaded.file_id:
                 if ai.get("ok"):
-                    st.success(
-                        f"AI 후보: {ai.get('subcategory') or '-'} → {ai.get('category') or '-'} "
-                        f"({ai['confidence']*100:.1f}%)"
-                    )
+                    ai_pick = ai_candidate_pick(ai, key=f"ai_pick_{uploaded.file_id}")
                 else:
                     st.warning(ai["message"])
 
-        default_sub = None
-        if st.session_state.last_ai_result and st.session_state.last_ai_result.get("ok"):
-            default_sub = st.session_state.last_ai_result.get("subcategory")
+        default_sub = ai_pick
         sub_index = SUBCATEGORIES.index(default_sub) if default_sub in SUBCATEGORIES else 0
 
         # 세부분류·대분류는 폼 밖에 둔다: 폼 안 위젯은 제출 전까지 다시 그려지지 않아
@@ -448,6 +461,8 @@ elif page == "내 옷장":
                     data, suffix = upload_bytes(uploaded)
                     path = media.save(user["id"], "", data, suffix)
                     ai = st.session_state.last_ai_result or {}
+                    if ai.get("file_id") != uploaded.file_id:   # 다른 사진의 AI 결과는 기록하지 않음
+                        ai = {}
                     store.create_wardrobe_item(
                         user["id"], name.strip(), category, subcategory, color.strip(),
                         warmth, rain_ok, material, path, "",
@@ -604,7 +619,7 @@ elif page == "사기 전에 맞춰보기":
 
     with st.expander("구매 후보 추가", expanded=not candidates):
         up = st.file_uploader("상품 사진 또는 캡처 (JPG/PNG)", type=["jpg", "jpeg", "png"], key="cand_upload")
-        cand_ai, cand_color = None, ""
+        cand_ai, cand_color, cand_pick = None, "", None
         if up:
             cand_image = open_upright(up)
             st.image(cand_image, width=220)
@@ -614,13 +629,15 @@ elif page == "사기 전에 맞춰보기":
                 st.session_state[ai_key] = classify_clothing_image(cand_image)
             cand_ai = st.session_state[ai_key]
             if cand_ai.get("ok"):
-                st.caption(f"AI: {cand_ai['subcategory']} ({cand_ai['confidence'] * 100:.0f}%) · 색 {COLOR_KO.get(cand_color, cand_color)}")
+                cand_pick = ai_candidate_pick(cand_ai, key=f"cand_pick_{up.file_id}")
+                st.caption(f"색 추정: {COLOR_KO.get(cand_color, cand_color)}")
             else:
                 st.caption(cand_ai["message"])
-        ai_sub = cand_ai.get("subcategory") if cand_ai and cand_ai.get("ok") else None
+        ai_sub = cand_ai.get("subcategory") if cand_ai and cand_ai.get("ok") else None   # 기록용: AI 1등 답
         c1, c2 = st.columns(2)
         cand_sub = c1.selectbox("종류", SUBCATEGORIES,
-                                index=SUBCATEGORIES.index(ai_sub) if ai_sub in SUBCATEGORIES else 0, key=f"cand_sub_{ai_sub}")
+                                index=SUBCATEGORIES.index(cand_pick) if cand_pick in SUBCATEGORIES else 0,
+                                key=f"cand_sub_{cand_pick}")
         colors = list(COLOR_KO)
         cand_color = c2.selectbox("색", colors, index=colors.index(cand_color) if cand_color in colors else 0,
                                   format_func=lambda c: COLOR_KO[c], key=f"cand_color_{cand_color}")

@@ -1,6 +1,7 @@
 """분류기를 못 쓸 때 원인(파일 없음 / PyTorch 미설치 / 파일 손상)을 정확히 알려 주는지."""
 import sys
 
+import pytest
 from PIL import Image
 
 import core.vision as v
@@ -58,3 +59,32 @@ def test_dominant_color_ignores_background():
 def test_dominant_color_when_item_fills_photo():
     """옷이 사진을 꽉 채우면 가장자리도 옷 색이라 배경을 빼지 않는다."""
     assert v.dominant_color_name(Image.new("RGB", (64, 64), (190, 40, 40))) == "red"
+
+
+def _fake_model(monkeypatch, classes, logits):
+    torch = pytest.importorskip("torch")
+    model = lambda x: torch.tensor([logits])  # noqa: E731
+    monkeypatch.setattr(v, "_MODEL_CACHE", (model, lambda img: torch.zeros(3, 224, 224), classes, "subcategory"))
+
+
+def test_top3_candidates_and_low_confidence(monkeypatch):
+    """앱도 웹처럼 상위 3개 후보를 보여 준다. 옛 클래스명은 새 이름으로 합쳐 한 번만, 1등 확신이 낮으면 sure=False."""
+    _fake_model(monkeypatch, ["청바지", "야상/필드재킷", "야상·필드재킷", "반바지", "슬랙스"], [2.0, 1.5, 1.4, 1.0, 0.5])
+    r = v.classify_clothing_image(IMG)
+    assert r["ok"] and [c["subcategory"] for c in r["candidates"]] == ["청바지", "야상·필드재킷", "반바지"]
+    assert r["subcategory"] == "청바지" and r["category"] == "하의" and r["confidence"] == r["candidates"][0]["confidence"]
+    assert r["candidates"][1]["category"] == "아우터"
+    conf = [c["confidence"] for c in r["candidates"]]
+    assert conf == sorted(conf, reverse=True) and r["confidence"] < v.SURE_CONFIDENCE and r["sure"] is False
+
+
+def test_sure_when_confident(monkeypatch):
+    _fake_model(monkeypatch, ["청바지", "반바지", "슬랙스"], [6.0, 0.0, 0.0])
+    r = v.classify_clothing_image(IMG)
+    assert r["sure"] is True and r["confidence"] >= v.SURE_CONFIDENCE and len(r["candidates"]) == 3
+
+
+def test_web_uses_same_confidence_threshold():
+    """웹 체험판이 '자동 입력됨 / 후보 중에서 골라 주세요'를 가르는 기준이 앱과 같은지."""
+    web = (v.ROOT / "web" / "src" / "app_body.html").read_text(encoding="utf-8")
+    assert f"conf >= {v.SURE_CONFIDENCE}" in web

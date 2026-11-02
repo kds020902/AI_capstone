@@ -12,6 +12,10 @@
   hnm       H&M 상품 이미지 128px (multabench/core-img-reg-hnm-fashion,   product_type + 상품 설명. 같은 상품의 색상만 다른 컷은 1장만,
             원본 Kaggle H&M 대회 데이터 — 비상업 연구용)               아동복 제외. 해상도가 낮아 이 출처만 있는 클래스가 생기지 않게
                                                                        기존 클래스에도 고르게 섞는다
+  extra     학습+검증 660장 미만 종류 보충 — data/extra_weak_classes.csv 에 적힌 사진만 꺼낸다 (모두 학습용).
+            H&M·Fashion200k·UT-Zappos·FPI 는 위 규칙에 없던 상품명·설명으로 찾은 것(검증에 든 상품 제외),
+            Polyvore(Marqo/polyvore, Apache-2.0 표기)·Atlas(Marqo/atlas, MIT, 인도 쇼핑몰 상품 사진)·KREAM 은
+            현재 모델로 후보를 추린 뒤 사람이 사진을 보고 고른 것. 이미 있는 사진과 사실상 같은 사진은 목록을 만들 때 뺐다
 
 규칙에 걸리지 않거나 여러 세부분류가 섞인 라벨은 대분류(상의/하의/…)로만 표시한다
 → prepare_dataset.py 에서 학습에서 빠진다 (집계에서 어떤 라벨이 빠졌는지 보려고 남겨 둠).
@@ -21,7 +25,7 @@
   python scripts/open_datasets.py download --raw raw
   python scripts/open_datasets.py build --raw raw --out open_csv --max-per-class 500
   python scripts/open_datasets.py build --raw raw --out open_csv --dry-run      # 클래스별 장수와 예시만 출력
-  for s in kream fpi f200k grigorev utzappos shoe3 hnm; do
+  for s in kream fpi f200k grigorev utzappos shoe3 hnm extra; do
     python scripts/prepare_dataset.py --source csv --csv open_csv/$s.csv --name $s --out dataset_sub
   done
 """
@@ -56,7 +60,11 @@ DOWNLOADS = {
     "shoe3": [f"{HF}/keremberke/shoe-classification/resolve/main/data/train.zip"],
     "hnm": [f"{HF}/multabench/core-img-reg-hnm-fashion/resolve/main/data.parquet"]
            + [f"{HF}/multabench/core-img-reg-hnm-fashion/resolve/main/images-{i:05d}.zip" for i in range(42)],
+    # extra 는 위 출처(hnm·f200k·kream·fpi·utzappos)에 더해 Polyvore·Atlas 를 쓴다 (둘 다 raw/extra 에 받음)
+    "extra": [f"{HF}/Marqo/polyvore/resolve/main/data/data-0000{i}-of-00006.parquet" for i in range(6)]
+             + [f"{HF}/Marqo/atlas/resolve/main/data/data-0000{i}-of-00009.parquet" for i in range(9)],
 }
+EXTRA_WEAK = ROOT / "data" / "extra_weak_classes.csv"
 GRIGOREV_GIT = "https://github.com/alexeygrigorev/clothing-dataset"
 
 
@@ -477,10 +485,67 @@ def collect(source, raw):
             if label:
                 out.append((path, label, brand))
         return out
+    if source == "extra":
+        return _extra_candidates(raw)
     raise ValueError(source)
 
 
-SOURCES = ["kream", "fpi", "f200k", "grigorev", "utzappos", "shoe3", "hnm"]
+def load_extra_weak(path=EXTRA_WEAK):
+    """[(출처, 키, 세부분류)]. 키: hnm=사진 이름(ProductPic), f200k=item_ID, utzappos=raw/utzappos 아래 경로,
+    polyvore·atlas·kream·fpi='parquet 파일/행 그룹/행'."""
+    with open(path, encoding="utf-8") as f:
+        return [(r["source"], r["key"], r["label"]) for r in csv.DictReader(f)]
+
+
+def _extra_candidates(raw):
+    """data/extra_weak_classes.csv 의 사진을 원본에서 꺼내 raw/extra/extracted 에 저장. (경로, 라벨, 설명)."""
+    import pyarrow.parquet as pq
+    out_dir = raw / "extra" / "extracted"
+    rows = load_extra_weak()
+    dst = {(s, k): out_dir / s / (re.sub(r"[^\w.-]", "_", k) + ("" if k.endswith(".jpg") else ".jpg")) for s, k, _ in rows}
+    todo = {(s, k) for s, k, _ in rows if not dst[s, k].exists()}
+
+    def save(key, data):
+        _save_image(data, dst[key])
+        todo.discard(key)
+
+    hnm = {k for s, k in todo if s == "hnm"}
+    for z in sorted((raw / "hnm").glob("images-*.zip")) if hnm else []:
+        with zipfile.ZipFile(z) as zf:
+            for name in hnm.intersection(zf.namelist()):
+                save(("hnm", name), zf.read(name))
+    f200k = {k for s, k in todo if s == "f200k"}
+    for f in sorted((raw / "f200k").glob("*.parquet")) if f200k else []:
+        pf = pq.ParquetFile(f)
+        for g in range(pf.num_row_groups):
+            ids = pf.read_row_group(g, columns=["item_ID"]).column("item_ID").to_pylist()
+            hit = [i for i, iid in enumerate(ids) if iid in f200k]
+            if hit:
+                images = pf.read_row_group(g, columns=["image"]).column("image").to_pylist()
+                for i in hit:
+                    save(("f200k", ids[i]), images[i]["bytes"])
+    for k in [k for s, k in todo if s == "utzappos"]:
+        if (raw / "utzappos" / k).exists():
+            save(("utzappos", k), (raw / "utzappos" / k).read_bytes())
+    for source, folder in (("polyvore", raw / "extra"), ("atlas", raw / "extra"), ("kream", raw / "kream"),
+                           ("fpi", raw / "fpi")):
+        by_group = collections.defaultdict(list)
+        for s, k in todo:
+            if s == source:
+                name, g, i = k.split("/")
+                by_group[(name, int(g))].append((k, int(i)))
+        for (name, g), items in sorted(by_group.items()):
+            if not (folder / name).exists():
+                continue
+            images = pq.ParquetFile(folder / name).read_row_group(g, columns=["image"]).column("image").to_pylist()
+            for k, i in items:
+                save((source, k), images[i]["bytes"])
+    if todo:
+        print(f"[extra] 원본에서 못 찾은 사진 {len(todo)}장 (download 를 먼저 하세요): {sorted(todo)[:5]}")
+    return [(dst[s, k], label, f"{s} | {k}") for s, k, label in rows if dst[s, k].exists()]
+
+
+SOURCES = ["kream", "fpi", "f200k", "grigorev", "utzappos", "shoe3", "hnm", "extra"]
 
 
 def build(raw, out, sources, max_per_class, seed, dry_run, examples):
@@ -498,11 +563,12 @@ def build(raw, out, sources, max_per_class, seed, dry_run, examples):
         if dry_run:
             continue
         rows = _extract_parquet(kept, out, source) if kept and len(kept[0]) == 5 else kept
+        train_only = source == "extra"   # 보충 사진은 학습에만 (검증은 다른 모델과 같은 사진으로 비교)
         with open(out / f"{source}.csv", "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["image_path", "label", "source_label"])
+            w.writerow(["image_path", "label", "source_label"] + (["split"] if train_only else []))
             for path, label, desc in rows:
-                w.writerow([Path(path).resolve(), label, desc])
+                w.writerow([Path(path).resolve(), label, desc] + (["train"] if train_only else []))
     return report
 
 
