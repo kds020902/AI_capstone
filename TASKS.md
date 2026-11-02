@@ -8,7 +8,7 @@
 | ID | 작업 | 담당 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
 | T-01 | 배포 주소에서 핵심 흐름 확인 | 사용자 + AI | 커밋 `1b1c6f1` 재배포 | 배포 주소(`*.streamlit.app`)에서 가입 → 사진으로 옷 등록 → 추천 → 저장 성공, 결과를 test-plan 3절에 기록 | 진행 중 (배포 주소 공유 대기) |
-| T-02 | Supabase 정리 | 사용자 | – | 시험 계정 4개(`closet.check.*`, `closet.e2e.*` @example.com) 삭제, DB 비밀번호 재설정 | 할 일 |
+| T-02 | Supabase 정리 | 사용자 | – | 시험 계정 8개(`closet.check.*`, `closet.check3.*`, `closet.e2e.*`, `closet.e2e3.*` @example.com) 삭제, DB 비밀번호 재설정 | 할 일 |
 | T-03 | Streamlit Secrets 정리 | 사용자 | – | `SUPABASE_URL`을 대시보드 주소 대신 `https://<프로젝트ID>.supabase.co`로 (코드가 자동 변환하지만 정리 권장) | 할 일 |
 | T-04 | 웹 체험판 공개 | 사용자 | – | Settings → Pages → GitHub Actions, Actions에서 1회 실행, `kds020902.github.io/AI_capstone` 열림, `WEB_TRIAL_URL` 설정 | 할 일 |
 | T-05 | 배포본 속도 측정 | AI | T-01 | 로그인·옷 저장·추천·화면 전환 시간을 배포 주소에서 재서 기록 | 대기 |
