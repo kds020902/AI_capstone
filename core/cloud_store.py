@@ -86,6 +86,23 @@ class CloudStore:
             name, category, subcategory, color, warmth, rain_ok, material, image_path, notes,
             ai_category, ai_subcategory, ai_confidence))
 
+    def create_wardrobe_items(self, user_id, items):
+        self._own(user_id)
+        rows = [self._item_row(x["name"], x["category"], x.get("subcategory"), x.get("color"), x["warmth"],
+                               x["rain_ok"], x.get("material", ""), x.get("image_path", ""), x.get("notes", ""),
+                               x.get("ai_category"), x.get("ai_subcategory"), x.get("ai_confidence"))
+                for x in items]
+        if not rows:
+            return []
+        return [r["id"] for r in self._t("wardrobe_items").insert(rows).execute().data]
+
+    def update_wardrobe_item(self, item_id, user_id, name, category, subcategory, color, warmth, rain_ok,
+                             material="", notes=""):
+        self._own(user_id)
+        self._set_item(item_id, {"name": name, "category": category, "subcategory": subcategory, "color": color,
+                                 "warmth": int(warmth), "rain_ok": int(bool(rain_ok)), "material": material,
+                                 "notes": notes}, only_kept=True)
+
     def list_wardrobe_items(self, user_id, active_only=True):
         self._own(user_id)
         q = self._t("wardrobe_items").select("*").eq("user_id", self.uid).eq("deleted", 0)

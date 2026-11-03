@@ -1,16 +1,19 @@
 from datetime import date
 from pathlib import Path
+import hashlib
 import io
 import sqlite3
 
 import pandas as pd
 import streamlit as st
+from PIL import ImageOps
 
 from core import db
+from core.batch_add import MAX_PHOTOS, after_remove, default_name, next_unconfirmed, step, take_room
 from core.care import get_care_guide
 from core.colors import COLOR_KO, normalize_color
 from core.config import UnsafeKeyError, cloud_settings, get_setting
-from core.media import LocalMedia, open_upright
+from core.media import LocalMedia, open_upright, to_cloud_jpeg
 from core.recommender import recommend, explain_score_breakdown
 from core.shopping import candidate_report
 from core.taxonomy import (
@@ -18,7 +21,7 @@ from core.taxonomy import (
     main_category_for_subcategory, manual_seasons, season_label, seasons_for,
 )
 from core.tryon import MAX_GARMENTS, space_addresses, tryon_default, tryon_kind, tryon_link, tryon_order, tryon_supported
-from core.vision import SURE_CONFIDENCE, classify_clothing_image, dominant_color_hex, dominant_color_name, model_status
+from core.vision import SURE_CONFIDENCE, classify_clothing_image, dominant_color_name, model_status
 from core.weather import CITY_PRESETS, RETURN_HOURS, coldest_until, get_current_weather
 
 ROOT = Path(__file__).resolve().parent
@@ -34,7 +37,13 @@ for key, value in {
     "recommendation_session_id": None,
     "rec_meta": None,
     "weather_cache": None,
-    "last_ai_result": None,
+    "ba_cards": [],      # 직접 추가: 확인 중인 사진 카드 (최대 10장)
+    "ba_idx": 0,
+    "ba_seq": 0,
+    "ba_nonce": 0,
+    "ba_more": False,
+    "ba_flash": [],
+    "ba_names": set(),
 }.items():
     st.session_state.setdefault(key, value)
 
@@ -210,6 +219,346 @@ def thermal_label(cold, heat):
     return "보통"
 
 
+# ------------------------------------------------------------------ 직접 추가: 사진 여러 장(최대 10장)을 카드로 확인
+MATERIALS = ["", "cotton", "polyester", "denim", "wool", "linen", "nylon", "other"]
+COLORS = list(COLOR_KO)
+OTHER_KIND = "다른 종류"
+# 사진·필드 부분만 따로 스크롤 (화면 맨 위에서 아래 버튼까지 한 화면에 들어오게, 최소 300px). 사진은 화면 높이에 맞춰 줄인다.
+BA_CSS = """<style>
+div:has(> [class*="st-key-ba_scroll_"]) {height: max(300px, calc(100dvh - 460px)) !important;
+  flex: 0 0 max(300px, calc(100dvh - 460px)) !important;}
+[class*="st-key-ba_scroll_"] * {word-break: keep-all;}
+.st-key-ba_photo img {max-height: min(46vh, 440px); object-fit: contain;}
+</style>"""
+
+
+def _jpeg(img, side, square=False):
+    small = ImageOps.fit(img, (side, side)) if square else img.copy()
+    small.thumbnail((side, side))
+    buf = io.BytesIO()
+    small.save(buf, "JPEG", quality=85)
+    return buf.getvalue()
+
+
+def ba_key(card, field):
+    return f"ba_{field}_{card['uid']}"
+
+
+def ba_taken(card):
+    """이 카드 말고 이미 쓰인 이름 (옷장 + 다른 카드). 자동 이름이 겹치지 않게."""
+    ss = st.session_state
+    return set(ss.ba_names) | {c["name"] for c in ss.ba_cards if c is not card}
+
+
+def ba_new_card(uploaded, digest):
+    """올린 사진 한 장 → 확인 카드 (AI 분류·대표색 추정까지). 열 수 없는 파일이면 None."""
+    data, suffix = upload_bytes(uploaded)
+    try:
+        image = open_upright(io.BytesIO(data))
+        if media.kind == "supabase":     # 어차피 긴 변 1280px JPEG로 저장하므로 미리 줄여 둔다 (무료 서버 메모리 절약)
+            data, suffix = to_cloud_jpeg(data), ".jpg"
+    except Exception:
+        return None
+    ai = classify_clothing_image(image)
+    cands = [c for c in (ai.get("candidates") or []) if c["subcategory"] in RULES] if ai.get("ok") else []
+    sub = cands[0]["subcategory"] if cands else SUBCATEGORIES[0]
+    color = dominant_color_name(image)
+    rule = RULES[sub]
+    st.session_state.ba_seq += 1
+    return {
+        "uid": f"{st.session_state.ba_seq}_{digest[:8]}", "hash": digest, "data": data, "suffix": suffix,
+        "view": _jpeg(image, 720), "thumb": _jpeg(image, 200, square=True), "ai": ai, "cands": cands,
+        "pick": sub if cands else OTHER_KIND, "sub": sub, "cat": main_category_for_subcategory(sub),
+        "color": color if color in COLOR_KO else COLORS[0], "warmth": rule["default_warmth"],
+        "rain_ok": bool(rule["default_rain_ok"]), "material": "", "notes": "", "name": "", "name_auto": True,
+        "confirmed": False,
+    }
+
+
+def ba_ingest(files):
+    """새로 올린 사진을 카드로 만든다 (같은 사진은 한 번만, 모두 합쳐 10장까지)."""
+    ss = st.session_state
+    have = {c["hash"] for c in ss.ba_cards}
+    fresh, dup = [], 0
+    for f in files:
+        digest = hashlib.md5(f.getvalue()).hexdigest()
+        if digest in have:
+            dup += 1
+            continue
+        have.add(digest)
+        fresh.append((f, digest))
+    fresh, dropped = take_room(len(ss.ba_cards), fresh)
+    first_new, bad = len(ss.ba_cards), 0
+    with st.spinner(f"AI가 사진 {len(fresh)}장을 분류하고 있어요…"):
+        for f, digest in fresh:
+            card = ba_new_card(f, digest)
+            if card is None:
+                bad += 1
+                continue
+            card["name"] = default_name(COLOR_KO[card["color"]], card["sub"], ba_taken(card))
+            ss.ba_cards.append(card)
+    if dropped:
+        ss.ba_flash.append(("warning", f"한 번에 {MAX_PHOTOS}장까지라 {dropped}장은 넣지 않았어요. "
+                                       "저장하거나 사진을 뺀 뒤 더 올려 주세요."))
+    if dup:
+        ss.ba_flash.append(("info", f"같은 사진 {dup}장은 한 번만 넣었어요."))
+    if bad:
+        ss.ba_flash.append(("warning", f"열 수 없는 파일 {bad}장은 넣지 않았어요."))
+    if len(ss.ba_cards) > first_new:
+        ss.ba_idx = first_new          # 새로 넣은 첫 사진부터 확인
+    ss.ba_nonce += 1                   # 올리기 칸 비우기
+    ss.ba_more = False
+
+
+def ba_sync(card):
+    """화면에서 고친 값을 카드에 옮긴다 (안 보이는 카드의 위젯 값은 Streamlit이 지우므로 카드에 따로 둔다).
+    종류가 바뀌면 대분류·두께·비를 그 종류 기본값으로, 종류나 색이 바뀌면 직접 고치지 않은 이름도 다시 짓는다."""
+    ss = st.session_state
+    if ba_key(card, "pick") in ss:
+        card["pick"] = ss[ba_key(card, "pick")]
+    sub = card["pick"] if card["pick"] != OTHER_KIND else ss.get(ba_key(card, "other"), card["sub"])
+    name = ss.get(ba_key(card, "name"), card["name"])
+    if name != card["name"]:
+        card["name"] = name.strip()
+        card["name_auto"] = not card["name"]        # 이름을 비우면 다시 자동 이름
+    for f, field in (("cat", "cat"), ("warmth", "warmth"), ("rain", "rain_ok"), ("material", "material"),
+                     ("notes", "notes")):
+        if ba_key(card, f) in ss:
+            card[field] = ss[ba_key(card, f)]
+    color = ss.get(ba_key(card, "color"), card["color"])
+    changed = sub != card["sub"] or color != card["color"]
+    if sub != card["sub"]:
+        rule = RULES[sub]
+        card.update(sub=sub, cat=main_category_for_subcategory(sub), warmth=rule["default_warmth"],
+                    rain_ok=bool(rule["default_rain_ok"]))
+    card["color"] = color
+    if card["name_auto"] and (changed or not card["name"]):
+        card["name"] = default_name(COLOR_KO[color], sub, ba_taken(card))
+
+
+def ba_seed(card):
+    """카드 값을 위젯에 채운다 (위젯을 그리기 전에)."""
+    ss = st.session_state
+    values = {"pick": card["pick"], "name": card["name"], "color": card["color"], "cat": card["cat"],
+              "warmth": card["warmth"], "rain": card["rain_ok"], "material": card["material"], "notes": card["notes"]}
+    if card["pick"] == OTHER_KIND:
+        values["other"] = card["sub"]
+    for f, v in values.items():
+        ss[ba_key(card, f)] = v
+
+
+def ba_go(delta=0, to=None):
+    ss = st.session_state
+    if not ss.ba_cards:
+        return
+    ba_sync(ss.ba_cards[ss.ba_idx])
+    ss.ba_idx = to if to is not None else step(ss.ba_idx, len(ss.ba_cards), delta)
+
+
+def ba_confirm_next():
+    ss = st.session_state
+    card = ss.ba_cards[ss.ba_idx]
+    ba_sync(card)
+    card["confirmed"] = True
+    nxt = next_unconfirmed([c["confirmed"] for c in ss.ba_cards], ss.ba_idx)
+    if nxt is None:
+        ss.ba_flash.append(("success", f"{len(ss.ba_cards)}장을 모두 확인했어요. 아래 '저장'을 누르면 옷장에 넣어요."))
+    else:
+        ss.ba_idx = nxt
+
+
+def ba_remove():
+    ss = st.session_state
+    ss.ba_cards.pop(ss.ba_idx)
+    ss.ba_idx = after_remove(ss.ba_idx, len(ss.ba_cards))
+    if not ss.ba_cards:
+        ss.ba_more = False
+
+
+def ba_clear():
+    ss = st.session_state
+    ss.ba_cards, ss.ba_idx, ss.ba_more = [], 0, False
+    ss.ba_nonce += 1
+
+
+@st.dialog("사진 목록", width="large")
+def ba_list_dialog():
+    ss = st.session_state
+    cards = ss.ba_cards
+    st.caption(f"확인 {sum(c['confirmed'] for c in cards)} / {len(cards)} · 번호를 누르면 그 사진으로 가요.")
+    with st.container(horizontal=True, wrap=True, gap="small"):
+        for i, c in enumerate(cards):
+            with st.container(width=88):      # 휴대폰에서도 한 줄에 3장
+                st.image(c["thumb"], width="stretch")
+                st.caption(("✓ " if c["confirmed"] else "") + c["sub"])
+                if st.button(f"{i + 1}번", key=f"ba_go_{i}", width="stretch",
+                             type="primary" if i == ss.ba_idx else "secondary"):
+                    ba_go(to=i)
+                    st.rerun()
+
+
+def ba_fields(card):
+    """카드 오른쪽(휴대폰은 아래): AI 후보 → 이름·색 → 대분류·두께 → 설명 → 더 보기."""
+    ai, k = card["ai"], (lambda f: ba_key(card, f))
+    if card["cands"]:
+        best = card["cands"][0]
+        if ai.get("sure"):
+            st.success(f"AI 판단: {best['subcategory']} ({best['confidence'] * 100:.0f}%). 다르면 다른 후보를 골라 주세요.")
+        else:
+            st.warning(f"AI가 확실하지 않아요 (1등 {best['confidence'] * 100:.0f}%). 맞는 종류를 골라 주세요.")
+        conf = {c["subcategory"]: c["confidence"] for c in card["cands"]}
+        st.radio("종류 (AI 후보)", list(conf) + [OTHER_KIND], horizontal=True, key=k("pick"),
+                 format_func=lambda s: f"{s} {conf[s] * 100:.0f}%" if s in conf else s)
+        if card["pick"] == OTHER_KIND:
+            st.selectbox(f"다른 종류 ({NUM_SUBCATEGORIES}종)", SUBCATEGORIES, key=k("other"))
+    else:
+        if not ai.get("ok"):
+            st.caption(ai.get("message", ""))
+        st.selectbox(f"종류 ({NUM_SUBCATEGORIES}종)", SUBCATEGORIES, key=k("other"))
+    c1, c2 = st.columns(2)
+    c1.text_input("이름", key=k("name"))
+    c2.selectbox("색 (자동 추정)", COLORS, key=k("color"), format_func=lambda c: COLOR_KO[c])
+    c3, c4 = st.columns(2)
+    c3.selectbox("대분류", MAIN_CATEGORIES, key=k("cat"))
+    c4.slider("두께/보온", 1, 5, key=k("warmth"))
+    st.text_input("설명 (선택)", key=k("notes"), placeholder="예: 기모 안감, 오버핏")
+    with st.expander("더 보기 · 소재, 비 오는 날"):
+        st.selectbox("소재", MATERIALS, key=k("material"), format_func=lambda m: m or "모름")
+        st.checkbox("비 오는 날 부담이 적음", key=k("rain"))
+
+
+def ba_save(user, cards):
+    """카드들을 옷장에 한 번에 넣는다. 사진은 한 장씩 저장소에, 옷 정보는 한 번에 DB에."""
+    rows = []
+    for i, c in enumerate(cards):
+        path = media.save(user["id"], f"b{i}_", c["data"], c["suffix"])    # 같은 순간에 저장해도 이름이 겹치지 않게
+        ai = c["ai"] if c["ai"].get("ok") else {}                          # 기록용: AI 1등 답
+        rows.append({"name": c["name"], "category": c["cat"], "subcategory": c["sub"], "color": c["color"],
+                     "warmth": c["warmth"], "rain_ok": c["rain_ok"], "material": c["material"], "image_path": path,
+                     "notes": c["notes"].strip(), "ai_category": ai.get("category"),
+                     "ai_subcategory": ai.get("subcategory"), "ai_confidence": ai.get("confidence")})
+    store.create_wardrobe_items(user["id"], rows)
+
+
+def render_direct_add(user):
+    """내 옷장 > 직접 추가. 사진을 올리면 AI가 채운 카드를 한 장씩 확인하고 저장한다 (1장이어도 같은 화면)."""
+    ss = st.session_state
+    st.html(BA_CSS)
+    ss.ba_names = {x["name"] for x in store.list_wardrobe_items(user["id"], active_only=False)}
+    for kind, text in ss.ba_flash:      # 알림은 떠 있다 사라지게 (카드가 아래로 밀리지 않게)
+        st.toast(text, icon={"success": "✅", "info": "ℹ️"}.get(kind, "⚠️"),
+                 duration="long" if kind == "warning" else "short")
+    ss.ba_flash = []
+    cards = ss.ba_cards
+
+    if not cards or ss.ba_more:
+        if len(cards) < MAX_PHOTOS:
+            label = ("저장할 의류를 넣어 주세요 (최대 10장까지)" if not cards
+                     else f"사진 더 넣기 (지금 {len(cards)}장 · 최대 {MAX_PHOTOS}장까지)")
+            files = st.file_uploader(label, type=["jpg", "jpeg", "png"], accept_multiple_files=True,
+                                     key=f"ba_up_{ss.ba_nonce}")
+            if files:
+                ba_ingest(files)
+                st.rerun()
+        else:
+            st.info(f"이미 {MAX_PHOTOS}장이에요. 사진을 빼거나 저장하면 더 넣을 수 있어요.")
+        if not cards:
+            st.caption("올리면 AI가 종류·색·이름을 먼저 채워 줘요. 한 장씩 확인하고 저장하세요.")
+            return
+        with st.container(horizontal=True):
+            if st.button("닫기", key="ba_more_close"):
+                ss.ba_more = False
+                st.rerun()
+            st.button("지금 사진 모두 빼고 처음부터", key="ba_clear", type="tertiary", on_click=ba_clear)
+
+    n = len(cards)
+    ss.ba_idx = min(ss.ba_idx, n - 1)
+    idx, card = ss.ba_idx, cards[ss.ba_idx]
+    done = sum(c["confirmed"] for c in cards)
+    multi = n > 1
+    ai_note = "AI 분류 완료" if all(c["cands"] for c in cards) else "AI 분류를 못 한 사진은 종류를 직접 골라 주세요"
+    with st.container(horizontal=True, vertical_alignment="bottom"):
+        if multi:
+            st.progress(done / n, text=f"📎 사진 {n}장 · 확인 {done} / {n}")
+        else:
+            st.caption(f"📎 사진 1장 · {ai_note}")
+        if st.button("목록", icon=":material/grid_view:", key="ba_list", disabled=not multi):
+            ba_list_dialog()
+
+    ba_sync(card)
+    ba_seed(card)
+    with st.container(height=480, border=True, key=f"ba_scroll_{card['uid']}"):
+        c_photo, c_form = st.columns([1, 1.2], gap="medium")
+        with c_photo:
+            with st.container(horizontal=True, vertical_alignment="center", key="ba_photo"):
+                st.button("‹", key="ba_prev", on_click=ba_go, args=(-1,), disabled=not multi, help="이전 사진")
+                st.image(card["view"], width="stretch")
+                st.button("›", key="ba_next", on_click=ba_go, args=(1,), disabled=not multi, help="다음 사진")
+            line = f":gray-badge[{idx + 1} / {n}]"
+            if multi:
+                line += " " + (":green-badge[✓ 확인함]" if card["confirmed"] else ":orange-badge[확인 전]") + " &nbsp; "
+                line += " ".join(":red[◉]" if i == idx else (":green[●]" if c["confirmed"] else ":gray[●]")
+                                 for i, c in enumerate(cards))
+            st.markdown(line)
+        with c_form:
+            ba_fields(card)
+
+    all_done = done == n
+    if multi:
+        st.button("✓ 모두 확인했어요" if all_done else "✓ 확인하고 다음 ›", key="ba_confirm", type="primary",
+                  width="stretch", on_click=ba_confirm_next, disabled=all_done)
+    to_save = [c for c in cards if c["confirmed"]] if multi else cards
+    with st.container(horizontal=True):
+        st.button("사진 빼기", key="ba_remove", on_click=ba_remove, width="stretch")
+        if st.button("다시 올리기", key="ba_more_open", width="stretch"):
+            ss.ba_more = True
+            st.rerun()
+        save = st.button(f"저장 ({len(to_save)}장)" if multi else "저장", key="ba_save", width="stretch",
+                         type="primary" if (all_done or not multi) else "secondary", disabled=not to_save)
+    if multi and not all_done:
+        st.caption("'확인하고 다음'을 누른 사진만 저장해요. 목록에서 원하는 사진으로 바로 갈 수 있어요.")
+    if save:
+        try:
+            ba_save(user, to_save)
+        except Exception as e:
+            st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요.")
+            return
+        saved = {id(c) for c in to_save}
+        ss.ba_cards = [c for c in cards if id(c) not in saved]
+        ss.ba_idx = 0
+        ss.ba_flash.append(("success", f"{len(to_save)}벌을 옷장에 넣었어요. '옷장 목록'에서 볼 수 있어요."
+                            + (f" 남은 사진 {len(ss.ba_cards)}장도 확인해 주세요." if ss.ba_cards else "")))
+        st.rerun()
+
+
+@st.dialog("정보 수정")
+def edit_item_dialog(item, user_id):
+    """저장한 옷의 이름·종류·색·두께 등을 고친다 (사진·AI 분류 기록·계절 설정은 그대로)."""
+    iid, sub0 = item["id"], item.get("subcategory")
+    subs = SUBCATEGORIES if (not sub0 or sub0 in SUBCATEGORIES) else SUBCATEGORIES + [sub0]
+    name = st.text_input("이름", value=item["name"], key=f"ed_name_{iid}")
+    c1, c2 = st.columns(2)
+    sub = c1.selectbox("종류", subs, index=subs.index(sub0) if sub0 in subs else 0, key=f"ed_sub_{iid}")
+    cat0 = item["category"] if sub == sub0 else (main_category_for_subcategory(sub) or item["category"])
+    cat = c2.selectbox("대분류", MAIN_CATEGORIES, key=f"ed_cat_{iid}_{sub}",   # 종류를 바꾸면 대분류가 따라옴
+                       index=MAIN_CATEGORIES.index(cat0) if cat0 in MAIN_CATEGORIES else 0)
+    color0 = item.get("color") or ""
+    colors = COLORS if color0 in COLOR_KO else [color0] + COLORS                 # 예전에 직접 쓴 색도 그대로 둘 수 있게
+    c3, c4 = st.columns(2)
+    color = c3.selectbox("색", colors, index=colors.index(color0), key=f"ed_color_{iid}",
+                         format_func=lambda c: COLOR_KO.get(c) or (f"{c} (지금 값)" if c else "없음"))
+    warmth = c4.slider("두께/보온", 1, 5, int(item["warmth"]), key=f"ed_warmth_{iid}")
+    mat0 = item.get("material") or ""
+    mats = MATERIALS if mat0 in MATERIALS else MATERIALS + [mat0]
+    material = st.selectbox("소재", mats, index=mats.index(mat0), key=f"ed_mat_{iid}", format_func=lambda m: m or "모름")
+    rain = st.checkbox("비 오는 날 부담이 적음", value=bool(item["rain_ok"]), key=f"ed_rain_{iid}")
+    notes = st.text_input("설명", value=item.get("notes") or "", key=f"ed_notes_{iid}", placeholder="예: 기모 안감, 오버핏")
+    st.caption("사진·AI 분류 기록·계절 설정은 그대로 둬요. 계절은 '계절 수정'에서 바꿔요.")
+    if st.button("저장", type="primary", key=f"ed_save_{iid}", disabled=not name.strip()):
+        store.update_wardrobe_item(iid, user_id, name.strip(), cat, sub, color, warmth, rain, material, notes.strip())
+        st.rerun()
+
+
 # ------------------------------------------------------------------ 사이드바
 st.sidebar.title(f"👕 {APP_NAME}")
 if CLOUD:
@@ -239,7 +588,10 @@ if st.session_state.active_user_id != st.session_state.user_id:
     st.session_state.recommendations = None
     st.session_state.recommendation_session_id = None
     st.session_state.rec_meta = None
-    st.session_state.last_ai_result = None
+    st.session_state.ba_cards = []
+    st.session_state.ba_idx = 0
+    st.session_state.ba_more = False
+    st.session_state.ba_flash = []
 
 page = st.sidebar.radio("메뉴", ["홈", "프로필", "내 옷장", "오늘의 추천", "사기 전에 맞춰보기", "저장 코디", "KPI·데이터"])
 st.sidebar.divider()
@@ -324,7 +676,7 @@ elif page == "내 옷장":
         st.stop()
 
     st.caption(f"현재 프로필: {user['name']} · {gender_ko(user['gender'])}")
-    tab1, tab2, tab3 = st.tabs(["옷장 목록", "30개 스타터 옷장", "사진으로 직접 추가"])
+    tab1, tab2, tab3 = st.tabs(["옷장 목록", "30개 스타터 옷장", "직접 추가"])
 
     with tab1:
         items = store.list_wardrobe_items(user["id"], active_only=True)
@@ -372,16 +724,21 @@ elif page == "내 옷장":
                         st.write(f"색상: {item['color'] or '-'} · 비 적합: {'O' if item['rain_ok'] else 'X'}")
                         if item.get("material"):
                             st.caption(f"세탁: {get_care_guide(item['material'])['text']}")
+                        if item.get("notes"):
+                            st.caption(f"설명: {item['notes']}")
                         tryon_button([item], f"item_{item['id']}")
-                        with st.popover("계절 수정"):
-                            picked = st.multiselect("입는 계절", SEASONS, default=item_seasons(item),
-                                                    key=f"season_{item['id']}")
-                            if st.button("저장", key=f"season_save_{item['id']}"):
-                                same_as_auto = picked == seasons_for(item.get("subcategory"))
-                                store.update_item_seasons(item["id"], user["id"], None if same_as_auto else picked)
-                                st.rerun()
-                            st.caption(f"자동: {season_label(seasons_for(item.get('subcategory')))} (옷 종류 기준). "
-                                       "전부 지우고 저장하면 자동으로 돌아가요.")
+                        with st.container(horizontal=True):
+                            if st.button("정보 수정", key=f"edit_{item['id']}"):
+                                edit_item_dialog(item, user["id"])
+                            with st.popover("계절 수정"):
+                                picked = st.multiselect("입는 계절", SEASONS, default=item_seasons(item),
+                                                        key=f"season_{item['id']}")
+                                if st.button("저장", key=f"season_save_{item['id']}"):
+                                    same_as_auto = picked == seasons_for(item.get("subcategory"))
+                                    store.update_item_seasons(item["id"], user["id"], None if same_as_auto else picked)
+                                    st.rerun()
+                                st.caption(f"자동: {season_label(seasons_for(item.get('subcategory')))} (옷 종류 기준). "
+                                           "전부 지우고 저장하면 자동으로 돌아가요.")
                         c_a, c_b = st.columns(2)
                         if c_a.button("비활성화", key=f"off_{item['id']}"):
                             store.deactivate_item(item["id"], user["id"])
@@ -415,64 +772,7 @@ elif page == "내 옷장":
             st.rerun()
 
     with tab3:
-        st.subheader("사진 업로드")
-        uploaded = st.file_uploader("JPG/PNG", type=["jpg", "jpeg", "png"])
-        color_guess = ""
-        ai_pick = None
-        if uploaded:
-            image = open_upright(uploaded)
-            st.image(image, width=300)
-            color_guess = dominant_color_name(image) or ""
-            st.write(f"대표색 추정: `{color_guess}` ({dominant_color_hex(image)})")
-            if st.button("AI 분류 시도"):
-                # 어느 사진의 결과인지 같이 둔다: 사진을 바꾸면 이전 사진의 후보가 남지 않게
-                st.session_state.last_ai_result = {**classify_clothing_image(image), "file_id": uploaded.file_id}
-            ai = st.session_state.last_ai_result
-            if ai and ai.get("file_id") == uploaded.file_id:
-                if ai.get("ok"):
-                    ai_pick = ai_candidate_pick(ai, key=f"ai_pick_{uploaded.file_id}")
-                else:
-                    st.warning(ai["message"])
-
-        default_sub = ai_pick
-        sub_index = SUBCATEGORIES.index(default_sub) if default_sub in SUBCATEGORIES else 0
-
-        # 세부분류·대분류는 폼 밖에 둔다: 폼 안 위젯은 제출 전까지 다시 그려지지 않아
-        # 세부분류를 바꿔도 대분류가 따라오지 않는다 (예: '상의 / 청바지'로 저장)
-        subcategory = st.selectbox(f"세부분류({NUM_SUBCATEGORIES}종)", SUBCATEGORIES, index=sub_index)
-        rule = RULES[subcategory]
-        predicted_main = main_category_for_subcategory(subcategory)
-        category = st.selectbox(
-            "최종 대분류", MAIN_CATEGORIES, index=MAIN_CATEGORIES.index(predicted_main), key=f"cat_{subcategory}"
-        )
-
-        with st.form("add_item"):
-            name = st.text_input("의류명")
-            color = st.text_input("색상 (예: black, 네이비, #1f2a44)", value=color_guess)
-            warmth = st.slider("두께/보온", 1, 5, rule["default_warmth"], key=f"warmth_{subcategory}")
-            rain_ok = st.checkbox("비 오는 날 부담이 적음", value=rule["default_rain_ok"], key=f"rain_{subcategory}")
-            material = st.selectbox("소재", ["", "cotton", "polyester", "denim", "wool", "linen", "nylon", "other"])
-            if st.form_submit_button("저장", type="primary"):
-                if not name.strip():
-                    st.error("의류명을 입력하세요.")
-                elif uploaded is None:
-                    st.error("사진을 업로드하세요.")
-                else:
-                    data, suffix = upload_bytes(uploaded)
-                    path = media.save(user["id"], "", data, suffix)
-                    ai = st.session_state.last_ai_result or {}
-                    if ai.get("file_id") != uploaded.file_id:   # 다른 사진의 AI 결과는 기록하지 않음
-                        ai = {}
-                    store.create_wardrobe_item(
-                        user["id"], name.strip(), category, subcategory, color.strip(),
-                        warmth, rain_ok, material, path, "",
-                        ai.get("category") if ai.get("ok") else None,
-                        ai.get("subcategory") if ai.get("ok") else None,
-                        ai.get("confidence") if ai.get("ok") else None,
-                    )
-                    st.session_state.last_ai_result = None
-                    st.success("등록했습니다.")
-                    st.rerun()
+        render_direct_add(user)
 
 # ------------------------------------------------------------------ 오늘의 추천
 elif page == "오늘의 추천":

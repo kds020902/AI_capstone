@@ -28,6 +28,22 @@ def _scenario(store, uid):
     store.reactivate_item(items[3]["id"], uid)
     store.soft_delete_item(items[4]["id"], uid)
     store.reactivate_item(items[4]["id"], uid)            # 지운 옷은 다시 켜지지 않아야 함
+    # 사진 여러 장 한 번에 저장 → 저장 후 정보 고치기 (지운 옷은 안 바뀜)
+    out["batch_empty"] = store.create_wardrobe_items(uid, [])
+    new_ids = store.create_wardrobe_items(uid, [
+        {"name": "블랙 니트", "category": "상의", "subcategory": "니트", "color": "black", "warmth": 3, "rain_ok": 0,
+         "image_path": "u/b0_1.jpg", "notes": "목이 넓음", "ai_category": "상의", "ai_subcategory": "니트",
+         "ai_confidence": 0.81},
+        {"name": "블루 청바지", "category": "하의", "subcategory": "청바지", "color": "blue", "warmth": 2,
+         "rain_ok": False, "ai_category": "하의", "ai_subcategory": "슬랙스", "ai_confidence": 0.42},
+        {"name": "블랙 슬리퍼", "category": "신발", "subcategory": "슬리퍼", "color": "black", "warmth": 1,
+         "rain_ok": True, "material": "고무"},
+    ])
+    out["batch_n"] = len(new_ids)
+    store.update_wardrobe_item(new_ids[1], uid, "연청 청바지", "하의", "청바지", "skyblue", 2, True,
+                               material="데님", notes="밑단 접어 입기")
+    store.soft_delete_item(new_ids[2], uid)
+    store.update_wardrobe_item(new_ids[2], uid, "바뀌면 안 됨", "상의", "니트", "red", 5, False)
     out["inactive"] = sorted(x["name"] for x in store.list_inactive_items(uid))
     out["count"] = store.count_wardrobe_items(uid)
     out["items"] = _clean(store.list_wardrobe_items(uid))
@@ -81,6 +97,11 @@ def test_cloud_store_matches_sqlite(tmp_path):
     remote = _scenario(cloud, client.uid)
 
     assert local["starter_added"] == 30 and local["starter_again"] == 0
+    assert local["batch_empty"] == [] and local["batch_n"] == 3
+    edited = next(x for x in local["items"] if x["name"] == "연청 청바지")
+    assert (edited["color"], edited["rain_ok"], edited["material"], edited["notes"]) == ("skyblue", 1, "데님", "밑단 접어 입기")
+    assert edited["ai_subcategory"] == "슬랙스"                      # AI 기록은 그대로
+    assert not any(x["name"] == "바뀌면 안 됨" for x in local["items"])
     assert local["disliked_ok"] and remote["disliked_ok"]
     for key in local:
         assert remote[key] == local[key], key
@@ -115,8 +136,10 @@ def test_two_accounts_are_isolated():
     # B가 A의 id로 바꾸거나 사려고 해도 아무 일도 안 일어난다
     sb.soft_delete_item(a_item["id"], b.uid)
     sb.update_item_seasons(a_item["id"], b.uid, ["겨울"])
+    sb.update_wardrobe_item(a_item["id"], b.uid, "B가 바꾼 이름", "상의", "니트", "red", 5, True)
     assert sb.buy_candidate(a_cand, b.uid) is None
     assert sa.list_wardrobe_items(a.uid)[0]["seasons"] is None
+    assert sa.list_wardrobe_items(a.uid)[0]["name"] == a_item["name"]
     assert len(sa.list_wardrobe_items(a.uid)) == 30
     # 앱 코드가 다른 사람 id를 넘기면 바로 거절
     with pytest.raises(PermissionError):
@@ -139,3 +162,23 @@ def test_signed_out_client_cannot_read():
     a.auth.sign_out()
     with pytest.raises(FakeAPIError):
         a.table("profiles").select("*").execute()
+
+
+def test_edit_skips_deleted_item(tmp_path):
+    """지운 옷의 정보 고치기는 DB 행에도 반영되지 않는다 (SQLite·Supabase 둘 다)."""
+    db.DB_PATH = tmp_path / "edit.sqlite3"
+    db.init_db()
+    client = signed_in_client(FakeBackend(), "e@example.com")
+    cloud = CloudStore(client, client.uid)
+    cloud.create_user("나", "male", 0, 0)
+    local_uid = db.create_user("나", "male", 0, 0)
+    for store, uid, raw in (
+        (db, local_uid, lambda i: dict(db.conn().execute("SELECT * FROM wardrobe_items WHERE id=?", (i,)).fetchone())),
+        (cloud, client.uid, lambda i: client.table("wardrobe_items").select("*").eq("id", i).execute().data[0]),
+    ):
+        iid = store.create_wardrobe_items(uid, [{"name": "그레이 후드티", "category": "상의", "subcategory": "후드티",
+                                                 "color": "gray", "warmth": 3, "rain_ok": 0}])[0]
+        store.soft_delete_item(iid, uid)
+        store.update_wardrobe_item(iid, uid, "바뀐 이름", "하의", "청바지", "blue", 1, True)
+        row = raw(iid)
+        assert (row["name"], row["category"], row["deleted"]) == ("그레이 후드티", "상의", 1)

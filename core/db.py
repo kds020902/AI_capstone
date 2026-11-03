@@ -210,6 +210,28 @@ def create_wardrobe_item(
             "ai_confidence": ai_confidence, "created_at": now,
         })
 
+def create_wardrobe_items(user_id, items):
+    """여러 벌을 한 번에 저장 (사진 여러 장 등록). items: create_wardrobe_item 의 인자 이름을 키로 갖는 dict 목록.
+    새 id 목록을 넣은 순서대로 돌려준다."""
+    now = datetime.now().isoformat(timespec="seconds")
+    with conn() as c:
+        return [_insert(c, "wardrobe_items", {
+            "user_id": user_id, "name": x["name"], "category": x["category"], "subcategory": x.get("subcategory"),
+            "color": x.get("color"), "warmth": int(x["warmth"]), "rain_ok": int(bool(x["rain_ok"])),
+            "material": x.get("material", ""), "image_path": x.get("image_path", ""), "notes": x.get("notes", ""),
+            "ai_category": x.get("ai_category"), "ai_subcategory": x.get("ai_subcategory"),
+            "ai_confidence": x.get("ai_confidence"), "created_at": now,
+        }) for x in items]
+
+def update_wardrobe_item(item_id, user_id, name, category, subcategory, color, warmth, rain_ok, material="", notes=""):
+    """저장한 옷의 정보 고치기 (AI 기록·사진·계절은 그대로). 지운 옷은 고치지 않는다."""
+    with conn() as c:
+        c.execute(
+            "UPDATE wardrobe_items SET name=?, category=?, subcategory=?, color=?, warmth=?, rain_ok=?, material=?, "
+            "notes=? WHERE id=? AND user_id=? AND deleted=0",
+            (name, category, subcategory, color, int(warmth), int(bool(rain_ok)), material, notes, item_id, user_id),
+        )
+
 def list_wardrobe_items(user_id, active_only=True):
     q = "SELECT * FROM wardrobe_items WHERE user_id=? AND deleted=0"
     args = [user_id]

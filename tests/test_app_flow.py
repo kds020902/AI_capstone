@@ -118,3 +118,48 @@ def test_cloud_mode_signup_with_email_confirmation(cloud):
     _signup(at, "c@example.com")
     assert any("인증 링크" in i.value for i in at.info)
     assert len(at.sidebar.radio) == 0
+
+
+def _photo(i):
+    """서로 다른 작은 옷 사진 대신 쓸 단색 JPEG (색이 달라 같은 사진으로 보지 않는다)."""
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 80), (12 * i, 255 - 12 * i, 90)).save(buf, "JPEG")
+    return (f"p{i}.jpg", buf.getvalue(), "image/jpeg")
+
+
+def test_cloud_mode_direct_add_many_photos(cloud):
+    """직접 추가: 12장 → 10장만, 확인한 2장만 한 번에 저장 (사진은 내 폴더에 겹치지 않는 이름으로), 같은 사진은 한 번만."""
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    _signup(at, "d@example.com")
+    _goto(at, "프로필")
+    _by_label(at.text_input, "이름 / 닉네임").input("D")
+    _button(at, "저장").click().run()
+    _goto(at, "내 옷장")
+    assert [t.label for t in at.tabs] == ["옷장 목록", "30개 스타터 옷장", "직접 추가"]
+    up = next(u for u in at.file_uploader if u.label == "저장할 의류를 넣어 주세요 (최대 10장까지)")
+    up.set_value([_photo(i) for i in range(12)]).run()
+    assert not at.exception
+    assert any("2장은 넣지 않았어요" in t.value for t in at.toast)
+    assert len(at.session_state.ba_cards) == 10
+    assert _button(at, "저장 (0장)").disabled
+    _button(at, "✓ 확인하고 다음 ›").click().run()
+    _button(at, "›").click().run()
+    _button(at, "✓ 확인하고 다음 ›").click().run()
+    _button(at, "저장 (2장)").click().run()
+    assert not at.exception
+    rows = cloud.rows("wardrobe_items")
+    assert len(rows) == 2 and len(at.session_state.ba_cards) == 8
+    paths = [r["image_path"] for r in rows]
+    uid = rows[0]["user_id"]
+    assert all(p.startswith(f"sb:{uid}/b") for p in paths) and len(set(paths)) == 2
+    assert all(f"wardrobe/{p[3:]}" in cloud.objects for p in paths)
+    assert len({r["name"] for r in rows}) == 2                       # 자동 이름이 겹치지 않는다
+    # 다시 올리기: 남은 사진과 같은 사진은 한 번만
+    _button(at, "다시 올리기").click().run()
+    more = next(u for u in at.file_uploader if u.label.startswith("사진 더 넣기 (지금 8장"))
+    more.set_value([_photo(5), _photo(20)]).run()
+    assert any("같은 사진 1장은 한 번만" in t.value for t in at.toast)
+    assert len(at.session_state.ba_cards) == 9
+    assert not at.exception

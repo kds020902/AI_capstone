@@ -43,8 +43,9 @@
 | `app.py` | 화면 전체, 로그인 게이트, 저장소 선택(로컬/클라우드) |
 | `core/config.py` | 설정 읽기(환경 변수 → Streamlit Secrets), 서비스 키 거부, Supabase 주소 정리 |
 | `core/cloud_auth.py` | 가입·로그인·세션·로그아웃, 오류 문구 변환 |
-| `core/db.py` / `core/cloud_store.py` | 같은 함수 이름의 두 저장소: SQLite / Supabase. 화면 코드는 `store.함수()`만 부른다 |
+| `core/db.py` / `core/cloud_store.py` | 같은 함수 이름의 두 저장소: SQLite / Supabase. 화면 코드는 `store.함수()`만 부른다. 여러 벌 한 번에 넣기 `create_wardrobe_items`(Supabase는 insert 1번), 저장 후 고치기 `update_wardrobe_item`(지운 옷 제외) |
 | `core/media.py` | 사진 저장: `LocalMedia`(폴더) / `SupabaseMedia`(Storage, 서명 주소) |
+| `core/batch_add.py` | 직접 추가(사진 여러 장) 계산: 10장 제한, 끝과 처음이 이어진 이동, 다음 확인 안 한 사진, 겹치지 않는 자동 이름. 화면 상태(확인 카드)는 `st.session_state.ba_cards`에 두고, 안 보이는 카드의 입력값은 카드에 따로 보관한다 (Streamlit은 화면에 없는 위젯 값을 지움) |
 | `core/recommender.py`, `core/taxonomy.py`, `data/clothing_taxonomy.csv` | 추천 규칙, 42종 규칙표, 겹쳐 입기·금지 조합, 계절 계산 |
 | `core/shopping.py` | 사기 전에 맞춰보기 |
 | `core/vision.py` | 분류 모델 불러오기·분류, 대표색 |
