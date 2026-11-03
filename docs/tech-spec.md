@@ -73,6 +73,76 @@
 - 시각은 한국 시간 ISO 문자열(text)로 저장해 로컬 SQLite 형식과 맞춘다.
 - 사진 참조: 로컬은 파일 경로, 클라우드는 `sb:<사용자id>/<파일명>.jpg`.
 
+### 관계 (ER 다이어그램)
+
+```mermaid
+erDiagram
+    AUTH_USERS["auth.users (로그인 계정, Supabase Auth)"] {
+        uuid id PK "로그인 사용자 id"
+    }
+    PROFILES["profiles (프로필)"] {
+        uuid id PK,FK "= auth.users.id"
+        text name "이름"
+    }
+    WARDROBE_ITEMS["wardrobe_items (옷장)"] {
+        bigint id PK
+        uuid user_id FK "→ auth.users"
+        text name "옷 이름"
+        text subcategory "세부분류 (42종)"
+        text image_path "사진 경로 → Storage"
+    }
+    PURCHASE_CANDIDATES["purchase_candidates (구매 후보)"] {
+        bigint id PK
+        uuid user_id FK "→ auth.users"
+        text name "이름"
+        text subcategory "세부분류"
+        text image_path "사진 경로 → Storage"
+    }
+    RECOMMENDATION_SESSIONS["recommendation_sessions (추천 요청)"] {
+        bigint id PK
+        uuid user_id FK "→ auth.users"
+        text purpose "외출 목적"
+    }
+    RECOMMENDATIONS["recommendations (추천 결과 TOP 3)"] {
+        bigint id PK
+        uuid user_id FK "→ auth.users"
+        bigint session_id FK "→ recommendation_sessions"
+        int rank "순위 1~3"
+        text pieces_json "코디 옷 목록 (옷 id 포함, JSON)"
+    }
+    SAVED_OUTFITS["saved_outfits (저장 코디)"] {
+        bigint id PK
+        uuid user_id FK "→ auth.users"
+        bigint recommendation_id FK "→ recommendations"
+    }
+    FEEDBACK["feedback (피드백)"] {
+        bigint id PK
+        uuid user_id FK "→ auth.users"
+        bigint recommendation_id FK "→ recommendations"
+        text rating "좋아요/별로"
+    }
+    STORAGE_OBJECTS["storage.objects (사진 파일, wardrobe 버킷)"] {
+        text name PK "경로: 사용자id/파일이름"
+    }
+
+    AUTH_USERS ||--|| PROFILES : "1:1 프로필"
+    AUTH_USERS ||--o{ WARDROBE_ITEMS : "1:N 옷"
+    AUTH_USERS ||--o{ PURCHASE_CANDIDATES : "1:N 구매 후보"
+    AUTH_USERS ||--o{ RECOMMENDATION_SESSIONS : "1:N 추천 요청"
+    RECOMMENDATION_SESSIONS ||--o{ RECOMMENDATIONS : "1:N (최대 3)"
+    RECOMMENDATIONS ||--o| SAVED_OUTFITS : "1:0..1 저장"
+    RECOMMENDATIONS ||--o| FEEDBACK : "1:0..1 피드백"
+    RECOMMENDATIONS }o..o{ WARDROBE_ITEMS : "pieces_json 안의 옷 id (FK 아님)"
+    WARDROBE_ITEMS |o..o| STORAGE_OBJECTS : "image_path (FK 아님)"
+    PURCHASE_CANDIDATES |o..o| STORAGE_OBJECTS : "image_path (FK 아님)"
+```
+
+- 실선 = 외래키(FK), 점선 = 값으로만 연결(FK 아님). 모든 표의 `user_id` → auth.users 선은 그림을 단순하게 하려고 생략했다.
+- auth.users ─ profiles **1:1**, auth.users ─ wardrobe_items·purchase_candidates·recommendation_sessions **1:N**, 세션 ─ recommendations **1:N(최대 3)**, recommendations ─ saved_outfits·feedback **1:0..1** (고유 제약).
+- recommendations ↔ wardrobe_items 는 FK가 아니라 `pieces_json` 안의 옷 id(추천 당시 옷 정보 그대로)로 연결한다. 옷을 지워도(소프트 삭제) 저장 코디가 깨지지 않게 하려는 것이고, 대신 DB가 연결을 보장하지는 않는다.
+- 사진 파일은 비공개 Storage `wardrobe` 버킷에 "사용자id/파일이름"으로 두고 표에는 경로만 둔다.
+- 로컬 SQLite(`core/db.py`)는 같은 구조이고, auth.users·profiles 대신 `users` 표 하나(정수 id)를 쓴다.
+
 ## 5. 인증·인가·보안
 
 | 항목 | 설계 |
