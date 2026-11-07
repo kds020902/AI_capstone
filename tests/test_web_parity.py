@@ -22,15 +22,19 @@ NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node가 없어 웹 체험판 비교를 건너뜀")
 
 
+def _key(r):
+    return ",".join(str(i) for i in sorted(p["id"] for p in r["pieces"]))
+
+
 def _entries(results):
-    def advice(r):
-        return next((t for t in r["reasons"] if "쯤 체감" in t), "")
-    return sorted(",".join(str(i) for i in sorted(p["id"] for p in r["pieces"])) + "=" + f"{r['score']:.4f}"
-                  + "|" + (str(r["carry"]["id"]) if r.get("carry") else "") + "|" + advice(r) for r in results)
+    """순위 순서 그대로: 옷 id = 점수 | 챙길 겉옷 | 이유 문구 전부."""
+    return [_key(r) + "=" + f"{r['score']:.4f}" + "|" + (str(r["carry"]["id"]) if r.get("carry") else "")
+            + "|" + " / ".join(r["reasons"]) for r in results]
 
 
 def test_js_recommender_matches_python(monkeypatch, tmp_path):
-    monkeypatch.setattr(R, "_pick_diverse", lambda scored, k: scored)  # 다양화 전 전체 후보로 비교
+    """같은 조건에서 모든 후보 코디의 순위·점수·이유·경고와 TOP 3(다양화 후)가 같아야 한다."""
+    real_pick = R._pick_diverse
     cases, expected = [], []
     for gender, purpose, t, rain, thermal, drop in itertools.product(
             ["male", "female"], ["등교", "데이트", "운동", "격식"], [-5, 5, 15, 25, 33], [False, True],
@@ -38,8 +42,13 @@ def test_js_recommender_matches_python(monkeypatch, tmp_path):
         cold, heat = THERMAL[thermal]
         items = starter_items(gender)
         later = None if drop is None else {"temperature": t - drop, "apparent_temperature": t - drop, "label": "21시"}
+        top = [_key(r) for r in R.recommend(items, t, t, 60, 0, rain, 8, purpose, cold, heat, 3, later=later)["results"]]
+        monkeypatch.setattr(R, "_pick_diverse", lambda scored, k: scored)  # 다양화 전 전체 후보로 비교
         out = R.recommend(items, t, t, 60, 0, rain, 8, purpose, cold, heat, 3, later=later)
-        expected.append({"entries": _entries(out["results"]), "eff": out["context"]["eff"], "warnings": out["warnings"]})
+        monkeypatch.setattr(R, "_pick_diverse", real_pick)
+        ctx = out["context"]
+        expected.append({"entries": _entries(out["results"]), "temps": [ctx["t_env"], ctx["t_filter"], ctx["t_pref"]],
+                         "top": top, "warnings": out["warnings"]})
         args = {"temperature": t, "apparent": t, "rain": rain, "purpose": purpose, "cold": cold, "heat": heat}
         if later:
             args["later"] = {"temperature": t - drop, "apparent": t - drop, "label": "21시"}
@@ -50,7 +59,28 @@ def test_js_recommender_matches_python(monkeypatch, tmp_path):
                                     capture_output=True, text=True, check=True).stdout)
     for case, exp, js in zip(cases, expected, got):
         assert js["entries"] == exp["entries"], case["args"]
-        assert abs(js["eff"] - exp["eff"]) < 1e-9 and js["warnings"] == exp["warnings"], case["args"]
+        assert js["top"] == exp["top"], case["args"]
+        assert js["temps"] == exp["temps"] and js["warnings"] == exp["warnings"], case["args"]
+
+
+def test_js_eligibility_matches_python(tmp_path):
+    """모든 종류 × 기온 × 목적 × 비 × 사용자 체크에서 후보 자격·젖음 부담·온도 계산이 같아야 한다."""
+    from core.eligibility import item_flags, temperature_context, wet_burden
+    items = [{"subcategory": sub, "rain_ok": ok} for sub in list(RULES) + ["없는 종류"] for ok in (0, 1)]
+    conds = [(t, rain, purpose, cold, heat) for t in range(-10, 41, 3) for rain in (False, True)
+             for purpose in ("등교", "데이트", "운동", "격식") for cold, heat in THERMAL.values()]
+    exp = {"flags": [], "wet": [wet_burden(x) for x in items], "temps": []}
+    for t, rain, purpose, cold, heat in conds:
+        ctx = temperature_context(t, t + 0.5, rain, purpose, cold, heat)
+        exp["temps"].append([ctx["t_env"], ctx["t_filter"], ctx["t_pref"]])
+        exp["flags"].append([None if (f := item_flags(x, ctx)) is None else list(f) for x in items])
+    src = tmp_path / "elig.json"
+    src.write_text(json.dumps({"data": closet_data(), "items": items, "conds": conds}, ensure_ascii=False), encoding="utf-8")
+    got = json.loads(subprocess.run([NODE, str(ROOT / "tests/js/eligibility.js"), str(src)],
+                                    capture_output=True, text=True, check=True).stdout)
+    assert got["wet"] == exp["wet"]
+    assert got["temps"] == exp["temps"]
+    assert got["flags"] == exp["flags"]
 
 
 def test_js_seasons_match_python(tmp_path):

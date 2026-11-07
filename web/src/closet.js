@@ -16,7 +16,10 @@
     const LAYER = new Set(D.LAYER_PAIRS.map((p) => p[0] + "|" + p[1]));
     const NEUTRALS = new Set(D.NEUTRALS);
     const CAT_LABEL = { 상의: "상의", 하의: "하의", 원피스: "원피스", 아우터: "겉옷", 신발: "신발" };
-    const fmt0 = (v) => Math.round(v).toFixed(0);
+    const fmt0 = (v) => {  // 파이썬 f"{v:.0f}" 와 같게 (.5는 짝수 쪽으로)
+      const r = Math.round(v);
+      return (Math.abs(v % 1) === 0.5 && r % 2 !== 0 ? r - 1 : r).toFixed(0);
+    };
     const round4 = (v) => parseFloat(v.toFixed(4));
 
     // ---------------------------------------------------------------- 색상
@@ -65,24 +68,14 @@
       return [0.5, "유채색이 3개 이상이라 색 조합이 산만할 수 있어요."];
     }
 
-    // ---------------------------------------------------------------- 기온 / 보온
-    function effectiveTemperature(temperature, apparent, rain, purpose, cold, heat) {
-      const base = apparent === null || apparent === undefined ? temperature : apparent;
-      const adj = [];
-      cold = +cold || 0; heat = +heat || 0;
-      if (cold) adj.push(["추위를 타는 체질", -D.THERMAL_SHIFT * cold]);
-      if (heat) adj.push(["더위를 타는 체질", D.THERMAL_SHIFT * heat]);
-      if (purpose === "운동") adj.push(["운동 중 체온 상승", D.EXERCISE_SHIFT]);
-      if (rain && temperature < 20) adj.push(["비", D.RAIN_SHIFT]);
-      return [base + adj.reduce((s, x) => s + x[1], 0), adj];
-    }
-    function targetWarmth(eff) {
+    // ---------------------------------------------------------------- 보온 (core/recommender.py 와 같음)
+    function targetWarmth(temp) {
       const pts = D.TARGET_CURVE;
-      if (eff <= pts[0][0]) return pts[0][1];
-      if (eff >= pts[pts.length - 1][0]) return pts[pts.length - 1][1];
+      if (temp <= pts[0][0]) return pts[0][1];
+      if (temp >= pts[pts.length - 1][0]) return pts[pts.length - 1][1];
       for (let i = 0; i < pts.length - 1; i++) {
         const [t0, w0] = pts[i], [t1, w1] = pts[i + 1];
-        if (t0 <= eff && eff <= t1) return w0 + (w1 - w0) * (eff - t0) / (t1 - t0);
+        if (t0 <= temp && temp <= t1) return w0 + (w1 - w0) * (temp - t0) / (t1 - t0);
       }
       return pts[pts.length - 1][1];
     }
@@ -101,38 +94,98 @@
       const rs = roles(pieces);
       return pieces.reduce((s, p, i) => s + (D.WARMTH_CONTRIB[rs[i]] || [0, 0, 0, 0, 0])[level(p) - 1], 0);
     }
-
-    // ---------------------------------------------------------------- 필터
-    const purposeOk = (x, purpose) => { const r = ruleFor(x.subcategory); return !r || !r.blocked_purposes.includes(purpose); };
-    const tempOk = (x, eff) => { const r = ruleFor(x.subcategory); return !r || (r.min_temp <= eff && eff <= r.max_temp); };
     function josa(word, withFinal = "이", without = "가") {
       const ch = word.charCodeAt(word.length - 1);
       if (ch >= 0xac00 && ch <= 0xd7a3) return (ch - 0xac00) % 28 ? withFinal : without;
       return withFinal;
     }
-    function buildPool(items, cat, purpose, eff, rain, warnings) {
-      const all = items.filter((x) => x.category === cat);
-      if (!all.length) return [];
-      const label = CAT_LABEL[cat];
-      const checks = [["purpose", (x) => purposeOk(x, purpose)], ["temp", (x) => tempOk(x, eff)]];
-      if (cat === "신발" && rain) checks.push(["rain", (x) => !!x.rain_ok]);
-      const active = new Set(checks.map((c) => c[0]));
-      const run = () => all.filter((x) => checks.every(([n, fn]) => !active.has(n) || fn(x)));
-      let pool = run();
-      for (const drop of ["rain", "temp", "purpose"]) {
-        if (pool.length || !active.has(drop)) continue;
-        active.delete(drop);
-        pool = run();
-        if (pool.length && drop === "rain") {
-          const names = pool.filter((x) => !x.rain_ok).map((x) => x.name).join(", ");
-          warnings.push(`조건에 맞는 신발 중 비에 강한 것이 없어 비에 약한 신발(${names})도 포함했어요. 젖지 않게 주의하세요.`);
-        } else if (pool.length && drop === "temp") {
-          warnings.push(`체감 ${fmt0(eff)}℃에 맞는 ${label}${josa(label)} 옷장에 없어 기온 기준을 완화했어요.`);
-        } else if (pool.length && drop === "purpose") {
-          warnings.push(`'${purpose}'에 맞는 ${label}${josa(label)} 옷장에 없어 목적 기준을 완화했어요.`);
-        }
+
+    // ---------------------------------------------------------------- 온도·후보 자격·젖음 (core/eligibility.py 와 같음)
+    function temperatureContext(temperature, apparent, rain, purpose, cold = 0, heat = 0) {
+      const tEnv = apparent === null || apparent === undefined ? temperature : apparent;
+      const tFilter = tEnv + (purpose === "운동" ? D.EXERCISE_SHIFT : 0);
+      cold = +cold || 0; heat = +heat || 0;
+      const chill = rain ? Math.min(1, Math.max(0, (D.RAIN_CHILL_WARM - tEnv) / D.RAIN_CHILL_SPAN)) : 0;
+      const adj = [];
+      if (cold) adj.push(["추위를 타는 체질", -D.THERMAL_SHIFT * cold]);
+      if (heat) adj.push(["더위를 타는 체질", D.THERMAL_SHIFT * heat]);
+      if (chill) adj.push(["쌀쌀한 비", -D.RAIN_CHILL * chill]);
+      return { t_env: tEnv, t_filter: tFilter, t_pref: adj.reduce((s, x) => s + x[1], tFilter),
+        rain: !!rain, purpose, adjustments: adj };
+    }
+    const tempFits = (r, t) => r.min_temp <= t && t <= r.max_temp;
+    function tempOk(x, ctx) {
+      const r = ruleFor(x.subcategory);
+      if (!r) return true;
+      return tempFits(r, ctx.t_filter) || (ctx.rain && r.weather_shell && tempFits(r, ctx.t_env));
+    }
+    function itemFlags(x, ctx) {  // null = 이 목적엔 절대 안 됨, 아니면 [목적 완화 필요, 기온 완화 필요]
+      const r = ruleFor(x.subcategory);
+      if (!r) return [false, false];
+      if (r.blocked_purposes.includes(ctx.purpose)) return null;
+      return [r.fallback_purposes.includes(ctx.purpose), !tempOk(x, ctx)];
+    }
+    function allowed(flags, tier) {
+      if (flags === null) return false;
+      const [pr, tr] = D.TIERS[tier];
+      return (pr || !flags[0]) && (tr || !flags[1]);
+    }
+    const wearable = (x, ctx) => allowed(itemFlags(x, ctx), 0);
+    function wetBurden(x) {
+      const rainOk = !!x.rain_ok, r = ruleFor(x.subcategory);
+      if (!r) return rainOk ? 0 : 1;
+      let w = r.wet_burden;
+      if (rainOk !== r.default_rain_ok) {
+        if (rainOk && w > 0.5) w = 0.5;
+        else if (!rainOk && w <= 0.5) w = 1;
       }
-      return pool;
+      return w;
+    }
+
+    // ---------------------------------------------------------------- 후보 자격 단계
+    const CATS = ["상의", "하의", "원피스", "아우터", "신발"];
+    function poolsAt(usable, flags, tier) {
+      const pools = { 상의: [], 하의: [], 원피스: [], 아우터: [], 신발: [] };
+      for (const x of usable) if (allowed(flags.get(x), tier)) pools[x.category].push(x);
+      return pools;
+    }
+    const feasible = (p, outerRequired) => !!(p["신발"].length && ((p["상의"].length && p["하의"].length) || p["원피스"].length)
+      && (p["아우터"].length || !outerRequired));
+    function chooseTier(usable, flags, outerRequired) {
+      for (let tier = 0; tier < D.TIERS.length; tier++) {
+        const pools = poolsAt(usable, flags, tier);
+        if (feasible(pools, outerRequired)) return [tier, pools];
+      }
+      return [null, null];
+    }
+    function relaxWarnings(usable, flags, tier, pools, outerRequired, ctx) {
+      const p0 = poolsAt(usable, flags, 0);
+      const need = ["신발", ...(outerRequired ? ["아우터"] : [])];
+      if (pools["상의"].length && pools["하의"].length) need.push("상의", "하의");
+      if (pools["원피스"].length) need.push("원피스");
+      const p1 = tier === 3 ? poolsAt(usable, flags, 1) : null, p2 = tier === 3 ? poolsAt(usable, flags, 2) : null;
+      const purpose = ctx.purpose, t = fmt0(ctx.t_filter), out = [];
+      for (const cat of CATS) {
+        if (!need.includes(cat) || p0[cat].length || !pools[cat].length) continue;
+        const label = CAT_LABEL[cat];
+        const kind = tier < 3 ? tier : p1[cat].length ? 1 : p2[cat].length ? 2 : 3;
+        if (kind === 1) out.push(`'${purpose}'에 맞는 ${label}${josa(label)} 옷장에 없어 목적 기준을 완화했어요.`);
+        else if (kind === 2) out.push(`추천 기준 ${t}℃에 맞는 ${label}${josa(label)} 옷장에 없어 기온 기준을 완화했어요.`);
+        else out.push(`'${purpose}'·추천 기준 ${t}℃에 맞는 ${label}${josa(label)} 옷장에 없어 목적·기온 기준을 완화했어요.`);
+      }
+      return out;
+    }
+    function missing(usable, flags, ctx) {
+      const p = poolsAt(usable, flags, D.TIERS.length - 1), purpose = ctx.purpose;
+      const blocked = (cats) => {
+        const names = usable.filter((x) => cats.includes(x.category) && flags.get(x) === null).slice(0, 3).map((x) => x.name);
+        return names.length ? ` (${names.join(", ")}${josa(names[names.length - 1], "은", "는")} '${purpose}'에 추천하지 않아요.)` : "";
+      };
+      const out = [];
+      if (!p["신발"].length) out.push(`'${purpose}'에 신을 수 있는 신발이 옷장에 없어요.${blocked(["신발"])}`);
+      if (!((p["상의"].length && p["하의"].length) || p["원피스"].length))
+        out.push(`'${purpose}'에 입을 수 있는 상의·하의나 원피스가 옷장에 없어요.${blocked(["상의", "하의", "원피스"])}`);
+      return out;
     }
     function pairsOk(pieces) {
       const subs = pieces.map(sub).filter(Boolean);
@@ -142,22 +195,22 @@
       return true;
     }
     const outfitKey = (pieces) => pieces.map((p) => +p.id).sort((a, b) => a - b).join(",");
-    function topUnits(tops, eff) {
+    function topUnits(tops, temp) {
       const units = tops.map((t) => [t]);
-      if (eff < D.LAYER_MAX_TEMP)
+      if (temp < D.LAYER_MAX_TEMP)
         for (const a of tops) for (const b of tops) if (LAYER.has(sub(a) + "|" + sub(b))) units.push([a, b]);
       return units;
     }
-    function prune(pools, eff) {
+    function prune(pools, temp) {
       const pre = (x) => {
         const r = ruleFor(x.subcategory);
         if (!r) return 0;
-        return -Math.abs(eff - (Math.max(r.min_temp, -15) + Math.min(r.max_temp, 35)) / 2);
+        return -Math.abs(temp - (Math.max(r.min_temp, -15) + Math.min(r.max_temp, 35)) / 2);
       };
-      const size = () => (topUnits(pools["상의"], eff).length * pools["하의"].length + pools["원피스"].length)
+      const size = () => (topUnits(pools["상의"], temp).length * pools["하의"].length + pools["원피스"].length)
         * Math.max(1, pools["신발"].length) * (pools["아우터"].length + 1);
       while (size() > D.MAX_COMBOS) {
-        const cat = ["상의", "하의", "원피스", "아우터", "신발"].reduce((a, c) => (pools[c].length > pools[a].length ? c : a));
+        const cat = CATS.reduce((a, c) => (pools[c].length > pools[a].length ? c : a));
         if (pools[cat].length <= 3) break;
         pools[cat] = pools[cat].slice().sort((a, b) => pre(b) - pre(a)).slice(0, -1);
       }
@@ -165,26 +218,30 @@
     }
 
     // ---------------------------------------------------------------- 점수
-    function weighted(pieces, rw, fn) {
-      const rs = roles(pieces);
-      let tw = 0, s = 0;
-      pieces.forEach((p, i) => { const w = rw[rs[i]] ?? 0.2; tw += w; s += w * fn(p); });
-      return s / tw;
+    function exposed(pieces) {  // 비를 맞는 옷: [신발, 하체, 가장 바깥 상체]
+      const by = {};
+      roles(pieces).forEach((r, i) => { by[r] = pieces[i]; });
+      return [by["신발"], by["하의"] || by["원피스"], by["아우터"] || by["상의"] || by["원피스"]];
+    }
+    function seedRank(seed, pieces) {  // FNV-1a 32비트 (core/recommender.py seed_rank 와 같은 값)
+      const text = `${seed}|` + pieces.map((p) => +p.id).sort((a, b) => a - b).join(",");
+      let h = 0x811c9dc5;
+      for (const b of new TextEncoder().encode(text)) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+      return h;
     }
     function score(pieces, ctx) {
-      const { eff, target, rain } = ctx;
-      const actual = outfitWarmth(pieces);
-      const weatherScore = Math.max(0, 1 - Math.abs(actual - target) / D.WARMTH_TOLERANCE);
+      const target = ctx.target, actual = outfitWarmth(pieces);
+      const weather = Math.max(0, 1 - Math.abs(actual - target) / D.WARMTH_TOLERANCE);
       const hasOuter = pieces.some((p) => p.category === "아우터");
-      let rainScore = 1;
-      if (rain) {
-        const rw = { ...D.RAIN_ROLE_WEIGHT };
-        if (!hasOuter) rw["상의"] = 0.30;
-        rainScore = weighted(pieces, rw, (p) => (p.rain_ok ? 1 : 0.2));
+      let wet = null, total = weather, shoe, lower, upper;
+      if (ctx.rain) {
+        [shoe, lower, upper] = exposed(pieces);
+        wet = D.WET_PARTS["신발"] * wetBurden(shoe) + D.WET_PARTS["하체"] * wetBurden(lower)
+          + D.WET_PARTS["상체"] * wetBurden(upper);
+        total = D.RAIN_MIX.weather * weather + D.RAIN_MIX.wet * (1 - wet);
       }
+      const scoreI = Math.floor(Math.min(1, Math.max(0, total)) * D.SCORE_SCALE + 0.5 + 1e-9);
       const [cScore, cReason] = colorScore(pieces);
-      const W = D.WEIGHTS;
-      const final = W.weather * weatherScore + W.rain * rainScore + W.color * cScore;
 
       const reasons = [];
       const rs = roles(pieces);
@@ -192,20 +249,25 @@
         const inner = pieces[rs.indexOf("이너")], over = pieces[rs.indexOf("상의")];
         reasons.push(`${inner.name} 위에 ${over.name}${josa(over.name, "을", "를")} 겹쳐 입는 레이어드 코디예요.`);
       }
+      const where = ctx.purpose === "운동" ? `운동 기준 ${fmt0(ctx.t_filter)}℃` : `체감 ${fmt0(ctx.t_env)}℃`;
       const d = actual - target;
-      if (Math.abs(d) <= 0.35) reasons.push(`체감 ${fmt0(eff)}℃ 기준으로 두께가 잘 맞습니다.`);
-      else if (d < 0) reasons.push(`체감 ${fmt0(eff)}℃ 기준으로 조금 서늘할 수 있어요. 안에 한 겹 더 입는 걸 권장해요.`);
-      else reasons.push(`체감 ${fmt0(eff)}℃ 기준으로 조금 더울 수 있어요.` + (hasOuter ? " 겉옷을 벗어 조절하세요." : ""));
-      if (rain) {
-        const weak = pieces.filter((p) => (p.category === "신발" || p.category === "아우터") && !p.rain_ok).map((p) => p.name);
+      if (Math.abs(d) <= D.FIT_GAP) reasons.push(`${where}에 두께가 잘 맞습니다.`);
+      else if (d < 0) reasons.push(`${where}에는 조금 서늘할 수 있어요. 안에 한 겹 더 입는 걸 권장해요.`);
+      else reasons.push(`${where}에는 조금 더울 수 있어요.` + (hasOuter ? " 겉옷을 벗어 조절하세요." : ""));
+      if (ctx.rain) {
+        const weak = [];
+        for (const p of [shoe, lower, upper]) if (wetBurden(p) >= 1 && !weak.includes(p.name)) weak.push(p.name);
         if (weak.length) reasons.push(`비에 약한 ${weak.join(", ")}${josa(weak[weak.length - 1])} 포함돼 있어요. 젖지 않게 주의하세요.`);
-        else reasons.push(hasOuter ? "신발·겉옷이 비에 강한 조합입니다." : "신발이 비에 강한 조합입니다. 우산을 챙기세요.");
+        else reasons.push("비를 맞는 신발·옷이 비에 강한 조합입니다." + (hasOuter ? "" : " 우산을 챙기세요."));
       }
       reasons.push(cReason);
+      const r1 = (v) => Math.round(v * 10) / 10;
       return {
-        score: round4(Math.max(0, Math.min(1, final))), reasons,
-        components: { weather_score: round4(weatherScore), rain_score: round4(rainScore), color_score: round4(cScore),
-          target_warmth: round4(target), actual_warmth: round4(actual), effective_temp: Math.round(eff * 10) / 10 },
+        result: { score: scoreI / D.SCORE_SCALE, reasons,
+          components: { weather_score: round4(weather), rain_score: wet === null ? null : round4(1 - wet),
+            color_score: round4(cScore), target_warmth: round4(target), actual_warmth: round4(actual),
+            env_temp: r1(ctx.t_env), filter_temp: r1(ctx.t_filter), pref_temp: r1(ctx.t_pref) } },
+        key: [Math.floor(scoreI / D.BUCKET), cScore, scoreI],
       };
     }
 
@@ -215,13 +277,14 @@
     };
 
     // ---------------------------------------------------------------- 일교차 (core/recommender.py _later_advice 와 같음)
+    const laterPurposeOk = (o, lt) => { const f = itemFlags(o, lt); return f !== null && !f[0]; };
     function laterAdvice(pieces, ctx, outers) {
       const lt = ctx.later;
-      if (!lt || lt.eff > ctx.eff - D.LATER_DROP) return null;
+      if (!lt || lt.t_env > ctx.t_env - D.LATER_DROP) return null;
       const hasOuter = pieces.some((p) => p.category === "아우터");
-      const short = lt.target - outfitWarmth(pieces) > D.LATER_GAP;
-      if (!(short || (!hasOuter && lt.eff <= D.OUTER_REQUIRED_AT))) return null;
-      const when = `${lt.label}쯤 체감 ${fmt0(lt.eff)}℃까지 내려가요.`;
+      const short = lt.target - outfitWarmth(pieces) > D.FIT_GAP;
+      if (!(short || (!hasOuter && lt.t_filter <= D.OUTER_REQUIRED_AT))) return null;
+      const when = `${lt.label}쯤 체감 ${fmt0(lt.t_env)}℃까지 내려가요.`;
       const r6 = (v) => Math.round(v * 1e6) / 1e6;
       const fit = (base, o) => [r6(Math.abs(outfitWarmth([...base, o]) - lt.target)), -colorScore([...base, o])[0], +o.id];
       const less = (a, b) => a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2];
@@ -229,14 +292,14 @@
       if (hasOuter) {
         const cur = pieces.find((p) => p.category === "아우터"), rest = pieces.filter((p) => p !== cur);
         const gap = r6(Math.abs(outfitWarmth(pieces) - lt.target));
-        const better = outers.filter((o) => +o.id !== +cur.id && level(o) > level(cur) && purposeOk(o, ctx.purpose)
-          && tempOk(o, lt.eff) && pairsOk([...rest, o]) && fit(rest, o)[0] < gap);
+        const better = outers.filter((o) => +o.id !== +cur.id && level(o) > level(cur) && laterPurposeOk(o, lt)
+          && tempOk(o, lt) && pairsOk([...rest, o]) && fit(rest, o)[0] < gap);
         if (!better.length) return [null, `${when} ${cur.name}만으로는 조금 추울 수 있으니 안에 한 겹 더 챙기세요.`];
         const b = best(better, rest);
         return [b, `${when} ${cur.name}보다 ${b.name}${josa(b.name)} 더 따뜻해요. 늦게까지 밖에 있으면 ${b.name}${josa(b.name, "을", "를")} 입고 나가세요.`];
       }
-      const ok = outers.filter((o) => purposeOk(o, ctx.purpose) && pairsOk([...pieces, o]));
-      const warm = ok.filter((o) => tempOk(o, lt.eff)), cands = warm.length ? warm : ok;
+      const ok = outers.filter((o) => laterPurposeOk(o, lt) && pairsOk([...pieces, o]));
+      const warm = ok.filter((o) => tempOk(o, lt)), cands = warm.length ? warm : ok;
       if (!cands.length) return [null, `${when} 챙길 만한 겉옷이 옷장에 없어요.`];
       const b = best(cands, pieces);
       return [b, `${when} ${b.name}${josa(b.name, "을", "를")} 챙기세요.`];
@@ -244,11 +307,11 @@
     function attachLater(result, ctx, outers) {
       result.carry = null;
       if (!ctx.later) return;
-      result.components.later_effective_temp = Math.round(ctx.later.eff * 10) / 10;
+      result.components.later_env_temp = Math.round(ctx.later.t_env * 10) / 10;
       const advice = laterAdvice(result.pieces, ctx, outers);
       if (!advice) return;
       result.carry = advice[0];
-      const i = result.reasons.findIndex((r) => r.startsWith("체감 "));
+      const i = result.reasons.findIndex((r) => r.startsWith("체감 ") || r.startsWith("운동 기준 "));
       result.reasons.splice(i < 0 ? result.reasons.length : i + 1, 0, advice[1]);
     }
 
@@ -270,71 +333,43 @@
       accept((a, b) => !same(core(a.pieces), core(b.pieces)) && inter(nonShoe(a.pieces), nonShoe(b.pieces)) <= 1);
       accept((a, b) => !same(core(a.pieces), core(b.pieces)));
       accept((a, b) => !same(nonShoe(a.pieces), nonShoe(b.pieces)));
-      return picked.sort((a, b) => b.score - a.score);
-    }
-
-    function seededRandom(seed) {
-      let h = 1779033703 ^ String(seed).length;
-      for (const ch of String(seed)) { h = Math.imul(h ^ ch.charCodeAt(0), 3432918353); h = (h << 13) | (h >>> 19); }
-      return () => {
-        h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
-        return ((h ^= h >>> 16) >>> 0) / 4294967296;
-      };
+      return picked.sort((a, b) => a.rank - b.rank);
     }
 
     // ---------------------------------------------------------------- 메인
     // later: 귀가 전까지 가장 추운 때 { temperature, apparent, label } — 주면 결과마다 carry(챙길 겉옷)와 안내 문구
     // mustInclude: 이 id의 옷이 들어간 코디만 (사기 전에 맞춰보기) — 결과에 comboKeys(옷 id 목록)도 준다
+    // all: 다양화 없이 순위대로 모든 후보 (비교 시험용)
     function recommend(items, { temperature, apparent = null, rain = false, purpose = "등교", cold = 0, heat = 0,
       topK = 3, excludeKeys = [], seed = 0, all = false, later = null, mustInclude = null } = {}) {
-      const [eff, adjustments] = effectiveTemperature(temperature, apparent, rain, purpose, cold, heat);
-      const ctx = { eff, adjustments, target: targetWarmth(eff), rain: !!rain, purpose,
-        baseTemp: apparent === null || apparent === undefined ? temperature : apparent, later: null };
+      const ctx = temperatureContext(temperature, apparent, rain, purpose, cold, heat);
+      ctx.target = targetWarmth(ctx.t_pref); ctx.later = null;
       if (later) {
-        const lApp = later.apparent === undefined ? null : later.apparent;
-        const [lEff] = effectiveTemperature(later.temperature, lApp, rain, purpose, cold, heat);
-        ctx.later = { label: later.label || "저녁", eff: lEff, target: targetWarmth(lEff),
-          baseTemp: lApp === null ? later.temperature : lApp };
+        const lt = temperatureContext(later.temperature, later.apparent === undefined ? null : later.apparent, rain, purpose, cold, heat);
+        lt.target = targetWarmth(lt.t_pref); lt.label = later.label || "저녁";
+        ctx.later = lt;
       }
-      const warnings = [];
+      const temp = ctx.t_filter, warnings = [];
       const usable = items.filter((x) => x.category in D.WARMTH_CONTRIB);
-      const pools = { 상의: [], 하의: [], 원피스: [], 아우터: [], 신발: [] };
-      pools["신발"] = buildPool(usable, "신발", purpose, eff, rain, warnings);
-      const strict = {};
-      for (const c of ["상의", "하의", "원피스"])
-        strict[c] = usable.filter((x) => x.category === c && purposeOk(x, purpose) && tempOk(x, eff));
-      if ((strict["상의"].length && strict["하의"].length) || strict["원피스"].length) {
-        const sepOk = !!(strict["상의"].length && strict["하의"].length);
-        pools["상의"] = sepOk ? strict["상의"] : [];
-        pools["하의"] = sepOk ? strict["하의"] : [];
-        pools["원피스"] = strict["원피스"];
-      } else {
-        const tmp = [];
-        const top = buildPool(usable, "상의", purpose, eff, rain, tmp);
-        const bottom = buildPool(usable, "하의", purpose, eff, rain, tmp);
-        if (top.length && bottom.length) { pools["상의"] = top; pools["하의"] = bottom; warnings.push(...tmp); }
-        else pools["원피스"] = buildPool(usable, "원피스", purpose, eff, rain, warnings);
+      const flags = new Map(usable.map((x) => [x, itemFlags(x, ctx)]));
+      let outerRequired = temp <= D.OUTER_REQUIRED_AT;
+      let [tier, pools] = chooseTier(usable, flags, outerRequired);
+      if (tier === null && outerRequired) {
+        warnings.push(`추천 기준 ${fmt0(temp)}℃라 겉옷이 필요하지만 옷장에 맞는 겉옷이 없어요. 겉옷을 등록하면 날씨에 맞게 추천할 수 있어요.`);
+        outerRequired = false;
+        [tier, pools] = chooseTier(usable, flags, outerRequired);
       }
-      let outerRequired = eff <= D.OUTER_REQUIRED_AT;
-      let strictOuter = usable.filter((x) => x.category === "아우터" && purposeOk(x, purpose) && tempOk(x, eff));
-      if (outerRequired && !strictOuter.length) {
-        strictOuter = buildPool(usable, "아우터", purpose, eff, rain, warnings);
-        if (!strictOuter.length) {
-          warnings.push(`체감 ${fmt0(eff)}℃라 겉옷이 필요하지만 옷장에 맞는 겉옷이 없어요.`);
-          outerRequired = false;
-        }
-      }
-      pools["아우터"] = strictOuter;
-      if (eff <= 5 && !strictOuter.some((x) => level(x) >= 4))
-        warnings.push(`체감 ${fmt0(eff)}℃인데 두꺼운 겉옷(코트·패딩)이 옷장에 없어 보온이 부족할 수 있어요.`);
-      if (!pools["신발"].length || !((pools["상의"].length && pools["하의"].length) || pools["원피스"].length))
-        return { results: [], warnings: [...warnings, "추천에 필요한 옷 조합(상의+하의+신발 또는 원피스+신발)이 없습니다."], context: ctx,
+      if (tier === null)
+        return { results: [], warnings: [...warnings, D.NO_COMBO, ...missing(usable, flags, ctx)], context: ctx,
           nCombos: 0, ...(mustInclude === null ? {} : { comboKeys: [] }) };
+      if (tier) warnings.push(...relaxWarnings(usable, flags, tier, pools, outerRequired, ctx));
+      if (temp <= D.THICK_OUTER_AT && !pools["아우터"].some((x) => level(x) >= D.THICK_LEVEL))
+        warnings.push(`추천 기준 ${fmt0(temp)}℃인데 두꺼운 겉옷(코트·패딩)이 옷장에 없어 보온이 부족할 수 있어요.`);
 
-      if (mustInclude === null) prune(pools, eff);  // 특정 옷을 꼭 넣을 때는 덜어내지 않는다
+      if (mustInclude === null) prune(pools, temp);  // 특정 옷을 꼭 넣을 때는 덜어내지 않는다
       const outers = outerRequired ? pools["아우터"] : [null, ...pools["아우터"]];
       const candidates = [];
-      for (const top of topUnits(pools["상의"], eff))
+      for (const top of topUnits(pools["상의"], temp))
         for (const bottom of pools["하의"]) for (const outer of outers) for (const shoe of pools["신발"])
           candidates.push([...top, bottom, ...(outer ? [outer] : []), shoe]);
       for (const dress of pools["원피스"]) for (const outer of outers) for (const shoe of pools["신발"])
@@ -354,11 +389,14 @@
       const comboKeys = mustInclude === null ? null
         : kept.map((c) => c.map((p) => +p.id).sort((a, b) => a - b)).sort(cmpIds);
 
-      const rnd = seededRandom(seed);
-      for (let i = kept.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [kept[i], kept[j]] = [kept[j], kept[i]]; }
-      const scored = kept.map((pieces) => ({ pieces, ...score(pieces, ctx) }));
-      scored.sort((a, b) => b.score - a.score);
-      const results = all ? scored : pickDiverse(scored, topK);
+      const scored = kept.map((pieces) => {
+        const { result, key } = score(pieces, ctx);
+        const relaxed = pieces.filter((p) => { const f = flags.get(p); return f !== null && (f[0] || f[1]); }).length;
+        return { r: { pieces, ...result }, key: [relaxed, -key[0], -key[1], -key[2], seedRank(seed, pieces)] };
+      });
+      scored.sort((a, b) => { for (let i = 0; i < 5; i++) if (a.key[i] !== b.key[i]) return a.key[i] - b.key[i]; return 0; });
+      const ranked = scored.map(({ r }, rank) => ({ ...r, rank }));
+      const results = (all ? ranked : pickDiverse(ranked, topK)).map(({ rank, ...r }) => r);
       const outerItems = usable.filter((x) => x.category === "아우터");
       for (const r of results) attachLater(r, ctx, outerItems);
       return { results, warnings, context: ctx, nCombos, ...(comboKeys ? { comboKeys } : {}) };
@@ -369,7 +407,7 @@
     function seasonsFor(subcategory) {
       const r = ruleFor(subcategory);
       if (!r) return SEASONS.slice();
-      return SEASONS.filter((s) => D.SEASON_TEMPS[s].some((t) => r.min_temp <= t && t <= r.max_temp));
+      return SEASONS.filter((s) => D.SEASON_TEMPS[s].some((t) => tempFits(r, t)));
     }
     function manualSeasons(item) {  // 직접 고른 계절: 배열 또는 '여름|겨울'
       const v = item.seasons, list = Array.isArray(v) ? v : String(v || "").split("|");
@@ -380,10 +418,6 @@
     const currentSeason = (month) => ([6, 7, 8].includes(month) ? "여름" : [12, 1, 2].includes(month) ? "겨울" : "봄·가을");
 
     // ---------------------------------------------------------------- 사기 전에 맞춰보기 (core/shopping.py 와 같음)
-    function wearable(cand, purpose, eff) {
-      const r = ruleFor(cand.subcategory);
-      return !r || (!r.blocked_purposes.includes(purpose) && r.min_temp <= eff && eff <= r.max_temp);
-    }
     function similarItems(cand, items) {
       const s = canon(cand.subcategory), color = normalizeColor(cand.color);
       const same = items.filter((x) => canon(x.subcategory) === s);
@@ -402,7 +436,7 @@
             const sc = base.results[0].score;
             cell.best_without = cell.best_without === null ? sc : Math.max(cell.best_without, sc);
           }
-          if (!seasons.includes(season) || !wearable(cand, purpose, base.context.eff)) continue;
+          if (!seasons.includes(season) || !wearable(cand, base.context)) continue;
           const out = recommend([...items, cand], { ...args, topK: 3, mustInclude: D.CANDIDATE_ID });
           for (const k of out.comboKeys) keys.add(k.join(","));
           if (out.results.length && (cell.best === null || out.results[0].score > cell.best)) {
@@ -435,16 +469,17 @@
       return { seasons, cells, total, partners, improves, similar, verdict };
     }
 
-    function breakdown(c) {
-      const W = D.WEIGHTS;
+    function breakdown(c) {  // 맑은 날 날씨 100%, 비 오는 날 날씨 70% + 젖음 30%. 색은 점수가 비슷할 때 순서만 (weight null)
+      const rainy = c.rain_score !== null && c.rain_score !== undefined;
       return [
-        { label: "날씨 적합도", score: c.weather_score, weight: W.weather },
-        { label: "비/강수 적합도", score: c.rain_score, weight: W.rain },
-        { label: "색상 조합", score: c.color_score, weight: W.color },
+        { label: "날씨 적합도", score: c.weather_score, weight: rainy ? D.RAIN_MIX.weather : 1 },
+        ...(rainy ? [{ label: "비에 젖어도 괜찮음", score: c.rain_score, weight: D.RAIN_MIX.wet }] : []),
+        { label: "색상 조합", score: c.color_score, weight: null },
       ];
     }
 
     return { recommend, breakdown, outfitKey, normalizeColor, hexToName, ruleFor, roles, josa, COLOR_KO, D,
+      temperatureContext, itemFlags, wetBurden,
       SEASONS, seasonsFor, manualSeasons, itemSeasons, seasonLabel, currentSeason, candidateReport };
   }
 

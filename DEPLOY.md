@@ -67,7 +67,7 @@ python scripts/migrate_to_supabase.py --user-id 1 --email me@example.com
 1. <https://huggingface.co/new-space> 에서
    - Space name: 예) `ai-closet-tryon`
    - SDK: **Gradio**, Hardware: **ZeroGPU**, Visibility: **Public**
-2. 만든 Space의 **Files → Add file → Upload files** 로 저장소의 `tryon_space/` 안 파일 3개(`app.py`, `requirements.txt`, `README.md`)를 올립니다.
+2. 만든 Space의 **Files → Add file → Upload files** 로 저장소의 `tryon_space/` 안 파일 3개(`app.py`, `requirements.txt`, `README.md`)를 올립니다. 나중에 `tryon_space/` 파일이 바뀌면(예: 2026-11-07 옷 사진 주소 리다이렉트 확인 추가) 같은 방법으로 다시 올려야 Space에 적용됩니다.
    `README.md` 맨 위 설정(파이썬 3.12, Gradio 5.49.1)이 그대로 적용됩니다.
 3. **Settings → Variables and secrets → New variable**
    - `ALLOWED_GARMENT_HOSTS` = `abcd1234.supabase.co` (내 Supabase 주소의 호스트만)

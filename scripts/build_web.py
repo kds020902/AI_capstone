@@ -99,21 +99,24 @@ def export_model(checkpoint=ROOT / "models" / "clothing_classifier.pt"):
 
 
 def closet_data():
-    from core import catalog, colors, recommender as R, shopping, taxonomy as T
+    from core import catalog, colors, eligibility as E, recommender as R, shopping, taxonomy as T
     return {
         "MAIN_CATEGORIES": T.MAIN_CATEGORIES, "PURPOSES": T.PURPOSES,
-        "RULES": {k: {**v, "blocked_purposes": sorted(v["blocked_purposes"])} for k, v in T.RULES.items()},
+        "RULES": {k: {**v, "blocked_purposes": sorted(v["blocked_purposes"]),
+                      "fallback_purposes": sorted(v["fallback_purposes"])} for k, v in T.RULES.items()},
         "SUBCATEGORIES": T.SUBCATEGORIES, "LEGACY_RENAMES": T.LEGACY_RENAMES,
         "INCOMPATIBLE_PAIRS": sorted(sorted(p) for p in T.INCOMPATIBLE_PAIRS),  # 집합 순서는 실행마다 달라서 정렬
         "LAYER_PAIRS": sorted(list(p) for p in T.LAYER_PAIRS),
         "STARTER": {"male": [list(r) for r in catalog.MALE_STARTER], "female": [list(r) for r in catalog.FEMALE_STARTER]},
         "NEUTRALS": sorted(colors.NEUTRALS), "PALETTE": colors._PALETTE,
         "ALIASES": [[list(keys), name] for keys, name in colors._ALIASES],
-        "WEIGHTS": R.WEIGHTS, "RAIN_ROLE_WEIGHT": R.RAIN_ROLE_WEIGHT, "WARMTH_CONTRIB": R.WARMTH_CONTRIB,
-        "TARGET_CURVE": R.TARGET_CURVE, "THERMAL_SHIFT": R.THERMAL_SHIFT, "EXERCISE_SHIFT": R.EXERCISE_SHIFT,
-        "RAIN_SHIFT": R.RAIN_SHIFT, "OUTER_REQUIRED_AT": R.OUTER_REQUIRED_AT, "LAYER_MAX_TEMP": R.LAYER_MAX_TEMP,
-        "WARMTH_TOLERANCE": R.WARMTH_TOLERANCE, "MAX_COMBOS": R.MAX_COMBOS,
-        "LATER_DROP": R.LATER_DROP, "LATER_GAP": R.LATER_GAP,
+        "THERMAL_SHIFT": E.THERMAL_SHIFT, "EXERCISE_SHIFT": E.EXERCISE_SHIFT, "RAIN_CHILL": E.RAIN_CHILL,
+        "RAIN_CHILL_WARM": E.RAIN_CHILL_WARM, "RAIN_CHILL_SPAN": E.RAIN_CHILL_SPAN, "TIERS": E.TIERS,
+        "RAIN_MIX": R.RAIN_MIX, "WET_PARTS": R.WET_PARTS, "SCORE_SCALE": R.SCORE_SCALE, "BUCKET": R.BUCKET,
+        "WARMTH_CONTRIB": R.WARMTH_CONTRIB, "TARGET_CURVE": R.TARGET_CURVE,
+        "OUTER_REQUIRED_AT": R.OUTER_REQUIRED_AT, "LAYER_MAX_TEMP": R.LAYER_MAX_TEMP,
+        "WARMTH_TOLERANCE": R.WARMTH_TOLERANCE, "FIT_GAP": R.FIT_GAP, "THICK_OUTER_AT": R.THICK_OUTER_AT,
+        "THICK_LEVEL": R.THICK_LEVEL, "MAX_COMBOS": R.MAX_COMBOS, "LATER_DROP": R.LATER_DROP, "NO_COMBO": R.NO_COMBO,
         "SEASONS": T.SEASONS, "SEASON_TEMPS": {k: list(v) for k, v in T.SEASON_TEMPS.items()},
         "CANDIDATE_ID": shopping.CANDIDATE_ID, "IMPROVE_MIN": shopping.IMPROVE_MIN,
     }

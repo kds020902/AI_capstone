@@ -4,8 +4,13 @@ data/clothing_taxonomy.csv 하나가 분류 클래스, 대분류 매핑, 업로�
 기온 허용 범위, 목적별 금지 규칙의 '단일 출처'다.
 규칙을 바꾸고 싶으면 코드가 아니라 CSV를 고치면 된다.
 
-- min_temp / max_temp : 사용자 체감 보정이 끝난 '유효 기온'(℃) 기준 착용 허용 범위
-- blocked_purposes    : 이 세부분류를 추천하지 않는 외출 목적 ("|" 구분)
+- min_temp / max_temp : 착용 가능 범위(℃). 추천할 때의 비교 온도(core/eligibility.py: 보통 실제 체감,
+                        실외 운동이면 +5℃)나 계절 대표 기온과 비교한다. 체질(추위·더위)은 여기에 넣지 않는다
+- blocked_purposes    : 절대 추천하지 않는 외출 목적 ("|" 구분). 맞는 옷이 없어도 풀지 않는다 (운동 + 구두 등)
+- fallback_purposes   : 평소엔 추천하지 않지만, 맞는 옷이 없으면 경고와 함께 쓰는 목적 (운동 + 청바지 등)
+- wet_burden          : 비에 젖었을 때 불편함 0 / 0.5 / 1 (긴 바지·두꺼운 옷 1, 반바지·바람막이 0)
+- weather_shell       : 1이면 비 오는 날 운동 보정(+5℃) 없이 실제 체감으로 착용 범위를 본다 (바람막이)
+- default_rain_ok     : 옷을 등록할 때 '비 오는 날 부담이 적음' 기본값. 사용자가 바꿨는지 판단하는 기준이라 고정한다
 """
 from __future__ import annotations
 
@@ -21,7 +26,7 @@ PURPOSES = ["등교", "데이트", "운동", "격식"]
 # 옛 DB·라벨에 남아 있을 수 있는 클래스명 → 현재 클래스명 ("/"는 학습 데이터 폴더명으로 쓸 수 없음)
 LEGACY_RENAMES = {"야상/필드재킷": "야상·필드재킷"}
 
-# 같이 입히지 않는 조합 (순서 무관)
+# 평소 같이 입히지 않는 조합 (순서 무관). 이것만 지키면 코디가 하나도 안 남을 때는 경고하고 허용한다
 INCOMPATIBLE_PAIRS = {
     frozenset(p) for p in [
         ("블레이저", "후드티"), ("블레이저", "조거팬츠"), ("블레이저", "반바지"),
@@ -43,6 +48,10 @@ LAYER_PAIRS = {
 }
 
 
+def _purposes(text):
+    return {p.strip() for p in (text or "").split("|") if p.strip()}
+
+
 def _load():
     rows = {}
     with open(TAXONOMY_CSV, encoding="utf-8-sig", newline="") as f:
@@ -50,15 +59,19 @@ def _load():
             name = r["subcategory"].strip()
             if "/" in name or "\\" in name:
                 raise ValueError(f"세부분류 이름에 경로 문자를 쓸 수 없습니다: {name}")
-            blocked = {p.strip() for p in (r.get("blocked_purposes") or "").split("|") if p.strip()}
             rows[name] = {
                 "main_category": r["main_category"].strip(),
                 "default_warmth": int(r["default_warmth"]),
                 "default_rain_ok": bool(int(r["default_rain_ok"])),
                 "min_temp": float(r["min_temp"]),
                 "max_temp": float(r["max_temp"]),
-                "blocked_purposes": blocked,
+                "blocked_purposes": _purposes(r.get("blocked_purposes")),
+                "fallback_purposes": _purposes(r.get("fallback_purposes")),
+                "wet_burden": float(r["wet_burden"]),
+                "weather_shell": bool(int(r["weather_shell"])),
             }
+            if rows[name]["wet_burden"] not in (0.0, 0.5, 1.0):
+                raise ValueError(f"wet_burden 은 0, 0.5, 1 중 하나여야 합니다: {name}")
     return rows
 
 
@@ -78,6 +91,11 @@ def rule_for(subcategory):
     return RULES.get(canonical_subcategory(subcategory))
 
 
+def temp_fits(rule, temp):
+    """비교 온도가 규칙표의 착용 가능 범위 안인지. 추천·구매 판정·계절 분류가 모두 이 비교를 쓴다."""
+    return rule["min_temp"] <= temp <= rule["max_temp"]
+
+
 def main_category_for_subcategory(subcategory):
     r = rule_for(subcategory)
     return r["main_category"] if r else None
@@ -95,7 +113,7 @@ def seasons_for(subcategory):
     r = rule_for(subcategory)
     if r is None:
         return list(SEASONS)
-    return [s for s, temps in SEASON_TEMPS.items() if any(r["min_temp"] <= t <= r["max_temp"] for t in temps)]
+    return [s for s, temps in SEASON_TEMPS.items() if any(temp_fits(r, t) for t in temps)]
 
 
 def manual_seasons(item):

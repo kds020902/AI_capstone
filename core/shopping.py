@@ -9,16 +9,12 @@
 from __future__ import annotations
 
 from core.colors import normalize_color
+from core.eligibility import wearable
 from core.recommender import recommend
-from core.taxonomy import PURPOSES, SEASON_TEMPS, SEASONS, canonical_subcategory, item_seasons, rule_for
+from core.taxonomy import PURPOSES, SEASON_TEMPS, SEASONS, canonical_subcategory, item_seasons
 
 CANDIDATE_ID = -1        # 후보 옷의 임시 id (옷장 옷 id와 겹치지 않게 음수)
 IMPROVE_MIN = 0.05       # 최고 점수가 이만큼 이상 오르면 '옷장에 없던 걸 채운다'고 본다
-
-
-def _wearable(cand, purpose, eff):
-    r = rule_for(cand.get("subcategory"))
-    return r is None or (purpose not in r["blocked_purposes"] and r["min_temp"] <= eff <= r["max_temp"])
 
 
 def similar_items(cand, items):
@@ -45,7 +41,7 @@ def candidate_report(candidate, items, cold=0.0, heat=0.0):
                 if base["results"]:
                     s = base["results"][0]["score"]
                     cell["best_without"] = s if cell["best_without"] is None else max(cell["best_without"], s)
-                if season not in seasons or not _wearable(cand, purpose, base["context"]["eff"]):
+                if season not in seasons or not wearable(cand, base["context"]):
                     continue
                 out = recommend(items + [cand], t, t, 60, 0, False, 8, purpose, cold, heat, 3,
                                 must_include=CANDIDATE_ID)

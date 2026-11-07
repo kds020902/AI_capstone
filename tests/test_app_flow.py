@@ -208,3 +208,67 @@ def test_weather_is_kept_per_city(tmp_path, monkeypatch):
     _by_label(at.selectbox, "도시").set_value("서울").run()
     assert _by_label(at.metric, "기온").value == "5.0℃"
     assert not at.exception
+
+
+def test_cloud_wardrobe_rerun_reads_db_twice_and_reuses_photos(cloud, monkeypatch):
+    """내 옷장을 다시 그릴 때 DB는 2번(사용자·옷장)만 읽고, 이미 받은 사진은 다시 내려받지 않는다."""
+    import io
+
+    from PIL import Image
+
+    from core.cloud_store import CloudStore
+    from core.media import SupabaseMedia
+    from tests.fake_supabase import _Bucket, signed_in_client
+
+    c = signed_in_client(cloud, "p@example.com")
+    store, media = CloudStore(c, c.uid), SupabaseMedia(c, c.uid)
+    store.create_user("P", "male", 0, 0)
+    for i in range(3):
+        buf = io.BytesIO()
+        Image.new("RGB", (900, 700), (40 * i, 90, 160)).save(buf, "JPEG")
+        store.create_wardrobe_item(c.uid, f"셔츠{i}", "상의", "셔츠", "white", 2, 1,
+                                   image_path=media.save(c.uid, f"p{i}_", buf.getvalue()))
+    downloads = []
+    real = _Bucket.download
+    monkeypatch.setattr(_Bucket, "download", lambda self, path: downloads.append(path) or real(self, path))
+
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    at.text_input(key="login_email").input("p@example.com")
+    at.text_input(key="login_pw").input("secret123")
+    _button(at, "로그인").click().run()
+    _goto(at, "내 옷장")
+    assert len(downloads) == 3
+    cloud.calls.clear()
+    downloads.clear()
+    at.run()
+    assert not at.exception
+    assert [t for t, _ in cloud.calls] == ["profiles", "wardrobe_items"] and downloads == []
+
+
+def test_screens_without_user_say_where_to_go(tmp_path, monkeypatch):
+    """사용자가 없을 때 빈 화면으로 멈추지 않고 프로필로 안내한다."""
+    at = _local_app(tmp_path, monkeypatch)
+    for page in ("내 옷장", "오늘의 추천", "사기 전에 맞춰보기", "저장 코디", "KPI·데이터"):
+        _goto(at, page)
+        assert any("프로필에서 사용자를 먼저 만들어 주세요" in i.value for i in at.info), page
+        assert not at.exception
+
+
+def test_shopping_screen_judges_candidate_and_buy_adds_it(tmp_path, monkeypatch):
+    """사기 전에 맞춰보기: 후보 판정·상황별 점수표가 보이고, '샀어요'를 누르면 옷장에 들어가고 지난 추천이 비워진다."""
+    at = _local_app(tmp_path, monkeypatch)
+    _make_profile_recommend_and_save(at, "쇼핑")
+    uid = db.list_users()[0]["id"]
+    db.create_candidate(uid, "베이지 트렌치코트", "아우터", "코트", "beige", 3, 0)
+    n_before = len(db.list_wardrobe_items(uid))
+    _goto(at, "오늘의 추천")
+    _button(at, "TOP 3 추천 생성").click().run()
+    assert at.session_state["recommendations"]
+    _goto(at, "사기 전에 맞춰보기")
+    assert not at.exception
+    assert any("베이지 트렌치코트" in m.value for m in at.markdown)
+    assert at.dataframe                                              # 상황별 최고 코디 점수 표
+    _button(at, "샀어요 · 옷장에 넣기").click().run()
+    assert not at.exception
+    assert len(db.list_wardrobe_items(uid)) == n_before + 1 and db.list_candidates(uid) == []
+    assert at.session_state["recommendations"] is None

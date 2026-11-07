@@ -223,3 +223,12 @@ def test_buy_candidate_failure_keeps_candidate_and_retry_adds_one(tmp_path, monk
         assert new_id and store.buy_candidate(cid, uid) is None                 # 다시 눌러도 한 벌만
         assert len(store.list_wardrobe_items(uid)) == n_before + 1
         assert store.list_candidates(uid) == []
+
+
+def test_photo_cache_drops_oldest_when_full():
+    from core.media import PhotoCache
+    cache = PhotoCache(max_bytes=10)
+    cache["a"], cache["b"] = b"1234", b"5678"
+    assert cache["a"] == b"1234"            # a를 최근에 씀 → b가 가장 오래됨
+    cache["c"] = b"9012"
+    assert "b" not in cache and "a" in cache and "c" in cache and len(cache) == 2

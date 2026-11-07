@@ -52,6 +52,7 @@ PostgreSQL 이 있으면 `AI_CLOSET_TEST_PG_DSN` 을 설정해 `supabase/schema.
 | [`docs/prd.md`](docs/prd.md) | 화면·기능, 추천·판정 규칙, 예외 처리, 수용 기준 |
 | [`docs/tech-spec.md`](docs/tech-spec.md) | 기술 스택, 시스템 구조, DB·권한, 외부 API, AI 구성, 배포 |
 | [`docs/test-plan.md`](docs/test-plan.md) | 시험 방법, 결과 기록, 미검증 항목 |
+| [`docs/evaluation.md`](docs/evaluation.md) | 옷 분류기 평가 조건과 결과 (휴대폰 사진 192장, 입력 조건별) |
 | [`docs/schedule.md`](docs/schedule.md) | 1~10주차 개발 일정과 근거 (커밋·시험 기록) |
 | [`TASKS.md`](TASKS.md) | 개발 작업 목록과 완료 기준 |
 | [`CLAUDE.md`](CLAUDE.md) | AI 코딩 도구 작업 지침 (가이드의 AGENTS.md 역할) |

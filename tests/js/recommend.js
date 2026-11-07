@@ -7,8 +7,9 @@ const out = cases.map(({ items, args }) => {
   const r = C.recommend(items, { ...args, all: true });
   return {
     entries: r.results.map((x) => x.pieces.map((p) => p.id).sort((a, b) => a - b).join(",") + "=" + x.score.toFixed(4)
-      + "|" + (x.carry ? x.carry.id : "") + "|" + (x.reasons.find((t) => t.includes("쯤 체감")) || "")).sort(),
-    eff: r.context.eff,
+      + "|" + (x.carry ? x.carry.id : "") + "|" + x.reasons.join(" / ")),
+    temps: [r.context.t_env, r.context.t_filter, r.context.t_pref],
+    top: C.recommend(items, args).results.map((x) => x.pieces.map((p) => p.id).sort((a, b) => a - b).join(",")),
     warnings: r.warnings,
   };
 });

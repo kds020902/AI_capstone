@@ -6,7 +6,8 @@
 """
 import itertools
 
-from core.recommender import recommend
+from core.eligibility import wet_burden
+from core.recommender import exposed, recommend
 from core.taxonomy import LAYER_PAIRS
 from tests.helpers import THERMAL, starter_items
 
@@ -25,7 +26,7 @@ BLAZER_BAD = {"후드티", "조거팬츠", "러닝화", "반바지", "민소매"
 DRESS_SHOE_BAD = {"조거팬츠", "반바지", "레깅스", "기능성 티셔츠"}
 
 
-def violations(pieces, purpose, t, rain, warnings, reasons):
+def violations(pieces, purpose, t, rain, warnings, reasons, rank=1):
     subs = {p["subcategory"] for p in pieces}
     cats = {p["category"] for p in pieces}
     v = []
@@ -55,12 +56,12 @@ def violations(pieces, purpose, t, rain, warnings, reasons):
         v.append(("허용 안 된 상의 겹쳐 입기", [p["subcategory"] for p in tops]))
     if t >= 27 and len(tops) == 2:
         v.append(("27℃ 이상인데 상의 겹쳐 입기", [p["subcategory"] for p in tops]))
-    shoes = [p for p in pieces if p["category"] == "신발"]
-    if rain and any(not s["rain_ok"] for s in shoes) and not any("비에 약한" in w for w in warnings):
-        v.append(("비 오는데 비에 약한 신발 (경고 없음)", [s["name"] for s in shoes]))
-    weak = [p for p in pieces if p["category"] in ("신발", "아우터") and not p["rain_ok"]]
+    weak = [p for p in exposed(pieces) if wet_burden(p) >= 1]
     if rain and weak and not any("비에 약한" in r for r in reasons):
-        v.append(("비에 약한 옷이 있는데 이유 문구에 없음", [p["name"] for p in weak]))
+        v.append(("비 맞는 옷이 비에 약한데 이유 문구에 없음", [p["name"] for p in weak]))
+    shoe = next(p for p in pieces if p["category"] == "신발")
+    if rain and rank == 1 and purpose != "격식" and wet_burden(shoe) >= 1:   # 격식은 구두·로퍼뿐이라 제외
+        v.append(("비 오는데 1위 신발이 비에 약함", [shoe["name"]]))
     return v
 
 
@@ -77,7 +78,7 @@ def run_grid(gender):
         if len(set(non_shoe)) != len(non_shoe):
             shoe_only.append(cond)
         for rank, r in enumerate(out["results"], 1):
-            for kind, detail in violations(r["pieces"], purpose, t, rain, out["warnings"], r["reasons"]):
+            for kind, detail in violations(r["pieces"], purpose, t, rain, out["warnings"], r["reasons"], rank):
                 found.append((kind, cond, rank, " + ".join(p["name"] for p in r["pieces"]), detail))
     return found, shoe_only, empty
 

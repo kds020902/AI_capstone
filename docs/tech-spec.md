@@ -1,6 +1,6 @@
 # 기술설계서 — AI 옷장
 
-작성 기준: 2026-10-20, `main` 커밋 `1b1c6f1`. 기능 기준은 `docs/prd.md`, 배포 절차는 `DEPLOY.md`.
+작성 기준: 2026-11-07 (추천 규칙 v2, 화면 분리, 성능 개선 반영), 처음 작성 2026-10-20. 기능 기준은 `docs/prd.md`, 배포 절차는 `DEPLOY.md`, 분류기 평가 조건은 `docs/evaluation.md`.
 
 ## 1. 기술 스택
 
@@ -22,9 +22,10 @@
 [사용자 브라우저]
    │ https
    ▼
-[Streamlit Community Cloud]  app.py + core/
+[Streamlit Community Cloud]  app.py (설정·로그인·메뉴) + screens/ (화면) + core/
    ├─ core/vision.py        옷 분류(EfficientNet-B0, CPU) · 대표색
-   ├─ core/recommender.py   추천 규칙·점수
+   ├─ core/eligibility.py   온도 세 가지 · 후보 자격 · 젖음 부담
+   ├─ core/recommender.py   추천 단계·점수·순위
    ├─ core/shopping.py      구매 판정
    ├─ core/weather.py ──────► Open-Meteo API
    ├─ core/cloud_auth.py ───► Supabase Auth (이메일 로그인)
@@ -40,22 +41,25 @@
 
 | 경로 | 역할 |
 |---|---|
-| `app.py` | 화면 전체, 로그인 게이트, 저장소 선택(로컬/클라우드) |
+| `app.py` | 설정 읽기, 저장소 선택(로컬/클라우드), 사이드바, 메뉴 → 화면 연결 (약 100줄) |
+| `screens/context.py` | 한 번 그릴 때 쓰는 `App`: 저장소·사진 저장소·설정, 그번에만 쓰는 캐시(사용자 1번·옷장 1번 읽기), 목록용 작은 사진. 저장소를 감싸 옷장·체질을 바꾸는 함수(`WARDROBE_CHANGES`)가 성공하면 지난 추천을 비운다. 세션마다 다른 값은 모듈 전역에 두지 않는다 (사용자끼리 섞임 방지) |
+| `screens/*.py` | 화면마다 하나: `login`, `home`, `profile`, `wardrobe`, `direct_add`, `recommend`, `shopping`, `saved`, `kpi`, 공통 위젯 `common` (가상 착용 창·정보 수정 창·AI 후보 고르기) |
 | `core/config.py` | 설정 읽기(환경 변수 → Streamlit Secrets), 서비스 키 거부, Supabase 주소 정리 |
 | `core/cloud_auth.py` | 가입·로그인·세션·로그아웃, 오류 문구 변환 |
 | `core/db.py` / `core/cloud_store.py` | 같은 함수 이름의 두 저장소: SQLite / Supabase. 화면 코드는 `store.함수()`만 부른다. 여러 벌 한 번에 넣기 `create_wardrobe_items`(Supabase는 insert 1번), 저장 후 고치기 `update_wardrobe_item`(지운 옷 제외) |
-| `core/media.py` | 사진 저장: `LocalMedia`(폴더) / `SupabaseMedia`(Storage, 서명 주소) |
+| `core/media.py` | 사진 저장: `LocalMedia`(폴더) / `SupabaseMedia`(Storage, 서명 주소). `PhotoCache`(최근 쓴 순서, 크기 한도)를 세션에 두어 다시 그릴 때 사진을 다시 내려받지 않음, 목록용 작은 사진 `thumbnail_jpeg` |
 | `core/batch_add.py` | 직접 추가(사진 여러 장) 계산: 10장 제한, 끝과 처음이 이어진 이동, 다음 확인 안 한 사진, 겹치지 않는 자동 이름. 화면 상태(확인 카드)는 `st.session_state.ba_cards`에 두고, 안 보이는 카드의 입력값은 카드에 따로 보관한다 (Streamlit은 화면에 없는 위젯 값을 지움) |
-| `core/recommender.py`, `core/taxonomy.py`, `data/clothing_taxonomy.csv` | 추천 규칙, 42종 규칙표, 겹쳐 입기·금지 조합, 계절 계산 |
+| `core/eligibility.py` | 온도 세 가지(실제 체감·추천 기준·두께 취향), 옷 하나의 후보 자격(절대 금지 / 목적 완화 / 기온 완화), 젖음 부담(사용자 체크 우선). 추천·구매 판정이 같이 쓰고, 계절 계산도 같은 기온 비교를 씀 |
+| `core/recommender.py`, `core/taxonomy.py`, `data/clothing_taxonomy.csv` | 추천 단계(정상 → 목적 완화 → 기온 완화 → 둘 다, 코디가 나오는 첫 단계), 점수·순위(0.02 칸 → 색 → 점수 → FNV-1a 고정 순서), 42종 규칙표(착용 범위, 절대 금지·완화 목적, 젖음 부담, 비를 막는 겉옷), 겹쳐 입기·평소 피하는 조합, 계절 계산 |
 | `core/shopping.py` | 사기 전에 맞춰보기 |
 | `core/vision.py` | 분류 모델 불러오기·분류, 대표색 |
 | `core/weather.py` | Open-Meteo 호출, 귀가 전 최저 기온 |
 | `core/colors.py`, `core/care.py`, `core/catalog.py` | 색 이름·조화, 세탁 가이드, 스타터 옷장 |
 | `core/tryon.py` | 가상 착용 옷 고르기, Space 주소 만들기 |
 | `supabase/schema.sql` | 표·접근 정책·사진 버킷 (여러 번 실행해도 안전) |
-| `tryon_space/` | Hugging Face Space에 올리는 가상 착용 앱 |
+| `tryon_space/` | Hugging Face Space에 올리는 가상 착용 앱. 옷 사진 주소가 다른 곳으로 넘어가면 넘어갈 때마다 허용 목록을 다시 확인(최대 3번) |
 | `scripts/` | 데이터 받기·학습(`open_datasets.py`, `prepare_dataset.py`, `train_classifier.py`), 웹 체험판 만들기(`build_web.py`), Supabase 점검·이전 |
-| `web/` | 웹 체험판 (`src/closet.js` 추천 규칙, `src/closetnet.js` 분류 모델 계산) |
+| `web/` | 웹 체험판 (`src/closet.js` 추천 규칙·후보 자격, `src/closetnet.js` 분류 모델 계산). 규칙 숫자는 `build_web.py`가 파이썬 소스에서 뽑아 넣는다 |
 | `tests/` | 자동 시험 (`docs/test-plan.md`) |
 
 ## 4. 데이터베이스 (Supabase PostgreSQL)
@@ -148,12 +152,12 @@ erDiagram
 
 | 항목 | 설계 |
 |---|---|
-| 로그인 | Supabase Auth 이메일+비밀번호. 브라우저 세션마다 클라이언트 1개(`st.session_state`)를 두어 사용자끼리 섞이지 않게 함. 만료 토큰은 자동 갱신 |
+| 로그인 | Supabase Auth 이메일+비밀번호. 브라우저 세션마다 클라이언트 1개(`st.session_state`)를 두어 사용자끼리 섞이지 않게 함. 만료 토큰은 자동 갱신. 사진 캐시도 세션에 두고, 경로의 사용자 id가 본인일 때만 읽음 |
 | 표 접근 | 모든 표 RLS 켬. 정책: `user_id = auth.uid()`. 하위 표(추천·저장·피드백)는 부모 행도 본인 것인지 추가 확인. 비로그인(anon) 역할은 표 권한 없음 |
 | 사진 | 비공개 버킷 `wardrobe`, 파일당 5MB, jpg/png/webp. 첫 폴더가 본인 id인 경로만 읽기·쓰기·삭제 |
 | 키 | 앱에는 공개 키(publishable)만. service_role/secret 키가 들어오면 실행 거부. 예전 anon 키(2026년 말까지 폐지 예정)는 받아 주되 서버 기록에 바꾸라는 경고 |
 | 비밀 설정 | Streamlit Secrets / Hugging Face Space Variables에만 둔다. 저장소에는 `.streamlit/secrets.toml.example`만 있고 실제 파일은 `.gitignore` |
-| 가상 착용 | 옷 사진은 10분짜리 서명 주소로만 전달. Space는 허용 호스트(`ALLOWED_GARMENT_HOSTS`)의 https 주소만 받음. 사람 사진은 AI 옷장에 저장하지 않고, Space 임시 파일은 1시간이 지나면 정리 |
+| 가상 착용 | 옷 사진은 10분짜리 서명 주소로만 전달. Space는 허용 호스트(`ALLOWED_GARMENT_HOSTS`)의 https 주소만 받고, 다른 주소로 넘기는 응답(리다이렉트)은 저절로 따라가지 않고 넘어갈 때마다 허용 목록을 다시 확인 (최대 3번). 사람 사진은 AI 옷장에 저장하지 않고, Space 임시 파일은 1시간이 지나면 정리 |
 | 업로드 | Streamlit 업로드 최대 20MB, 저장 전 긴 변 1280px JPEG로 줄임 (사진 방향 보정 포함) |
 
 ## 6. 외부 API
@@ -173,7 +177,7 @@ erDiagram
 - 학습: 마지막 2개 블록과 분류층만 재학습, AdamW, 클래스 가중치 1/√장수, label smoothing 0.1, 15 에폭. 증강은 좌우 반전본 + 무작위 변형본 1벌(90·180·270도 회전, ±20도 기울기, 자르기, 밝기·색, 흐림, `--aug-copies 1`).
 - 데이터 37,753장 = 학습 32,626 + 검증 5,127. 종류별 최소 400장(플리스 407, 야상 415, 나머지 600장 이상). 검증 정확도 83.3%, 클래스 평균 81.7%.
 - 사진이 적던 13종 보충 2,645장(`data/extra_weak_classes.csv`, 출처 `extra`)은 학습에만 넣어 검증은 이전 모델과 같은 사진으로 비교한다.
-- 휴대폰 사진 시험 192장 (학습·검증에 안 씀, `data/grigorev_relabel.csv`의 `split=test`): 65.1%, 상위 3개 88.5%, 대분류 92.2%. 90·180·270도 돌아간 사진은 45~49%.
+- 휴대폰 사진 시험 192장 (학습·검증에 안 씀, `data/grigorev_relabel.csv`의 `split=test`): 앱과 같은 원본 입력 **63.5%**, 상위 3개 88.5%, 대분류 92.2%. JPEG 품질 92로 다시 저장한 사진(예전 기록의 조건)은 65.1%. 90·180·270도 돌아간 사진은 45~49% (품질 92 조건). 조건과 과거 모델 비교는 `docs/evaluation.md`. 검증 정확도는 학습용으로 가공한 검증 사진 기준이고, 웹 체험판 정확도는 따로 재지 않았다.
 - 추론: 224×224, ImageNet 정규화, softmax → 상위 3개 후보(세부분류·대분류·확신도)와 1등 확신이 70%(`core/vision.py`의 `SURE_CONFIDENCE`, 웹 체험판과 같음) 이상인지. 대분류는 규칙표로 정한다.
 - 파일: `models/clothing_classifier.pt`. 웹 체험판은 fp16 가중치(배치정규화를 conv에 합침)를 순수 JS로 계산.
 
@@ -208,5 +212,7 @@ erDiagram
 
 ## 10. 알려진 기술 과제
 
-- 화면을 다시 그릴 때마다 Supabase를 여러 번 호출해, 실제 Supabase 연결 시 화면 전환이 수 초 걸린다 (`docs/test-plan.md` 측정값, `TASKS.md` T-05·T-06).
+- 화면을 다시 그릴 때 Supabase 호출을 줄였다 (내 옷장: DB 6번 + 사진 30장 → DB 2번 + 사진 0장, 요청마다 지연을 넣은 가짜 Supabase에서 6.9초 → 0.4초). 실제 배포 주소에서는 아직 재지 않았다 (`TASKS.md` T-05).
+- '샀어요'는 SQLite에서는 한 거래로 처리하지만, Supabase(REST)는 여러 요청을 한 거래로 묶을 수 없어 후보를 먼저 빼는 데 성공한 요청만 옷장에 넣고 실패하면 되돌린다. 되돌리기까지 실패하면 후보가 빠진 채 남을 수 있다 (옷이 두 벌 들어가는 것보다 낫다고 봄).
+- 추천 점수의 실험값(날씨 0.7 / 젖음 0.3, 신발 0.5 / 하의 0.3 / 겉옷 0.2)은 사용자 시험 결과로 다시 정한다.
 - 앱 안 창(`*.hf.space`)에서는 Hugging Face 방문자 확인 정보가 전달되지 않아 ZeroGPU 사용량이 방문자 각자 기준인지 확인되지 않았다. 앱은 새 창을 권장한다.

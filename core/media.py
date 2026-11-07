@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import time
+from collections import OrderedDict
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -33,6 +34,50 @@ def to_cloud_jpeg(data: bytes) -> bytes:
     out = io.BytesIO()
     img.save(out, "JPEG", quality=CLOUD_JPEG_QUALITY)
     return out.getvalue()
+
+
+THUMB_SIDE = 480          # 옷장 목록에 보여 줄 작은 사진의 긴 변
+
+
+def thumbnail_jpeg(data: bytes, side=THUMB_SIDE) -> bytes:
+    """목록용 작은 JPEG (브라우저로 보내는 양을 줄인다). 열 수 없는 사진이면 원본 그대로."""
+    try:
+        img = open_upright(io.BytesIO(data))
+    except Exception:
+        return data
+    img.thumbnail((side, side))
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=85)
+    return out.getvalue()
+
+
+class PhotoCache:
+    """사진 바이트를 최근에 쓴 순서로 담아 두는 캐시. 합계가 max_bytes를 넘으면 오래된 것부터 버린다.
+    앱은 세션(st.session_state)에 하나 두고 화면을 다시 그릴 때마다 같은 사진을 다시 내려받지 않는다."""
+
+    def __init__(self, max_bytes=40_000_000):
+        self.max_bytes = max_bytes
+        self._items = OrderedDict()
+        self._size = 0
+
+    def __contains__(self, key):
+        return key in self._items
+
+    def __getitem__(self, key):
+        self._items.move_to_end(key)
+        return self._items[key]
+
+    def __setitem__(self, key, data):
+        if key in self._items:
+            self._size -= len(self._items.pop(key))
+        self._items[key] = data
+        self._size += len(data)
+        while self._size > self.max_bytes and len(self._items) > 1:
+            _, old = self._items.popitem(last=False)
+            self._size -= len(old)
+
+    def __len__(self):
+        return len(self._items)
 
 
 class LocalMedia:
@@ -60,10 +105,10 @@ class LocalMedia:
 class SupabaseMedia:
     kind = "supabase"
 
-    def __init__(self, client, user_id):
+    def __init__(self, client, user_id, cache=None):
         self.client = client
         self.uid = str(user_id)
-        self._cache = {}
+        self._cache = cache if cache is not None else PhotoCache()
 
     def _bucket(self):
         return self.client.storage.from_(BUCKET)

@@ -310,7 +310,7 @@ footer a { color: var(--accent); }
 
   <footer>
     <span>추천: 날씨 60% · 비 25% · 색상 15% · 외출 목적에 안 맞는 옷은 규칙표로 먼저 거름</span>
-    <span>사진 분류: EfficientNet-B0 · 42종 · 검증 정확도 83.3% (휴대폰 사진 시험 65.1%) · 브라우저 안에서 계산</span>
+    <span>사진 분류: EfficientNet-B0 · 42종 · 브라우저 안에서 계산 · <a href="https://github.com/kds020902/AI_capstone/blob/main/docs/evaluation.md" target="_blank" rel="noopener">평가 조건과 결과 보기</a></span>
     <span>날씨 자동 조회와 기록 저장은 설치형 앱에서 쓸 수 있어요 · <a href="https://github.com/kds020902/AI_capstone" target="_blank" rel="noopener">GitHub에서 전체 앱 받기</a></span>
   </footer>
 </div>
@@ -422,10 +422,13 @@ footer a { color: var(--accent); }
       later: w.late ? { temperature: w.l, apparent: w.l, label: "저녁" } : null });
     const ctx = out.context;
     const adj = ctx.adjustments.map(([l, d]) => `<span>${esc(l)} <b>${d > 0 ? "+" : ""}${fmt(d)}℃</b></span>`).join("");
-    $("thermo").innerHTML = `<span>체감 <b>${fmt(ctx.baseTemp)}℃</b></span>${adj || "<span class='muted'>보정 없음</span>"}` +
-      `<span>→ 기준 <span class="eff">${fmt(ctx.eff)}℃</span>로 추천</span>` +
-      (ctx.later ? `<span>저녁 체감 <b>${fmt(ctx.later.baseTemp)}℃</b> → 기준 <b>${fmt(ctx.later.eff)}℃</b></span>` : "");
-    $("warns").innerHTML = out.warnings.map((m) => `<div class="warn">${esc(m)}</div>`).join("");
+    $("thermo").innerHTML = `<span>실제 체감 <b>${fmt(ctx.t_env)}℃</b></span>` +
+      (ctx.purpose === "운동" ? `<span>실외 운동 <b>+${fmt(C.D.EXERCISE_SHIFT)}℃</b></span>` : "") +
+      `<span>→ 추천 기준 <span class="eff">${fmt(ctx.t_filter)}℃</span></span>` +
+      (adj ? `<span class="muted">두께는</span>${adj}<span>반영해 <b>${fmt(ctx.t_pref)}℃</b>에 맞춤</span>` : "") +
+      (ctx.later ? `<span>저녁 체감 <b>${fmt(ctx.later.t_env)}℃</b></span>` : "");
+    $("warns").innerHTML = out.warnings.map((m) => `<div class="warn">${esc(m)}</div>`).join("") +
+      (out.results.length ? `<div class="muted" style="font-size:0.82rem">점수 차이가 2점 안이면 색 조합이 더 잘 어울리는 코디를 앞에 둬요.</div>` : "");
     if (!out.results.length) {
       $("outfits").innerHTML = `<li class="block empty">추천할 코디가 없어요. 내 옷장에서 상의·하의·신발을 보유로 켜 두세요.</li>`;
       return;
@@ -434,7 +437,7 @@ footer a { color: var(--accent); }
       const roles = C.roles(r.pieces);
       const bars = C.breakdown(r.components).map((b) =>
         `<div class="bar"><span>${b.label}</span><span class="track"><span class="fill" style="width:${(b.score * 100).toFixed(0)}%"></span></span>` +
-        `<span class="w">${(b.score * 100).toFixed(0)} × ${(b.weight * 100).toFixed(0)}%</span></div>`).join("");
+        `<span class="w">${(b.score * 100).toFixed(0)}${b.weight === null ? " · 순서만" : ` × ${(b.weight * 100).toFixed(0)}%`}</span></div>`).join("");
       return `<li class="block outfit">
         <div class="top"><span class="rank">${i + 1}위</span><span class="pct">${(r.score * 100).toFixed(1)}%</span>
           <span class="muted num" style="font-size:0.82rem">보온 ${r.components.actual_warmth.toFixed(2)} / 목표 ${r.components.target_warmth.toFixed(2)}</span></div>
