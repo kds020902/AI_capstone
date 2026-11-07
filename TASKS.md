@@ -10,7 +10,7 @@
 | T-01 | 배포 주소에서 핵심 흐름 확인 | 사용자 + AI | 커밋 `1b1c6f1` 재배포 | 배포 주소(`*.streamlit.app`)에서 가입 → 사진으로 옷 등록 → 추천 → 저장 성공, 결과를 test-plan 3절에 기록 | 진행 중 (배포 주소 공유 대기) |
 | T-02 | Supabase 정리 | 사용자 | – | 시험 계정 8개(`closet.check.*`, `closet.check3.*`, `closet.e2e.*`, `closet.e2e3.*` @example.com) 삭제, DB 비밀번호 재설정 | 할 일 |
 | T-03 | Streamlit Secrets 정리 | 사용자 | – | ① `SUPABASE_KEY`를 publishable 키(`sb_publishable_…`)로 바꾸고 앱 동작 확인 → ② 그다음 Supabase Settings → API Keys에서 예전 anon·service_role 키 끄기 (예전 키는 2026년 말까지 폐지 예정, 순서는 DEPLOY.md 1-4) ③ `SUPABASE_URL`을 `https://<프로젝트ID>.supabase.co`로 (코드가 자동 변환하지만 정리 권장) | 할 일 |
-| T-04 | 웹 체험판 공개 | 사용자 | – | Settings → Pages → GitHub Actions, Actions에서 1회 실행, `kds020902.github.io/AI_capstone` 열림, `WEB_TRIAL_URL` 설정 | 할 일 |
+| T-04 | 웹 체험판 공개 | 사용자 | – | Settings → Pages → GitHub Actions, Actions에서 1회 실행, `kds020902.github.io/AI_capstone` 열림, `WEB_TRIAL_URL` 설정. 지금은 Pages가 꺼져 있어 push 때마다 자동 배포가 `configure-pages` 단계에서 실패함 (2026-11-07 실행 #3 등, "Get Pages site failed") | 할 일 |
 | T-05 | 배포본 속도 측정 | AI | T-01 | 로그인·옷 저장·추천·화면 전환 시간을 배포 주소에서 재서 기록 (T-06 개선 전후 비교: 예전 실측 옷 저장 후 목록 12.2초) | 대기 |
 | T-07 | 가상 착용 Space 만들기 | 사용자 | Hugging Face `matsusung` 계정 가입 30일(2026-11-16 18:49 한국 시간 이후) + 이메일 인증, 또는 조건이 되는 팀원 계정 | ZeroGPU Space Running(`tryon_space/` 최신 파일 3개, 리다이렉트 확인 포함 2026-11-07판), 사진 1장으로 결과 생성, Logs의 `GPU 사용 n초` 기록 | 대기 |
 | T-08 | 앱에 가상 착용 연결 | 사용자 + AI | T-07 | `TRYON_SPACE_URL`·`ALLOWED_GARMENT_HOSTS` 설정, `TRYON_SEC_PER_STEP` 조정, 휴대폰에서 새 창·앱 안 창 결과 생성, 사용량 차감 방식 기록 | 대기 |
