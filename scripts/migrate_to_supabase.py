@@ -5,7 +5,7 @@
 
 사용 (옮겨 갈 계정으로 먼저 앱에서 가입해 둘 것)
   set SUPABASE_URL=https://xxxx.supabase.co
-  set SUPABASE_KEY=<anon public 또는 publishable 키>
+  set SUPABASE_KEY=<publishable 키 (sb_publishable_…)>
   python scripts/migrate_to_supabase.py --list                 # 로컬 사용자 목록
   python scripts/migrate_to_supabase.py --user-id 1 --email me@example.com
   (비밀번호는 실행 중에 물어본다. 화면·파일에 남지 않는다)

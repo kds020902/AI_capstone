@@ -65,6 +65,21 @@ def test_server_only_keys_are_refused(monkeypatch, key):
 
 def test_publishable_key_is_accepted():
     assert config.check_public_key("sb_publishable_xyz") == "sb_publishable_xyz"
+    assert not config.is_legacy_key("sb_publishable_xyz")
+
+
+def test_legacy_anon_key_still_works_but_warns_in_log(monkeypatch, caplog):
+    """예전 anon 키는 Supabase가 2026년 말까지 없앨 예정: 앱은 멈추지 않고 서버 기록에만 바꾸라고 남긴다."""
+    monkeypatch.setenv("SUPABASE_URL", "https://abc.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", _jwt({"role": "anon"}))
+    with caplog.at_level("WARNING", logger="core.config"):
+        assert config.cloud_settings()["key"] == _jwt({"role": "anon"})
+    assert "publishable" in caplog.text
+    monkeypatch.setenv("SUPABASE_KEY", "sb_publishable_xyz")
+    caplog.clear()
+    with caplog.at_level("WARNING", logger="core.config"):
+        config.cloud_settings()
+    assert caplog.text == ""
 
 
 # ------------------------------------------------------------ 사진 저장소

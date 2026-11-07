@@ -28,8 +28,13 @@ PC나 Colab을 켜 두지 않아도 되는 무료 서비스만 씁니다. 비용
    - 인증 메일이 꼭 필요하면 무료 SMTP 서비스를 따로 가입해 **Authentication → Emails → SMTP Settings** 에 연결합니다. 앱은 두 경우 모두 지원합니다(켜져 있으면 "인증 링크를 확인해 주세요" 안내).
 4. **Project Settings → API Keys** 에서 두 값을 복사합니다.
    - Project URL: `https://abcd1234.supabase.co`
-   - **anon public** 키(`eyJ...`) 또는 **publishable** 키(`sb_publishable_...`)
+   - **publishable** 키(`sb_publishable_...`). 없으면 같은 화면에서 만듭니다.
+   - 예전 **anon public** 키(`eyJ...`)는 쓰지 않습니다. Supabase가 2026년 말까지 예전 키(anon·service_role)를 없앨 예정입니다. 앱은 아직 받아 주지만 서버 기록(Logs)에 바꾸라는 경고를 남깁니다.
    - `service_role` / `secret` 키는 쓰지 않습니다. 모든 사용자 데이터를 열 수 있는 키라서 앱에 넣으면 앱이 멈추고 안내합니다.
+   - **이미 anon 키로 배포했다면** 이 순서로 바꿉니다. 순서를 바꾸면 그 사이 앱이 멈춥니다.
+     1. Streamlit 앱 → Settings → Secrets 의 `SUPABASE_KEY` 를 publishable 키로 바꾸고 저장
+     2. 앱이 다시 켜지면 로그인·옷 목록이 되는지 확인 (Logs 에 예전 키 경고가 없어야 함)
+     3. 그다음 Supabase **Settings → API Keys** 에서 예전 키(legacy anon·service_role)를 끕니다
 
 ### (선택) 실제 프로젝트 점검
 
@@ -37,7 +42,7 @@ PC나 Colab을 켜 두지 않아도 되는 무료 서비스만 씁니다. 비용
 
 ```bash
 set SUPABASE_URL=https://abcd1234.supabase.co      # macOS/Linux 는 export
-set SUPABASE_KEY=<anon 또는 publishable 키>
+set SUPABASE_KEY=<publishable 키 (sb_publishable_...)>
 python scripts/check_supabase.py --email-a test1@example.com --email-b test2@example.com
 ```
 
@@ -141,7 +146,9 @@ python scripts/migrate_to_supabase.py --user-id 1 --email me@example.com
 
 | 증상 | 확인할 것 |
 |---|---|
-| 앱이 "service_role/secret 키가 들어 있어요" 로 멈춤 | Secrets 의 `SUPABASE_KEY` 를 anon public / publishable 키로 교체 |
+| 앱이 "service_role/secret 키가 들어 있어요" 로 멈춤 | Secrets 의 `SUPABASE_KEY` 를 publishable 키(`sb_publishable_...`)로 교체 |
+| Logs 에 "예전 anon public 키" 경고 | 1-4 의 순서대로 publishable 키로 교체 (예전 키는 2026년 말까지 폐지 예정) |
+| 예전 키를 끈 뒤 모두 로그인이 안 됨 | Secrets 에 아직 anon 키가 있음 → publishable 키로 바꾸거나, 예전 키를 잠시 다시 켬 |
 | 가입 후 "인증 링크를 확인해 주세요" 만 나오고 메일이 안 옴 | Supabase 의 Confirm email 이 켜져 있음 → 1-3 참고 |
 | 갑자기 모두 로그인이 안 됨 | Supabase 프로젝트가 일시 정지됐는지 대시보드에서 확인 후 Restore |
 | 가상 착용 버튼이 안 보임 | Secrets 에 `TRYON_SPACE_URL` 이 있는지, 옷이 상의·하의·원피스·아우터인지 (신발 미지원) |

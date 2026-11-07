@@ -151,7 +151,7 @@ erDiagram
 | 로그인 | Supabase Auth 이메일+비밀번호. 브라우저 세션마다 클라이언트 1개(`st.session_state`)를 두어 사용자끼리 섞이지 않게 함. 만료 토큰은 자동 갱신 |
 | 표 접근 | 모든 표 RLS 켬. 정책: `user_id = auth.uid()`. 하위 표(추천·저장·피드백)는 부모 행도 본인 것인지 추가 확인. 비로그인(anon) 역할은 표 권한 없음 |
 | 사진 | 비공개 버킷 `wardrobe`, 파일당 5MB, jpg/png/webp. 첫 폴더가 본인 id인 경로만 읽기·쓰기·삭제 |
-| 키 | 앱에는 공개 키(publishable/anon)만. service_role/secret 키가 들어오면 실행 거부 |
+| 키 | 앱에는 공개 키(publishable)만. service_role/secret 키가 들어오면 실행 거부. 예전 anon 키(2026년 말까지 폐지 예정)는 받아 주되 서버 기록에 바꾸라는 경고 |
 | 비밀 설정 | Streamlit Secrets / Hugging Face Space Variables에만 둔다. 저장소에는 `.streamlit/secrets.toml.example`만 있고 실제 파일은 `.gitignore` |
 | 가상 착용 | 옷 사진은 10분짜리 서명 주소로만 전달. Space는 허용 호스트(`ALLOWED_GARMENT_HOSTS`)의 https 주소만 받음. 사람 사진은 AI 옷장에 저장하지 않고, Space 임시 파일은 1시간이 지나면 정리 |
 | 업로드 | Streamlit 업로드 최대 20MB, 저장 전 긴 변 1280px JPEG로 줄임 (사진 방향 보정 포함) |

@@ -2,7 +2,8 @@
 
 공개 배포(Streamlit Community Cloud)에서는 앱 설정의 Secrets 에 아래 이름을 넣는다.
   SUPABASE_URL      Supabase 프로젝트 주소 (https://xxxx.supabase.co)
-  SUPABASE_KEY      공개용 키 (anon public 또는 publishable 키). service_role/secret 키는 절대 넣지 않는다
+  SUPABASE_KEY      공개용 publishable 키 (sb_publishable_…). service_role/secret 키는 절대 넣지 않는다.
+                    예전 anon public 키(eyJ…)도 아직 동작하지만 Supabase가 2026년 말까지 없앨 예정이라 바꿔 둔다
   TRYON_SPACE_URL   (선택) 가상 착용 Hugging Face Space 페이지 주소 (https://huggingface.co/spaces/아이디/공간이름)
   WEB_TRIAL_URL     (선택) 웹 체험판 주소 (GitHub Pages 등)
 SUPABASE_URL·SUPABASE_KEY 가 없으면 지금처럼 로컬 SQLite + data/uploads 로 동작한다.
@@ -11,12 +12,19 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 
 
 class UnsafeKeyError(ValueError):
     """서버 전용 비밀 키를 앱에 넣었을 때."""
+
+
+LEGACY_KEY_WARNING = (
+    "SUPABASE_KEY 에 예전 anon public 키(eyJ…)가 들어 있어요. Supabase가 2026년 말까지 예전 키를 없앨 예정이니 "
+    "대시보드 Project Settings → API Keys 의 publishable 키(sb_publishable_…)로 바꿔 주세요 (DEPLOY.md 1-4)."
+)
 
 
 def get_setting(name, default=None):
@@ -49,9 +57,14 @@ def check_public_key(key):
     if key.startswith("sb_secret_") or _jwt_role(key) == "service_role":
         raise UnsafeKeyError(
             "SUPABASE_KEY 에 service_role/secret 키가 들어 있어요. "
-            "Supabase 대시보드의 anon public(또는 publishable) 키로 바꿔 주세요."
+            "Supabase 대시보드 Project Settings → API Keys 의 publishable 키(sb_publishable_…)로 바꿔 주세요."
         )
     return key
+
+
+def is_legacy_key(key):
+    """예전 anon public 키(JWT)인지. 동작은 하지만 Supabase가 2026년 말까지 없앨 예정이다."""
+    return _jwt_role(key) == "anon"
 
 
 _DASHBOARD = re.compile(r"^https?://(?:app\.)?supabase\.com/dashboard/project/([a-z0-9]+)", re.I)
@@ -72,4 +85,7 @@ def cloud_settings():
     url, key = get_setting("SUPABASE_URL"), get_setting("SUPABASE_KEY")
     if not url or not key:
         return None
-    return {"url": normalize_supabase_url(url), "key": check_public_key(key)}
+    key = check_public_key(key)
+    if is_legacy_key(key):    # 사용자 화면이 아니라 서버 기록(Streamlit Cloud → Manage app → Logs)에만 남긴다
+        logging.getLogger(__name__).warning(LEGACY_KEY_WARNING)
+    return {"url": normalize_supabase_url(url), "key": key}

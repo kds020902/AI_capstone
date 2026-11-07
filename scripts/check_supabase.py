@@ -5,7 +5,7 @@
 (앱에서 미리 가입. 이미 옷이 있는 계정이면 멈춤).
 
   set SUPABASE_URL=https://xxxx.supabase.co
-  set SUPABASE_KEY=<anon public 또는 publishable 키>
+  set SUPABASE_KEY=<publishable 키 (sb_publishable_…)>
   python scripts/check_supabase.py --email-a test1@example.com --email-b test2@example.com
 (비밀번호는 실행 중에 물어본다)
 """
