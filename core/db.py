@@ -17,8 +17,17 @@ DB_PATH = ROOT / "data" / "ai_wardrobe.sqlite3"
 LEGACY_STYLE_COLUMNS = [("users", "preferred_style"), ("wardrobe_items", "style"),
                         ("recommendation_sessions", "preferred_style")]
 
+class _Conn(sqlite3.Connection):
+    """`with conn() as c:` 가 끝나면 저장(오류면 되돌림)한 뒤 연결도 닫는다. sqlite3 기본 with 는 닫지 않는다."""
+
+    def __exit__(self, *exc):
+        try:
+            return super().__exit__(*exc)
+        finally:
+            self.close()
+
 def conn():
-    c = sqlite3.connect(DB_PATH)
+    c = sqlite3.connect(DB_PATH, factory=_Conn)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA foreign_keys = ON")
     return c
@@ -201,14 +210,19 @@ def create_wardrobe_item(
     user_id, name, category, subcategory, color, warmth, rain_ok,
     material="", image_path="", notes="", ai_category=None, ai_subcategory=None, ai_confidence=None
 ):
-    now = datetime.now().isoformat(timespec="seconds")
     with conn() as c:
-        return _insert(c, "wardrobe_items", {
-            "user_id": user_id, "name": name, "category": category, "subcategory": subcategory, "color": color,
-            "warmth": warmth, "rain_ok": int(bool(rain_ok)), "material": material, "image_path": image_path,
-            "notes": notes, "ai_category": ai_category, "ai_subcategory": ai_subcategory,
-            "ai_confidence": ai_confidence, "created_at": now,
-        })
+        return _insert(c, "wardrobe_items", _item_values(
+            user_id, name, category, subcategory, color, warmth, rain_ok, material, image_path, notes,
+            ai_category, ai_subcategory, ai_confidence))
+
+def _item_values(user_id, name, category, subcategory, color, warmth, rain_ok, material="", image_path="",
+                 notes="", ai_category=None, ai_subcategory=None, ai_confidence=None):
+    return {
+        "user_id": user_id, "name": name, "category": category, "subcategory": subcategory, "color": color,
+        "warmth": warmth, "rain_ok": int(bool(rain_ok)), "material": material, "image_path": image_path,
+        "notes": notes, "ai_category": ai_category, "ai_subcategory": ai_subcategory,
+        "ai_confidence": ai_confidence, "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
 
 def create_wardrobe_items(user_id, items):
     """여러 벌을 한 번에 저장 (사진 여러 장 등록). items: create_wardrobe_item 의 인자 이름을 키로 갖는 dict 목록.
@@ -309,18 +323,22 @@ def delete_candidate(candidate_id, user_id):
         c.execute("UPDATE purchase_candidates SET deleted=1 WHERE id=? AND user_id=?", (candidate_id, user_id))
 
 def buy_candidate(candidate_id, user_id):
-    """'샀어요': 후보를 옷장에 넣고 후보 목록에서 뺀다. 새 옷장 옷 id (없는 후보면 None)."""
+    """'샀어요': 후보를 옷장에 넣고 후보 목록에서 뺀다. 새 옷장 옷 id (없거나 이미 산 후보면 None).
+    한 번에(한 거래로) 처리해 중간에 실패하면 둘 다 되돌리고, 두 번 눌러도 한 벌만 들어간다."""
     with conn() as c:
         row = c.execute("SELECT * FROM purchase_candidates WHERE id=? AND user_id=? AND deleted=0",
                         (candidate_id, user_id)).fetchone()
-    if row is None:
-        return None
-    r = dict(row)
-    item_id = create_wardrobe_item(user_id, r["name"], r["category"], r["subcategory"], r["color"], r["warmth"],
-                                   r["rain_ok"], image_path=r["image_path"] or "", notes=r["link"] or "",
-                                   ai_subcategory=r["ai_subcategory"], ai_confidence=r["ai_confidence"])
-    delete_candidate(candidate_id, user_id)
-    return item_id
+        if row is None:
+            return None
+        taken = c.execute("UPDATE purchase_candidates SET deleted=1 WHERE id=? AND user_id=? AND deleted=0",
+                          (candidate_id, user_id)).rowcount
+        if taken != 1:
+            return None
+        r = dict(row)
+        return _insert(c, "wardrobe_items", _item_values(
+            user_id, r["name"], r["category"], r["subcategory"], r["color"], r["warmth"], r["rain_ok"],
+            image_path=r["image_path"] or "", notes=r["link"] or "",
+            ai_subcategory=r["ai_subcategory"], ai_confidence=r["ai_confidence"]))
 
 def add_starter_wardrobe(user_id):
     user = get_user(user_id)

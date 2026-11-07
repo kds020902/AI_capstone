@@ -100,7 +100,7 @@ def _columns(table):
 
 def test_old_db_style_columns_are_removed(tmp_path):
     db.DB_PATH = tmp_path / "legacy.sqlite3"
-    with sqlite3.connect(db.DB_PATH) as c:
+    with db.conn() as c:
         c.executescript(V4_SCHEMA)
     db.init_db()
     assert "preferred_style" not in _columns("users")
@@ -122,7 +122,7 @@ def test_old_db_style_columns_are_removed(tmp_path):
 def test_insert_fills_style_column_that_old_sqlite_could_not_drop(tmp_path):
     """SQLite 3.35 미만은 DROP COLUMN이 안 된다 → 남은 NOT NULL 스타일 열은 빈 값으로 채워 넣는다."""
     db.DB_PATH = tmp_path / "old.sqlite3"
-    with sqlite3.connect(db.DB_PATH) as c:
+    with db.conn() as c:
         c.executescript(V4_SCHEMA)
     with db.conn() as c:  # init_db를 거치지 않은 상태 = 열을 못 지운 상태
         uid = db._insert(c, "users", {"name": "x", "gender": "male", "cold_sensitivity": 0, "heat_sensitivity": 0,
@@ -156,3 +156,39 @@ def test_season_override_and_put_away(tmp_path):
     db.set_items_active(off, uid, True)
     active = {x["id"] for x in db.list_wardrobe_items(uid)}
     assert set(off[1:]) <= active and off[0] not in active
+
+
+def test_connection_closes_after_with_block(tmp_path):
+    """with 블록이 끝나면 저장하고 연결도 닫는다. 오류가 나면 되돌린 뒤 닫는다."""
+    _use_tmp_db(tmp_path)
+    with db.conn() as c:
+        c.execute("INSERT INTO users(name, created_at) VALUES('닫힘', 'x')")
+    try:
+        c.execute("SELECT 1")
+    except sqlite3.ProgrammingError:
+        pass
+    else:
+        raise AssertionError("연결이 열린 채 남음")
+    try:
+        with db.conn() as c:
+            c.execute("INSERT INTO users(name, created_at) VALUES('되돌림', 'x')")
+            raise RuntimeError
+    except RuntimeError:
+        pass
+    assert [u["name"] for u in db.list_users()] == ["닫힘"]
+
+
+def test_app_like_flow_leaves_no_open_connection(tmp_path):
+    """가입 → 스타터 옷장 → 목록 같은 흐름에서 닫히지 않은 연결 경고가 나오지 않는다 (예전엔 70번)."""
+    import gc
+    import warnings
+
+    _use_tmp_db(tmp_path)
+    gc.collect()  # 앞선 시험이 남긴 객체는 세지 않는다
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", ResourceWarning)
+        uid = db.create_user("경고", "male", 0, 0)
+        db.add_starter_wardrobe(uid)
+        db.list_wardrobe_items(uid)
+        gc.collect()
+    assert not [w for w in caught if issubclass(w.category, ResourceWarning) and "sqlite3" in str(w.message)]

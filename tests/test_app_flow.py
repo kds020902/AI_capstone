@@ -163,3 +163,48 @@ def test_cloud_mode_direct_add_many_photos(cloud):
     assert any("같은 사진 1장은 한 번만" in t.value for t in at.toast)
     assert len(at.session_state.ba_cards) == 9
     assert not at.exception
+
+
+def _local_app(tmp_path, monkeypatch):
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "app.sqlite3")
+    return AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+
+
+def test_wardrobe_change_clears_old_recommendation(tmp_path, monkeypatch):
+    """추천을 받은 뒤 옷장에서 옷을 비활성화하면, 그 옷이 든 지난 추천이 남아 있지 않다."""
+    at = _local_app(tmp_path, monkeypatch)
+    _make_profile_recommend_and_save(at, "옷장변경")
+    _goto(at, "오늘의 추천")
+    assert at.session_state["recommendations"]
+    _goto(at, "내 옷장")
+    next(b for b in at.button if b.label == "비활성화").click().run()
+    assert at.session_state["recommendations"] is None
+    _goto(at, "오늘의 추천")
+    assert not any("1위" in m.value for m in at.markdown)
+    assert not at.exception
+
+
+def test_weather_is_kept_per_city(tmp_path, monkeypatch):
+    """한 도시 날씨를 불러온 뒤 도시를 바꾸면, 앞 도시 날씨로 추천하지 않고 다시 불러오라고 안내한다."""
+    from core import weather
+
+    def fake_weather(lat, lon):
+        return {"ok": True, "temperature": 5.0, "humidity": 50.0, "apparent_temperature": 3.0, "precipitation": 0.0,
+                "rain": 0.0, "wind_speed": 4.0, "source": "fake"}
+
+    monkeypatch.setattr(weather, "get_current_weather", fake_weather)
+    at = _local_app(tmp_path, monkeypatch)
+    _make_profile_recommend_and_save(at, "날씨")
+    _goto(at, "오늘의 추천")
+    _by_label(at.radio, "날씨").set_value("자동 조회").run()
+    _by_label(at.selectbox, "도시").set_value("서울").run()
+    _button(at, "현재 날씨 불러오기").click().run()
+    assert _by_label(at.metric, "기온").value == "5.0℃"
+    _by_label(at.selectbox, "도시").set_value("수원").run()
+    assert not [m for m in at.metric if m.label == "기온"]
+    assert any("서울 날씨를 불러온 상태" in c.value for c in at.caption)
+    _by_label(at.selectbox, "도시").set_value("서울").run()
+    assert _by_label(at.metric, "기온").value == "5.0℃"
+    assert not at.exception

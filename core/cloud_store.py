@@ -179,18 +179,26 @@ class CloudStore:
         self._t("purchase_candidates").update({"deleted": 1}).eq("id", candidate_id).eq("user_id", self.uid).execute()
 
     def buy_candidate(self, candidate_id, user_id):
+        """요청 여러 개를 한 거래로 묶을 수 없어서, 후보를 먼저 '뺌'(deleted=1)으로 바꾸는 데 성공한 요청만
+        옷장에 넣는다. 두 번 눌러도 한 벌만 들어가고, 옷장에 넣다 실패하면 후보를 되돌린다."""
         self._own(user_id)
-        rows = self._rows(self._t("purchase_candidates").select("*").eq("id", candidate_id)
-                          .eq("user_id", self.uid).eq("deleted", 0))
-        if not rows:
+        taken = self._rows(self._t("purchase_candidates").update({"deleted": 1}).eq("id", candidate_id)
+                           .eq("user_id", self.uid).eq("deleted", 0))
+        if not taken:
             return None
-        r = rows[0]
-        item_id = self.create_wardrobe_item(user_id, r["name"], r["category"], r["subcategory"], r["color"],
-                                            r["warmth"], r["rain_ok"], image_path=r["image_path"] or "",
-                                            notes=r["link"] or "", ai_subcategory=r["ai_subcategory"],
-                                            ai_confidence=r["ai_confidence"])
-        self.delete_candidate(candidate_id, user_id)
-        return item_id
+        r = taken[0]
+        try:
+            return self.create_wardrobe_item(user_id, r["name"], r["category"], r["subcategory"], r["color"],
+                                             r["warmth"], r["rain_ok"], image_path=r["image_path"] or "",
+                                             notes=r["link"] or "", ai_subcategory=r["ai_subcategory"],
+                                             ai_confidence=r["ai_confidence"])
+        except Exception:
+            try:
+                self._t("purchase_candidates").update({"deleted": 0}).eq("id", candidate_id) \
+                    .eq("user_id", self.uid).execute()
+            except Exception:
+                pass  # 되돌리기도 실패하면 후보는 빠진 채 남는다 (옷이 두 벌 들어가는 것보다 낫다)
+            raise
 
     # ------------------------------------------------------------ 추천 기록
     def create_recommendation_session(self, user_id, purpose, temperature, apparent_temperature,

@@ -164,6 +164,11 @@ def test_signed_out_client_cannot_read():
         a.table("profiles").select("*").execute()
 
 
+def _sqlite_item(item_id):
+    with db.conn() as c:
+        return dict(c.execute("SELECT * FROM wardrobe_items WHERE id=?", (item_id,)).fetchone())
+
+
 def test_edit_skips_deleted_item(tmp_path):
     """지운 옷의 정보 고치기는 DB 행에도 반영되지 않는다 (SQLite·Supabase 둘 다)."""
     db.DB_PATH = tmp_path / "edit.sqlite3"
@@ -173,7 +178,7 @@ def test_edit_skips_deleted_item(tmp_path):
     cloud.create_user("나", "male", 0, 0)
     local_uid = db.create_user("나", "male", 0, 0)
     for store, uid, raw in (
-        (db, local_uid, lambda i: dict(db.conn().execute("SELECT * FROM wardrobe_items WHERE id=?", (i,)).fetchone())),
+        (db, local_uid, _sqlite_item),
         (cloud, client.uid, lambda i: client.table("wardrobe_items").select("*").eq("id", i).execute().data[0]),
     ):
         iid = store.create_wardrobe_items(uid, [{"name": "그레이 후드티", "category": "상의", "subcategory": "후드티",
@@ -182,3 +187,39 @@ def test_edit_skips_deleted_item(tmp_path):
         store.update_wardrobe_item(iid, uid, "바뀐 이름", "하의", "청바지", "blue", 1, True)
         row = raw(iid)
         assert (row["name"], row["category"], row["deleted"]) == ("그레이 후드티", "상의", 1)
+
+
+def test_buy_candidate_failure_keeps_candidate_and_retry_adds_one(tmp_path, monkeypatch):
+    """'샀어요' 중간에 옷장 저장이 실패하면 후보가 그대로 남고, 다시 누르면 옷은 한 벌만 들어간다 (SQLite·Supabase)."""
+    db.DB_PATH = tmp_path / "buy.sqlite3"
+    db.init_db()
+    client = signed_in_client(FakeBackend(), "b@example.com")
+    cloud = CloudStore(client, client.uid)
+    cloud.create_user("나", "male", 0, 0)
+    local_uid = db.create_user("나", "male", 0, 0)
+
+    real_insert = db._insert
+
+    def broken_insert(c, table, values):
+        if table == "wardrobe_items":
+            raise RuntimeError("저장 실패")
+        return real_insert(c, table, values)
+
+    def broken_create(*a, **k):
+        raise RuntimeError("저장 실패")
+
+    for store, uid, break_it in ((db, local_uid, lambda: monkeypatch.setattr(db, "_insert", broken_insert)),
+                                 (cloud, client.uid, lambda: monkeypatch.setattr(cloud, "create_wardrobe_item",
+                                                                                 broken_create))):
+        cid = store.create_candidate(uid, "네이비 플리스", "아우터", "플리스", "navy", 3, 0)
+        n_before = len(store.list_wardrobe_items(uid))
+        break_it()
+        with pytest.raises(RuntimeError):
+            store.buy_candidate(cid, uid)
+        monkeypatch.undo()
+        assert [c["id"] for c in store.list_candidates(uid)] == [cid]          # 후보가 그대로 남음
+        assert len(store.list_wardrobe_items(uid)) == n_before                  # 옷은 안 들어감
+        new_id = store.buy_candidate(cid, uid)
+        assert new_id and store.buy_candidate(cid, uid) is None                 # 다시 눌러도 한 벌만
+        assert len(store.list_wardrobe_items(uid)) == n_before + 1
+        assert store.list_candidates(uid) == []

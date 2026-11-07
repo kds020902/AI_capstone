@@ -47,6 +47,15 @@ for key, value in {
 }.items():
     st.session_state.setdefault(key, value)
 
+
+def clear_recommendations():
+    """지난 추천을 비운다. 사용자를 바꾸거나 옷장·프로필을 바꾸면 부른다
+    (안 비우면 지운·넣어 둔 옷이 든 추천이 그대로 보이고 저장될 수 있음)."""
+    st.session_state.recommendations = None
+    st.session_state.recommendation_session_id = None
+    st.session_state.rec_meta = None
+
+
 # ------------------------------------------------------------------ 저장소: 로컬(SQLite) 또는 공개 배포(Supabase)
 try:
     CLOUD = cloud_settings()
@@ -438,6 +447,7 @@ def ba_save(user, cards):
                      "notes": c["notes"].strip(), "ai_category": ai.get("category"),
                      "ai_subcategory": ai.get("subcategory"), "ai_confidence": ai.get("confidence")})
     store.create_wardrobe_items(user["id"], rows)
+    clear_recommendations()
 
 
 def render_direct_add(user):
@@ -556,6 +566,7 @@ def edit_item_dialog(item, user_id):
     st.caption("사진·AI 분류 기록·계절 설정은 그대로 둬요. 계절은 '계절 수정'에서 바꿔요.")
     if st.button("저장", type="primary", key=f"ed_save_{iid}", disabled=not name.strip()):
         store.update_wardrobe_item(iid, user_id, name.strip(), cat, sub, color, warmth, rain, material, notes.strip())
+        clear_recommendations()
         st.rerun()
 
 
@@ -585,9 +596,7 @@ else:
 # 사용자를 바꾸면 이전 사용자의 추천·AI 분류 결과를 비운다 (안 비우면 다른 사람의 추천이 저장될 수 있음)
 if st.session_state.active_user_id != st.session_state.user_id:
     st.session_state.active_user_id = st.session_state.user_id
-    st.session_state.recommendations = None
-    st.session_state.recommendation_session_id = None
-    st.session_state.rec_meta = None
+    clear_recommendations()
     st.session_state.ba_cards = []
     st.session_state.ba_idx = 0
     st.session_state.ba_more = False
@@ -664,6 +673,7 @@ elif page == "프로필":
             cold2, heat2 = THERMAL_TO_SENSITIVITY[thermal2]
             if st.form_submit_button("설정 저장"):
                 store.update_user(user["id"], gender2, cold2, heat2)
+                clear_recommendations()
                 st.success("저장했습니다.")
                 st.rerun()
 
@@ -688,9 +698,11 @@ elif page == "내 옷장":
             c1, c2 = st.columns(2)
             if c1.button(f"{season}에 안 입는 옷 {len(off)}벌 넣어두기", disabled=not off):
                 store.set_items_active([x["id"] for x in off], user["id"], False)
+                clear_recommendations()
                 st.rerun()
             if c2.button(f"넣어 둔 옷 중 {season} 옷 {len(back)}벌 꺼내기", disabled=not back):
                 store.set_items_active([x["id"] for x in back], user["id"], True)
+                clear_recommendations()
                 st.rerun()
             st.caption("넣어 둔 옷은 추천에 쓰지 않아요. 아래 '넣어 둔 옷'에서 한 벌씩 꺼낼 수도 있어요.")
 
@@ -736,15 +748,18 @@ elif page == "내 옷장":
                                 if st.button("저장", key=f"season_save_{item['id']}"):
                                     same_as_auto = picked == seasons_for(item.get("subcategory"))
                                     store.update_item_seasons(item["id"], user["id"], None if same_as_auto else picked)
+                                    clear_recommendations()
                                     st.rerun()
                                 st.caption(f"자동: {season_label(seasons_for(item.get('subcategory')))} (옷 종류 기준). "
                                            "전부 지우고 저장하면 자동으로 돌아가요.")
                         c_a, c_b = st.columns(2)
                         if c_a.button("비활성화", key=f"off_{item['id']}"):
                             store.deactivate_item(item["id"], user["id"])
+                            clear_recommendations()
                             st.rerun()
                         if c_b.button("삭제", key=f"del_{item['id']}"):
                             store.soft_delete_item(item["id"], user["id"])
+                            clear_recommendations()
                             st.rerun()
 
         # 비활성화한 옷 다시 활성화
@@ -758,6 +773,7 @@ elif page == "내 옷장":
                           f"{season_label(item_seasons(item))}")
                 if c_b.button("다시 활성화", key=f"on_{item['id']}"):
                     store.reactivate_item(item["id"], user["id"])
+                    clear_recommendations()
                     st.rerun()
 
     with tab2:
@@ -768,6 +784,7 @@ elif page == "내 옷장":
         )
         if st.button("프로필 성별 기준 30개 추가", type="primary"):
             added = store.add_starter_wardrobe(user["id"])
+            clear_recommendations()
             st.success(f"{added}개를 추가했습니다. 이미 있던 이름은 중복 추가하지 않았습니다.")
             st.rerun()
 
@@ -798,8 +815,9 @@ elif page == "오늘의 추천":
                                        format_func=lambda h: "자정" if h == 24 else f"{h}시")
         lat, lon = CITY_PRESETS[city]
         if st.button("현재 날씨 불러오기"):
-            st.session_state.weather_cache = get_current_weather(lat, lon)
-        data = st.session_state.weather_cache
+            st.session_state.weather_cache = {"city": city, "data": get_current_weather(lat, lon)}
+        cached = st.session_state.weather_cache
+        data = cached["data"] if cached and cached["city"] == city else None  # 다른 도시 날씨는 쓰지 않는다
         if data and data.get("ok"):
             temperature = data["temperature"]
             humidity = data["humidity"]
@@ -818,6 +836,9 @@ elif page == "오늘의 추천":
                 c5.metric(f"귀가 전 최저 체감 ({later['label']})", f"{later['apparent_temperature']:.1f}℃")
         elif data:
             st.warning(data["message"])
+        elif cached:
+            st.caption(f"{cached['city']} 날씨를 불러온 상태예요. {city} 날씨는 '현재 날씨 불러오기'를 다시 눌러 주세요. "
+                       "그 전에는 기본값(22℃, 비 없음)으로 추천합니다.")
         else:
             st.caption("날씨를 불러오기 전에는 기본값(22℃, 비 없음)으로 추천합니다.")
     else:
@@ -924,10 +945,10 @@ elif page == "사기 전에 맞춰보기":
             cand_image = open_upright(up)
             st.image(cand_image, width=220)
             cand_color = dominant_color_name(cand_image) or ""
-            ai_key = f"cand_ai_{up.file_id}"  # 다시 그릴 때마다 분류하지 않도록
-            if ai_key not in st.session_state:
-                st.session_state[ai_key] = classify_clothing_image(cand_image)
-            cand_ai = st.session_state[ai_key]
+            # 다시 그릴 때마다 분류하지 않도록 지금 사진의 결과 하나만 둔다 (사진마다 결과가 쌓이지 않게)
+            if (st.session_state.get("cand_ai") or (None,))[0] != up.file_id:
+                st.session_state.cand_ai = (up.file_id, classify_clothing_image(cand_image))
+            cand_ai = st.session_state.cand_ai[1]
             if cand_ai.get("ok"):
                 cand_pick = ai_candidate_pick(cand_ai, key=f"cand_pick_{up.file_id}")
                 st.caption(f"색 추정: {COLOR_KO.get(cand_color, cand_color)}")
@@ -1002,6 +1023,7 @@ elif page == "사기 전에 맞춰보기":
             c_a, c_b = st.columns(2)
             if c_a.button("샀어요 · 옷장에 넣기", key=f"buy_{cand['id']}"):
                 store.buy_candidate(cand["id"], user["id"])
+                clear_recommendations()
                 st.toast(f"{cand['name']}을(를) 옷장에 넣었어요.")
                 st.rerun()
             if c_b.button("후보에서 지우기", key=f"cdel_{cand['id']}"):

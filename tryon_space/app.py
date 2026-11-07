@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import gradio as gr
 import numpy as np
@@ -48,6 +48,7 @@ SEC_PER_STEP = float(os.environ.get("TRYON_SEC_PER_STEP", "1.0"))   # GPU 예약
 ALLOWED_HOSTS = [h.strip().lower() for h in os.environ.get("ALLOWED_GARMENT_HOSTS", ".supabase.co").split(",") if h.strip()]
 ALLOW_HTTP = os.environ.get("ALLOW_HTTP_GARMENT") == "1"     # 로컬 시험 전용
 MAX_GARMENT_BYTES = 10 * 1024 * 1024
+MAX_REDIRECTS = 3
 KINDS = {"상의": "upper", "하의": "lower", "원피스·전신": "overall", "아우터": "outer"}
 KIND_LABEL = {v: k for k, v in KINDS.items()}
 
@@ -154,9 +155,17 @@ def _allowed(url):
 def _fetch(url):
     if not url:
         return None
-    if not _allowed(url):
-        raise gr.Error("허용하지 않은 주소의 옷 사진이에요. 옷 사진을 직접 올려 주세요.")
-    r = requests.get(url, timeout=15, stream=True)
+    # 다른 주소로 넘기는 응답(리다이렉트)을 저절로 따라가지 않고, 넘어갈 때마다 허용 목록을 다시 확인한다
+    for _ in range(MAX_REDIRECTS + 1):
+        if not _allowed(url):
+            raise gr.Error("허용하지 않은 주소의 옷 사진이에요. 옷 사진을 직접 올려 주세요.")
+        r = requests.get(url, timeout=15, stream=True, allow_redirects=False)
+        if not r.is_redirect:
+            break
+        url = urljoin(url, r.headers["Location"])
+        r.close()
+    else:
+        raise gr.Error("옷 사진 주소가 너무 여러 번 넘어가요. 옷 사진을 직접 올려 주세요.")
     r.raise_for_status()
     data = r.raw.read(MAX_GARMENT_BYTES + 1, decode_content=True)
     if len(data) > MAX_GARMENT_BYTES:
