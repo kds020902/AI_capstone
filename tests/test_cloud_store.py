@@ -597,3 +597,24 @@ def test_retry_that_fails_on_second_existing_row_changes_nothing_and_clears_reco
         assert cleared == [1], store
         assert watched.create_wardrobe_items(uid, retry) and \
             sorted(x["name"] for x in store.list_wardrobe_items(uid)) == ["둘째(고침)", "첫째(고침)"]
+
+
+@pytest.mark.parametrize("meanwhile", ["edit", "delete"])
+def test_edit_or_delete_between_read_and_update_is_not_overwritten(meanwhile):
+    """옷 묶음 저장 함수가 행을 읽은 직후 다른 창에서 '정보 수정'·삭제가 끼어들어도, 그 행은 카드 내용으로 덮어쓰지 않고
+    충돌로 알린다 (고치기 조건이 UPDATE 자체에 있음)."""
+    backend = FakeBackend()
+    client = signed_in_client(backend, "race@example.com")
+    store = CloudStore(client, client.uid)
+    store.create_user("나", "male", 0, 0)
+    card = {"category": "상의", "warmth": 2, "rain_ok": 0, "request_id": _req(1)}
+    iid = store.create_wardrobe_items(client.uid, [{**card, "name": "카드"}])[0]
+    other = signed_in_client(backend, "race@example.com")                 # 같은 사용자의 다른 창
+    so = CloudStore(other, other.uid)
+    backend.after_select.append({"edit": lambda: so.update_wardrobe_item(iid, other.uid, "다른 창에서 고침", "상의", None,
+                                                                         None, 2, 0),
+                                 "delete": lambda: so.soft_delete_item(iid, other.uid)}[meanwhile])
+    kept = []
+    assert store.create_wardrobe_items(client.uid, [{**card, "name": "카드 재시도"}], conflicts=kept) == [iid]
+    row = next(r for r in backend.rows("wardrobe_items") if r["id"] == iid)
+    assert kept == [_req(1)] and row["name"] == ("다른 창에서 고침" if meanwhile == "edit" else "카드")

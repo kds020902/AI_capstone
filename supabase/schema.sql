@@ -245,6 +245,7 @@ declare
     r jsonb;
     old public.wardrobe_items;
     new_id bigint;
+    changed integer;
 begin
     for r in select x.value from jsonb_array_elements(p_rows) as x loop
         select * into old from public.wardrobe_items w
@@ -258,17 +259,18 @@ begin
                     (r ->> 'ai_confidence')::double precision, r ->> 'created_at')
             returning w.id into new_id;
             return query select (r ->> 'request_id')::uuid, new_id, false;
-        elsif old.deleted = 0 and old.edited_at is null then
+        else
+            -- 고치기 조건은 UPDATE 자체에 둔다: 읽은 뒤 다른 창에서 '정보 수정'·삭제가 끼어들어도(먼저 커밋되면
+            -- PostgreSQL 이 최신 행으로 조건을 다시 본다) 덮어쓰지 않고, 실제로 바뀐 행이 없으면 kept_as_is = true
             update public.wardrobe_items w
                set name = r ->> 'name', category = r ->> 'category', subcategory = r ->> 'subcategory',
                    color = r ->> 'color', warmth = (r ->> 'warmth')::integer, rain_ok = (r ->> 'rain_ok')::integer,
                    material = r ->> 'material', image_path = r ->> 'image_path', notes = r ->> 'notes',
                    ai_category = r ->> 'ai_category', ai_subcategory = r ->> 'ai_subcategory',
                    ai_confidence = (r ->> 'ai_confidence')::double precision, created_at = r ->> 'created_at'
-             where w.id = old.id;
-            return query select (r ->> 'request_id')::uuid, old.id, false;
-        else
-            return query select (r ->> 'request_id')::uuid, old.id, true;
+             where w.id = old.id and w.deleted = 0 and w.edited_at is null;
+            get diagnostics changed = row_count;
+            return query select (r ->> 'request_id')::uuid, old.id, changed = 0;
         end if;
     end loop;
 end $$;

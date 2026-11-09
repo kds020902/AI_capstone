@@ -36,6 +36,7 @@ def test_checkpoint_present_but_torch_missing(monkeypatch, tmp_path):
 
 
 def test_broken_checkpoint_reports_load_error(monkeypatch, tmp_path):
+    pytest.importorskip("torch")      # PyTorch 가 없으면 'PyTorch 미설치' 안내가 먼저다 (위 시험)
     ck = tmp_path / "clothing_classifier.pt"
     ck.write_bytes(b"not a torch file")
     _reset(monkeypatch, ck)

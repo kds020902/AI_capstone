@@ -575,3 +575,52 @@ def test_save_wardrobe_items_function_is_one_transaction(conn, users):
         with conn.transaction():
             conn.execute("set local role anon")
             conn.execute("select * from public.save_wardrobe_items('[]'::jsonb)")
+
+
+def test_concurrent_edit_during_save_function_is_not_overwritten(conn, users):
+    """실제 PostgreSQL 두 연결: 연결 1이 '정보 수정'을 커밋하기 전에 연결 2의 옷 묶음 저장 함수가 같은 행을 읽고 UPDATE 에서
+    기다린다. 연결 1이 커밋하면 연결 2의 UPDATE 는 최신 행으로 조건(edited_at IS NULL)을 다시 보고 아무것도 안 바꾸며
+    kept_as_is 로 충돌을 알린다 (예전 함수는 이 수정을 덮어썼다)."""
+    import threading
+    import time
+    a, _ = users
+    req = str(uuid.uuid4())
+    with As(conn, a):
+        iid = CloudStore(_PgClient(conn), a).create_wardrobe_items(
+            a, [{"name": "카드", "category": "상의", "warmth": 2, "rain_ok": 0, "request_id": req}])[0]
+    window1 = psycopg.connect(DSN, autocommit=True)
+    window2 = psycopg.connect(DSN, autocommit=True)
+    result, errors = {}, []
+    try:
+        window1.execute("begin")
+        _become(window1, a)
+        window1.execute("update wardrobe_items set name = '다른 창에서 고침', edited_at = 'now' where id = %s", (iid,))
+
+        def save_retry():
+            try:
+                with As(window2, a):
+                    kept = []
+                    CloudStore(_PgClient(window2), a).create_wardrobe_items(
+                        a, [{"name": "카드 재시도", "category": "상의", "warmth": 2, "rain_ok": 0, "request_id": req}],
+                        conflicts=kept)
+                    result["kept"] = kept
+            except Exception as e:                       # 시험 스레드의 오류를 본 스레드로
+                errors.append(e)
+        t = threading.Thread(target=save_retry)
+        t.start()
+        pid = window2.info.backend_pid
+        for _ in range(100):                             # 연결 2가 행 잠금을 기다리는지 확인한 뒤 연결 1을 커밋
+            waiting = conn.execute("select wait_event_type from pg_stat_activity where pid = %s", (pid,)).fetchone()
+            if waiting and waiting[0] == "Lock":
+                break
+            time.sleep(0.05)
+        assert waiting and waiting[0] == "Lock", "연결 2가 잠금을 기다리지 않음"
+        window1.execute("commit")
+        t.join(10)
+        assert not errors, errors
+    finally:
+        window1.close()
+        window2.close()
+    assert result["kept"] == [req]
+    with As(conn, a) as s:
+        assert s.q("select name, edited_at is not null from wardrobe_items where id = %s", (iid,)) == [("다른 창에서 고침", True)]

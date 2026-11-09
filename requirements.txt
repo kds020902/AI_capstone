@@ -1,6 +1,7 @@
-# 배포에서 시험한 버전으로 고정 (Streamlit 1.66 은 Python 3.11 이상). Python 3.10 은 예전처럼 1.40 이상.
+# Streamlit 은 시험한 버전으로 고정한다. 1.66 은 Python 3.11 이상이라 Python 3.10 은 1.65.0 을 쓴다.
+# 1.65.0 은 Python 3.10 에서 설치·전체 시험을 통과한 '검증한 실행 버전'이다 (돌아가는 가장 낮은 버전이라는 뜻은 아니다).
 streamlit==1.66.0 ; python_version >= "3.11"
-streamlit>=1.40 ; python_version < "3.11"
+streamlit==1.65.0 ; python_version == "3.10"
 pandas>=2.0
 numpy>=1.24
 Pillow>=10.0

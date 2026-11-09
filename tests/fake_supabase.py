@@ -340,11 +340,10 @@ class _RPC:
             if not old:
                 new = t("wardrobe_items").insert({**r, "user_id": self.client.uid}).execute().data[0]
                 out.append({"req": r["request_id"], "item_id": new["id"], "kept_as_is": False})
-            elif old[0]["deleted"] == 0 and old[0]["edited_at"] is None:
-                t("wardrobe_items").update({k: v for k, v in r.items() if k != "request_id"}).eq("id", old[0]["id"]).execute()
-                out.append({"req": r["request_id"], "item_id": old[0]["id"], "kept_as_is": False})
-            else:
-                out.append({"req": r["request_id"], "item_id": old[0]["id"], "kept_as_is": True})
+            else:   # 고치기 조건은 UPDATE 자체에 (읽은 뒤 끼어든 수정·삭제를 덮어쓰지 않게), 바뀐 행이 없으면 충돌
+                done = (t("wardrobe_items").update({k: v for k, v in r.items() if k != "request_id"})
+                        .eq("id", old[0]["id"]).eq("deleted", 0).is_("edited_at", "null").execute().data)
+                out.append({"req": r["request_id"], "item_id": old[0]["id"], "kept_as_is": not done})
         return out
 
     def _export_user_logs(self, p):

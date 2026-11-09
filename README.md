@@ -9,7 +9,7 @@
 
 ## 실행 방법
 
-Python 3.10 이상이 필요합니다.
+Python 3.10 이상이 필요합니다. Streamlit 은 Python 3.11 이상에서 1.66.0, Python 3.10 에서 1.65.0 으로 고정되어 있습니다 (1.66 은 Python 3.11 이상만 지원. 1.65.0 은 Python 3.10 에서 설치·시험을 확인한 '검증한 실행 버전'이고, 돌아가는 가장 낮은 버전이라는 뜻은 아닙니다).
 
 ```bash
 pip install -r requirements.txt
