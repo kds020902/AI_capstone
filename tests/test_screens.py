@@ -32,7 +32,8 @@ def test_every_store_function_that_writes_wardrobe_is_watched():
         if fn.__module__ != "core.db" or name.startswith("_") or name == "init_db":
             continue
         src = inspect.getsource(fn)
-        if re.search(r'(UPDATE|INSERT INTO) wardrobe_items|_insert\(c, "wardrobe_items"|create_wardrobe_item\(', src):
+        if re.search(r'(UPDATE|INSERT INTO) wardrobe_items|(_insert|_save_by_request)\(c, "wardrobe_items"'
+                     r'|create_wardrobe_item\(', src):
             writers.add(name)
     assert {"create_wardrobe_items", "deactivate_item", "buy_candidate", "add_starter_wardrobe"} <= writers
     assert writers <= WARDROBE_CHANGES, writers - WARDROBE_CHANGES
@@ -77,3 +78,21 @@ def test_each_watched_function_really_changes_wardrobe_and_clears(tmp_path, monk
         assert snapshot() != before, f"{name}: 옷장·체질이 안 바뀜"
         assert len(cleared) == n + 1, f"{name}: 추천 비우기가 안 불림"
     assert {name for name, _ in steps} == WARDROBE_CHANGES
+
+
+
+def test_recommendation_request_key_covers_whole_stored_body():
+    """재시도 판단 키: 옷 id·점수가 같아도 옷 이름·이유·근거·날씨가 다르면 다른 요청."""
+    import copy
+
+    from screens.recommend import request_key
+    fields = ("등교", 12.0, 11.0, 60.0, 0.0, False, 8.0, "manual")
+    base = [{"score": 0.9, "pieces": [{"id": 1, "name": "셔츠"}], "reasons": ["이유"], "components": {"weather": 0.9}}]
+    k = request_key(fields, base)
+    assert request_key(fields, copy.deepcopy(base)) == k
+    for change in (lambda r: r[0]["pieces"][0].update(name="블라우스"), lambda r: r[0]["reasons"].append("저녁 안내"),
+                   lambda r: r[0]["components"].update(weather=0.8), lambda r: r[0].update(score=0.91)):
+        changed = copy.deepcopy(base)
+        change(changed)
+        assert request_key(fields, changed) != k
+    assert request_key(("운동",) + fields[1:], base) != k

@@ -145,6 +145,47 @@ def test_cloud_recommendation_retry_after_lost_response_keeps_one_session(cloud)
     assert len(cloud.rows("recommendation_sessions")) == 3
 
 
+def _shown_matches_db(at, cloud):
+    """화면에 보이는 추천마다, 붙은 추천 id의 DB 기록이 같은 내용(옷·이유·근거·점수)인지."""
+    import json
+    rows = {r["id"]: r for r in cloud.rows("recommendations")}
+    return all(json.loads(rows[r["recommendation_id"]]["reasons_json"]) == r["reasons"]
+               and json.loads(rows[r["recommendation_id"]]["pieces_json"]) == r["pieces"]
+               and json.loads(rows[r["recommendation_id"]]["components_json"]) == r["components"]
+               and rows[r["recommendation_id"]]["score"] == r["score"] for r in at.session_state["recommendations"])
+
+
+def test_cloud_recommendation_retry_with_changed_content_never_reuses_old_ids(cloud):
+    """응답 유실 뒤 저녁 외출을 켜서 이유(저녁 안내)만 달라진 추천은 새 요청: 옛 기록 id를 새 내용에 붙이지 않는다.
+    실패한 A → 실패한 B → 다시 A 는 A의 처음 요청 id로 돌아가 세션이 늘지 않는다."""
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    _signup(at, "rk@example.com")
+    _make_profile_recommend_and_save(at, "RK")                                   # 세션 1
+    _goto(at, "오늘의 추천")
+    _by_label(at.radio, "날씨").set_value("수동 입력").run()
+    cloud.rpc_faults["save_recommendation_session"] = "lost"
+    _button(at, "TOP 3 추천 생성").click().run()                                 # 세션 2 (응답 유실)
+    _by_label(at.checkbox, "저녁 늦게까지 밖에 있어요").check().run()
+    _button(at, "TOP 3 추천 생성").click().run()                                 # 내용이 달라 새 세션 3
+    assert not at.exception and len(cloud.rows("recommendation_sessions")) == 3
+    assert any("저녁" in x for r in at.session_state["recommendations"] for x in r["reasons"])
+    assert _shown_matches_db(at, cloud)
+
+    _by_label(at.checkbox, "저녁 늦게까지 밖에 있어요").uncheck().run()
+    cloud.rpc_faults["save_recommendation_session"] = "lost"
+    _button(at, "TOP 3 추천 생성").click().run()                                 # A: 세션 4 (응답 유실)
+    _by_label(at.selectbox, "외출 목적").set_value("운동").run()
+    cloud.rpc_faults["save_recommendation_session"] = "lost"
+    _button(at, "TOP 3 추천 생성").click().run()                                 # B: 세션 5 (응답 유실)
+    _by_label(at.selectbox, "외출 목적").set_value("등교").run()
+    _button(at, "TOP 3 추천 생성").click().run()                                 # 다시 A: 세션 4 재사용
+    assert not at.exception and len(cloud.rows("recommendation_sessions")) == 5
+    assert at.session_state["recommendation_session_id"] == cloud.rows("recommendation_sessions")[3]["id"]
+    assert _shown_matches_db(at, cloud)
+    _button(at, "TOP 3 추천 생성").click().run()                                 # 정상 저장 뒤엔 새 세션
+    assert len(cloud.rows("recommendation_sessions")) == 6 and _shown_matches_db(at, cloud)
+
+
 def test_cloud_mode_signup_with_email_confirmation(cloud):
     cloud.autoconfirm = False
     at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
@@ -239,7 +280,9 @@ def test_cloud_direct_add_retry_does_not_duplicate_photos_or_items(cloud):
     _confirm_all_and_save(at, 2)
     assert any("저장하지 못했어요" in e.value for e in at.error)
     assert len(cloud.rows("wardrobe_items")) == 5 and len(at.session_state.ba_cards) == 2
+    next(t for t in at.text_input if t.label == "이름").input("고친 이름").run()   # 응답 유실 뒤 카드를 고쳐서 다시 저장
     _button(at, "저장 (2장)").click().run()
+    assert "고친 이름" in [r["name"] for r in cloud.rows("wardrobe_items")]       # 새로 넣지 않고 고친 내용으로
     assert not at.exception and len(at.session_state.ba_cards) == 0
     assert len(cloud.objects) == 5 and len(cloud.rows("wardrobe_items")) == 5
     assert len({r["image_path"] for r in cloud.rows("wardrobe_items")}) == 5
@@ -263,12 +306,59 @@ def test_cloud_candidate_retry_does_not_duplicate(cloud):
     assert cloud.objects == {} and cloud.rows("purchase_candidates") == []
     cloud.faults[("purchase_candidates", "upsert")] = "lost"
     _button(at, "구매 후보로 저장").click().run()
-    assert any("두 번 저장되지 않아요" in e.value for e in at.error)
+    assert any("후보 하나만 저장돼요" in e.value for e in at.error)
     assert len(cloud.objects) == 1 and len(cloud.rows("purchase_candidates")) == 1
     _button(at, "구매 후보로 저장").click().run()
     assert not at.exception
     assert len(cloud.objects) == 1 and len(cloud.rows("purchase_candidates")) == 1
     assert any(m.value == "### " + cloud.rows("purchase_candidates")[0]["name"] for m in at.markdown)
+
+
+def _candidate_form(at, cloud, email):
+    at.run()
+    _signup(at, email)
+    _goto(at, "프로필")
+    _by_label(at.text_input, "이름 / 닉네임").input("C")
+    _button(at, "저장").click().run()
+    _goto(at, "사기 전에 맞춰보기")
+
+
+def _cand_name(at):
+    return next(t for t in at.text_input if t.label == "이름")
+
+
+def test_cloud_candidate_edit_after_lost_response_updates_same_candidate(cloud):
+    """구매 후보 저장 응답이 유실된 뒤 이름·링크를 고쳐 다시 저장해도 후보는 하나이고 고친 내용이 남는다.
+    실패한 A → 실패한 B → A 로 돌아와 저장해도 하나. 사진 없이 등록하는 후보도 같다.
+    저장에 성공한 뒤 같은 사진으로 다시 저장하면 일부러 새로 등록한 것이라 두 번째 후보가 생긴다."""
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT)
+    _candidate_form(at, cloud, "ce@example.com")
+    next(u for u in at.file_uploader if u.label.startswith("상품 사진")).set_value(_photo(4)).run()
+    _cand_name(at).input("A 코트").run()
+    cloud.faults[("purchase_candidates", "upsert")] = "lost"
+    _button(at, "구매 후보로 저장").click().run()                          # A 저장됨, 응답 유실
+    _cand_name(at).input("B 코트").run()
+    next(t for t in at.text_input if t.label.startswith("상품 링크")).input("https://example.com/b").run()
+    cloud.faults[("purchase_candidates", "upsert")] = "lost"
+    _button(at, "구매 후보로 저장").click().run()                          # 같은 등록을 B 로 고침, 또 응답 유실
+    assert [(c["name"], c["link"]) for c in cloud.rows("purchase_candidates")] == [("B 코트", "https://example.com/b")]
+    _cand_name(at).input("A 코트").run()
+    _button(at, "구매 후보로 저장").click().run()                          # 다시 A, 이번엔 성공
+    assert not at.exception
+    assert [c["name"] for c in cloud.rows("purchase_candidates")] == ["A 코트"] and len(cloud.objects) == 1
+    _button(at, "구매 후보로 저장").click().run()                          # 같은 사진·이름으로 일부러 한 번 더
+    assert len(cloud.rows("purchase_candidates")) == 2                   # 성공 뒤 같은 사진으로 새 등록 → 둘
+    assert len(cloud.objects) == 2
+
+    bt = AppTest.from_file(APP, default_timeout=TIMEOUT)                 # 사진 없는 후보
+    _candidate_form(bt, cloud, "cn@example.com")
+    _cand_name(bt).input("사진 없는 니트").run()
+    cloud.faults[("purchase_candidates", "upsert")] = "lost"
+    _button(bt, "구매 후보로 저장").click().run()
+    _cand_name(bt).input("사진 없는 니트(고침)").run()
+    _button(bt, "구매 후보로 저장").click().run()
+    mine = [c for c in cloud.rows("purchase_candidates") if c["name"].startswith("사진 없는")]
+    assert [c["name"] for c in mine] == ["사진 없는 니트(고침)"] and not bt.exception
 
 
 def _local_app(tmp_path, monkeypatch):

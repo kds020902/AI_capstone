@@ -18,10 +18,10 @@ from core.catalog import starter_for_gender
 from core.rows import candidate_row, wardrobe_row
 
 KST = timezone(timedelta(hours=9))
-PAGE = 1000          # 한 번에 받을 줄 수 (Supabase 기본 반환 한도). 서버 한도가 더 작아도 받은 만큼씩 넘어가 결과는 같다
+PAGE = 1000          # 한 번에 받을 줄 수 (Supabase 기본 반환 한도). 서버 한도가 더 작아도 전체 줄 수만큼 이어 받는다
 LOG_COLS = ("session_id", "started_at", "completed_at", "purpose", "temperature", "apparent_temperature", "humidity",
             "precipitation", "rain", "wind_speed", "weather_source", "recommendation_id", "rank", "score",
-            "pieces_json", "rating", "worn", "thermal_feedback", "satisfaction")    # core/db.py export 와 같은 순서
+            "rating", "worn", "thermal_feedback", "satisfaction")    # core/db.py export 와 같은 순서 (+ 있으면 outfit)
 
 
 def _now():
@@ -52,16 +52,21 @@ class CloudStore:
     def _rows(self, query):
         return list(query.execute().data or [])
 
-    def _all(self, make_query):
-        """여러 줄 조회를 끝까지 받는다. make_query() 는 select(..., count="exact") 와 정렬까지 정한 새 쿼리를 만든다
-        (같은 쿼리에 range 를 두 번 걸 수 없어서 쪽마다 새로 만든다). 전체 줄 수(count)만큼 받을 때까지 이어 받는다."""
-        out = []
+    def _all(self, make_query, desc=False):
+        """여러 줄 조회를 끝까지 받는다 (키셋). make_query() 는 select(..., count="exact") 와 조건까지 정한 새 쿼리.
+        id(고유하고 늘어나기만 함) 순서로 받고, 다음 쪽은 받은 마지막 id 다음부터라서 받는 도중 행이 추가·삭제돼도
+        이미 받은 행이 다시 오거나 남은 행을 건너뛰지 않는다 (offset 방식은 밀리거나 당겨지고, 범위를 넘으면 416).
+        첫 쪽의 전체 줄 수(count)만큼 받을 때까지 이어 받아서 서버 반환 한도가 PAGE 보다 작아도 끝까지 받는다."""
+        out, total = [], None
         while True:
-            res = make_query().range(len(out), len(out) + PAGE - 1).execute()
+            q = make_query()
+            if out:
+                q = q.lt("id", out[-1]["id"]) if desc else q.gt("id", out[-1]["id"])
+            res = q.order("id", desc=desc).limit(PAGE).execute()
             rows = list(res.data or [])
+            total = res.count if total is None else total
             out += rows
-            done = len(out) >= res.count if res.count is not None else len(rows) < PAGE
-            if not rows or done:
+            if not rows or (len(out) >= total if total is not None else len(rows) < PAGE):
                 return out
 
     def _insert(self, table, row):
@@ -108,24 +113,22 @@ class CloudStore:
             "rain_ok": rain_ok, "material": material, "image_path": image_path, "notes": notes,
             "ai_category": ai_category, "ai_subcategory": ai_subcategory, "ai_confidence": ai_confidence}, _now()))
 
-    def _insert_once(self, table, rows):
-        """요청 id 가 있는 행들을 넣는다. 같은 요청 id 로 이미 들어간 행은 건너뛰고(DB 고유 색인), 모든 행의 id 를
-        넣은 순서대로 돌려준다 → 저장 응답을 못 받고 다시 보내도 한 번만 들어간다."""
-        self._t(table).upsert(rows, on_conflict="user_id,request_id", ignore_duplicates=True).execute()
-        keys = [r["request_id"] for r in rows]
-        got = {r["request_id"]: r["id"] for r in self._all(lambda: self._t(table).select("id,request_id", count="exact")
-                                                             .eq("user_id", self.uid).in_("request_id", keys).order("id"))}
-        return [got[k] for k in keys]
-
-    def create_wardrobe_items(self, user_id, items):
-        """request_id 가 모두 있으면 같은 요청은 한 번만 넣는다 (SQLite 판과 같음)."""
-        self._own(user_id)
-        rows = [wardrobe_row(self.uid, x, _now()) for x in items]
+    def _save_by_request(self, table, rows):
+        """등록 요청 id 규칙 (SQLite 판과 같음): id 가 없는 행은 늘 새로, 있는 행은 같은 id 행이 있으면 지금 값으로 고치고
+        없으면 넣는다. upsert 한 번(= 한 거래)이라 중간에 실패하면 아무것도 안 바뀐다. id 를 넣은 순서대로 돌려준다.
+        같은 id 가 묶음 안에 반복되면 나중 값 하나만 보낸다 (PostgreSQL 은 한 문장에서 같은 행을 두 번 고칠 수 없다)."""
         if not rows:
             return []
-        if all(r["request_id"] for r in rows):
-            return self._insert_once("wardrobe_items", rows)
-        return [r["id"] for r in self._t("wardrobe_items").insert(rows).execute().data]
+        last = {r["request_id"]: i for i, r in enumerate(rows) if r["request_id"]}
+        send = [r for i, r in enumerate(rows) if not r["request_id"] or last[r["request_id"]] == i]
+        data = self._t(table).upsert(send, on_conflict="user_id,request_id").execute().data
+        by_request = {d["request_id"]: d["id"] for d in data if d.get("request_id")}
+        fresh = iter(d["id"] for d in data if not d.get("request_id"))   # 요청 id 없는 행은 보낸 순서대로 돌아온다
+        return [by_request[r["request_id"]] if r["request_id"] else next(fresh) for r in rows]
+
+    def create_wardrobe_items(self, user_id, items):
+        self._own(user_id)
+        return self._save_by_request("wardrobe_items", [wardrobe_row(self.uid, x, _now()) for x in items])
 
     def update_wardrobe_item(self, item_id, user_id, name, category, subcategory, color, warmth, rain_ok,
                              material="", notes=""):
@@ -139,8 +142,8 @@ class CloudStore:
 
         def query():
             q = self._t("wardrobe_items").select("*", count="exact").eq("user_id", self.uid).eq("deleted", 0)
-            return (q.eq("active", 1) if active_only else q).order("id", desc=True)
-        return self._all(query)
+            return q.eq("active", 1) if active_only else q
+        return self._all(query, desc=True)
 
     def count_wardrobe_items(self, user_id):
         return len(self.list_wardrobe_items(user_id, active_only=True))
@@ -173,7 +176,7 @@ class CloudStore:
     def list_inactive_items(self, user_id):
         self._own(user_id)
         return self._all(lambda: self._t("wardrobe_items").select("*", count="exact").eq("user_id", self.uid)
-                         .eq("active", 0).eq("deleted", 0).order("id", desc=True))
+                         .eq("active", 0).eq("deleted", 0), desc=True)
 
     def soft_delete_item(self, item_id, user_id):
         self._own(user_id)
@@ -197,16 +200,14 @@ class CloudStore:
     def create_candidate(self, user_id, name, category, subcategory, color, warmth, rain_ok, image_path="",
                          link="", ai_subcategory=None, ai_confidence=None, request_id=None):
         self._own(user_id)
-        row = candidate_row(self.uid, name, category, subcategory, color, warmth, rain_ok, image_path, link,
-                            ai_subcategory, ai_confidence, _now(), request_id)
-        if request_id:
-            return self._insert_once("purchase_candidates", [row])[0]
-        return self._insert("purchase_candidates", row)
+        return self._save_by_request("purchase_candidates", [candidate_row(
+            self.uid, name, category, subcategory, color, warmth, rain_ok, image_path, link, ai_subcategory,
+            ai_confidence, _now(), request_id)])[0]
 
     def list_candidates(self, user_id):
         self._own(user_id)
         return self._all(lambda: self._t("purchase_candidates").select("*", count="exact").eq("user_id", self.uid)
-                         .eq("deleted", 0).order("id", desc=True))
+                         .eq("deleted", 0), desc=True)
 
     def delete_candidate(self, candidate_id, user_id):
         self._own(user_id)
@@ -287,7 +288,7 @@ class CloudStore:
     def disliked_item_sets(self, user_id):
         self._own(user_id)
         rows = self._all(lambda: self._t("disliked_outfit_rows").select("id,pieces_json", count="exact")
-                         .eq("user_id", self.uid).order("id"))
+                         .eq("user_id", self.uid))
         return {frozenset(int(p["id"]) for p in json.loads(r["pieces_json"])) for r in rows}
 
     def count_recommendation_sessions(self, user_id):
@@ -303,7 +304,7 @@ class CloudStore:
         self._own(user_id)
         rows = self._all(lambda: self._t("saved_outfit_rows")
                          .select("id,saved_at,rank,score,pieces_json,purpose,temperature,humidity", count="exact")
-                         .eq("user_id", self.uid).order("id", desc=True))
+                         .eq("user_id", self.uid), desc=True)
         return [{**{k: r[k] for k in ("saved_at", "rank", "score", "pieces_json", "purpose", "temperature", "humidity")},
                  "outfit_text": " + ".join(p["name"] for p in json.loads(r["pieces_json"]))} for r in rows]
 
@@ -314,15 +315,13 @@ class CloudStore:
                 "top3_acceptance_rate": k["accepted_sessions"] / k["sessions"] if k["sessions"] else None}
 
     def export_user_logs(self, user_id):
-        """SQLite 판과 같은 열·순서 (세션 최신순, 순위순, 추천이 없는 세션도 한 줄). 줄이 많아도 끝까지 나눠 받는다."""
+        """SQLite 판과 같은 열·순서 (세션 최신순, 순위순, 추천이 없는 세션도 한 줄). DB 함수 한 번이 JSON 하나로 돌려줘서
+        한 시점의 전체 기록이고(나눠 받다 섞이지 않음) 반환 줄 한도도 받지 않는다. 옷 이름 줄(outfit)은 DB가 만든다."""
         self._own(user_id)
-        rows = self._all(lambda: self._t("recommendation_log_rows").select(",".join(LOG_COLS), count="exact")
-                         .eq("user_id", self.uid).order("session_id", desc=True).order("rank")
-                         .order("recommendation_id"))
         data = []
-        for r in rows:
-            d = {k: r[k] for k in LOG_COLS if k != "pieces_json"}
-            if r["pieces_json"]:
-                d["outfit"] = " + ".join(p["name"] for p in json.loads(r["pieces_json"]))
+        for r in self._rpc("export_user_logs", {}):
+            d = {k: r[k] for k in LOG_COLS}
+            if r.get("outfit") is not None:
+                d["outfit"] = r["outfit"]
             data.append(d)
         return pd.DataFrame(data)

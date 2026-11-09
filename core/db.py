@@ -223,20 +223,23 @@ def create_wardrobe_item(
     with conn() as c:
         return _insert(c, "wardrobe_items", wardrobe_row(user_id, item, datetime.now().isoformat(timespec="seconds")))
 
-def _existing_request(c, table, user_id, request_id):
-    """같은 요청 id 로 이미 넣은 행의 id (없으면 None)."""
-    if not request_id:
-        return None
-    row = c.execute(f"SELECT id FROM {table} WHERE user_id=? AND request_id=?", (user_id, str(request_id))).fetchone()
-    return row["id"] if row else None
+def _save_by_request(c, table, row):
+    """등록 요청 id 규칙 (Supabase 판과 같음): id 가 없으면 늘 새 행. 있으면 같은 id 행이 이미 있을 때 그 행을 지금 값으로
+    고치고(응답을 못 받은 저장 뒤 내용을 고쳐 다시 저장해도 한 행), 없으면 새로 넣는다. → 행 id"""
+    old = row.get("request_id") and c.execute(f"SELECT id FROM {table} WHERE user_id=? AND request_id=?",
+                                              (row["user_id"], row["request_id"])).fetchone()
+    if not old:
+        return _insert(c, table, row)
+    values = {k: v for k, v in row.items() if k not in ("user_id", "request_id")}
+    c.execute(f"UPDATE {table} SET {', '.join(f'{k}=?' for k in values)} WHERE id=?", [*values.values(), old["id"]])
+    return old["id"]
 
 def create_wardrobe_items(user_id, items):
-    """여러 벌을 한 번에 저장 (사진 여러 장 등록). items: create_wardrobe_item 의 인자 이름을 키로 갖는 dict 목록.
-    id 목록을 넣은 순서대로 돌려준다. request_id 가 있으면 같은 id 로 이미 넣은 옷은 다시 넣지 않고 그 id 를 준다."""
+    """여러 벌을 한 번에(한 거래로) 저장 (사진 여러 장 등록). items: create_wardrobe_item 의 인자 이름을 키로 갖는 dict 목록.
+    id 목록을 넣은 순서대로 돌려준다. request_id 규칙은 _save_by_request (같은 id 가 묶음 안에 반복되면 한 행, 나중 값)."""
     now = datetime.now().isoformat(timespec="seconds")
     with conn() as c:
-        return [_existing_request(c, "wardrobe_items", user_id, x.get("request_id"))
-                or _insert(c, "wardrobe_items", wardrobe_row(user_id, x, now)) for x in items]
+        return [_save_by_request(c, "wardrobe_items", wardrobe_row(user_id, x, now)) for x in items]
 
 def update_wardrobe_item(item_id, user_id, name, category, subcategory, color, warmth, rain_ok, material="", notes=""):
     """저장한 옷의 정보 고치기 (AI 기록·사진·계절은 그대로). 지운 옷은 고치지 않는다."""
@@ -305,10 +308,10 @@ def soft_delete_item(item_id, user_id):
 
 def create_candidate(user_id, name, category, subcategory, color, warmth, rain_ok, image_path="", link="",
                      ai_subcategory=None, ai_confidence=None, request_id=None):
-    """구매 후보 저장 → id. request_id 가 같으면 다시 넣지 않고 처음 넣은 후보의 id 를 준다."""
+    """구매 후보 저장 → id. request_id 규칙은 _save_by_request (같은 등록을 다시 저장하면 그 후보를 지금 값으로 고침)."""
     now = datetime.now().isoformat(timespec="seconds")
     with conn() as c:
-        return _existing_request(c, "purchase_candidates", user_id, request_id) or _insert(c, "purchase_candidates", candidate_row(
+        return _save_by_request(c, "purchase_candidates", candidate_row(
             user_id, name, category, subcategory, color, warmth, rain_ok, image_path, link, ai_subcategory,
             ai_confidence, now, request_id))
 

@@ -33,9 +33,17 @@ LEGACY_KEY_WARNING = (
 )
 
 
+# 옛 Streamlit 이 Secrets 파일이 없을 때 내는 FileNotFoundError 문구의 시작 (1.40: "No secrets found.", 그 전: "No secrets files found.")
+NO_SECRETS_PREFIXES = ("No secrets found.", "No secrets files found.")
+
+
 def _no_secrets_file(e):
-    """Streamlit 이 'Secrets 파일이 아예 없음'으로 낸 오류인지 (형식 오류와 같은 종류의 예외라 내용으로 구분)."""
-    return getattr(e, "error_id", None) == "no-secrets-found" or "No secrets" in str(e)
+    """Streamlit 이 'Secrets 파일이 아예 없음'으로 낸 오류인지. 새 버전은 error_id 로만 판단하고(형식 오류도 같은 예외 종류),
+    error_id 가 없는 옛 버전은 FileNotFoundError 이면서 알려진 문구로 시작할 때만 (형식 오류 본문에 'No secrets' 가 있어도 아님)."""
+    error_id = getattr(e, "error_id", None)
+    if error_id is not None:
+        return error_id == "no-secrets-found"
+    return isinstance(e, FileNotFoundError) and str(e).startswith(NO_SECRETS_PREFIXES)
 
 
 def get_setting(name, default=None):
@@ -46,17 +54,27 @@ def get_setting(name, default=None):
         import streamlit as st
     except ImportError:              # Streamlit 없이 도는 스크립트
         return default
+    secrets = st.secrets
+    # 옛 Streamlit(1.40 등)은 Secrets 를 읽다 실패하면 예외를 던지기 전에 오류 원문(이미 읽은 설정값이 섞일 수 있음)을
+    # 화면에 st.error 로 먼저 띄운다. 그 버전에만 있는 공개 함수로 읽는 동안만 끄고, 끝나면 원래대로 돌린다.
+    quiet = getattr(secrets, "set_suppress_print_error_on_exception", None)
+    before = bool(getattr(secrets, "_suppress_print_error_on_exception", False))
     try:
-        if name in st.secrets:
-            v = st.secrets[name]
+        if quiet:
+            quiet(True)
+        if name in secrets:
+            v = secrets[name]
             return str(v).strip() if v is not None else default
     except Exception as e:
         if _no_secrets_file(e):      # secrets.toml 이 없음 = 설정 안 함 (로컬 실행)
             return default
-        where = re.search(r"line \d+(?:, column \d+)?", str(e))   # 파일 내용(비밀값)은 문구에 넣지 않는다
+        where = re.search(r"line \d+(?:,? column \d+)?", str(e))   # 파일 내용(비밀값)은 문구에 넣지 않는다
         raise SettingsError("Streamlit Secrets 설정을 읽지 못했어요 (형식 오류"
                             + (f", {where.group(0)}" if where else "") + "). "
                             "secrets.toml 또는 앱 Settings → Secrets 의 형식을 확인해 주세요 (예: NAME = \"값\").") from None
+    finally:
+        if quiet:
+            quiet(before)
     return default
 
 

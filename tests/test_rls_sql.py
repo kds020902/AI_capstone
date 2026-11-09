@@ -174,10 +174,10 @@ class _PgQuery:
     """CloudStore 가 쓰는 만큼의 PostgREST 쿼리(select·insert·update·upsert, eq·in_·is_·order·range·count)를
     실제 SQL 로 바꿔 지금 거래(로그인 사용자의 RLS 적용) 안에서 실행한다. 가짜 백엔드가 아니라 실제 DB 동작 확인용."""
 
-    def __init__(self, conn, table):
-        self.conn, self.table = conn, table
+    def __init__(self, conn, table, client=None):
+        self.conn, self.table, self.client = conn, table, client
         self.op, self.cols, self.payload, self.where, self.args = "select", "*", None, [], []
-        self.orders, self.window, self.count, self.conflict = [], None, None, None
+        self.orders, self.window, self.count, self.conflict, self.row_limit = [], None, None, None, None
 
     def select(self, cols="*", count=None):
         self.cols, self.count = cols, count
@@ -188,8 +188,8 @@ class _PgQuery:
         return self
 
     def upsert(self, payload, on_conflict=None, ignore_duplicates=False):
-        assert ignore_duplicates
-        self.op, self.payload, self.conflict = "insert", payload, on_conflict
+        # PostgREST: ignore-duplicates → on conflict do nothing, 기본(merge-duplicates) → 보낸 열을 do update
+        self.op, self.payload, self.conflict, self.merge = "insert", payload, on_conflict, not ignore_duplicates
         return self
 
     def update(self, values):
@@ -205,6 +205,20 @@ class _PgQuery:
         vals = list(vals)
         self.where.append(f"{col}::text = any(%s)" if all(isinstance(v, str) for v in vals) else f"{col} = any(%s)")
         self.args.append(vals)
+        return self
+
+    def lt(self, col, val):
+        self.where.append(f"{col} < %s")
+        self.args.append(val)
+        return self
+
+    def gt(self, col, val):
+        self.where.append(f"{col} > %s")
+        self.args.append(val)
+        return self
+
+    def limit(self, n):
+        self.row_limit = n
         return self
 
     def is_(self, col, val):
@@ -235,7 +249,14 @@ class _PgQuery:
                 sql += " order by " + ", ".join(self.orders)
             if self.window:
                 sql += f" offset {self.window[0]} limit {self.window[1] - self.window[0] + 1}"
-            return SimpleNamespace(data=self._rows(self.conn.execute(sql, self.args)), count=total)
+            cap = min(x for x in (self.row_limit, getattr(self.client, "max_rows", None)) if x is not None) \
+                if self.row_limit is not None or getattr(self.client, "max_rows", None) else None
+            if cap is not None:                          # PostgREST 의 limit 과 서버 반환 한도(db-max-rows)
+                sql += f" limit {cap}"
+            rows = self._rows(self.conn.execute(sql, self.args))
+            if self.client is not None and self.client.after_select:
+                self.client.after_select.pop(0)()
+            return SimpleNamespace(data=rows, count=total)
         if self.op == "update":
             sets = ", ".join(f"{k} = %s" for k in self.payload)
             cur = self.conn.execute(f"update public.{self.table} set {sets}{where} returning *",
@@ -246,7 +267,8 @@ class _PgQuery:
         values = ", ".join("(" + ", ".join(["%s"] * len(cols)) + ")" for _ in rows)
         sql = f"insert into public.{self.table} ({', '.join(cols)}) values {values}"
         if self.conflict:
-            sql += f" on conflict ({self.conflict}) do nothing"
+            sets = ", ".join(f"{c} = excluded.{c}" for c in cols)
+            sql += f" on conflict ({self.conflict}) " + (f"do update set {sets}" if self.merge else "do nothing")
         cur = self.conn.execute(sql + " returning *", [r.get(c) for r in rows for c in cols])
         return SimpleNamespace(data=self._rows(cur), count=None)
 
@@ -255,11 +277,11 @@ class _PgClient:
     """CloudStore 의 client 자리에 넣는다: table(...) 은 위 _PgQuery, rpc(이름, 인자).execute() 는 실제 함수 호출.
     함수가 돌려주는 표를 PostgREST 처럼 [{열: 값}] 으로 돌려준다."""
 
-    def __init__(self, conn):
-        self.conn = conn
+    def __init__(self, conn, max_rows=None):
+        self.conn, self.max_rows, self.after_select = conn, max_rows, []
 
     def table(self, name):
-        return _PgQuery(self.conn, name)
+        return _PgQuery(self.conn, name, self)
 
     def rpc(self, fn, params):
         from psycopg.types.json import Jsonb
@@ -269,7 +291,10 @@ class _PgClient:
         def execute():
             cur = self.conn.execute(sql, args)
             cols = [d.name for d in cur.description]
-            return SimpleNamespace(data=[dict(zip(cols, r)) for r in cur.fetchall()])
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            if cols == [fn]:                     # 값 하나(jsonb 등)를 돌려주는 함수: PostgREST 는 그 값을 그대로 준다
+                return SimpleNamespace(data=rows[0][fn])
+            return SimpleNamespace(data=rows)
         return SimpleNamespace(execute=execute)
 
 
@@ -438,3 +463,56 @@ def test_cloud_store_on_real_postgres_matches_sqlite(conn, tmp_path, monkeypatch
     for key in local:
         assert remote[key] == local[key], key
     assert len(local["log_rows"]) == 8 and len(local["items"]) == 29
+
+
+def test_request_id_rule_on_real_postgres(conn, users):
+    """등록 요청 id 규칙(전부 id / 전부 없음 / 섞임 / 재시도 / 묶음 안 반복 / 고쳐서 다시 저장)이 실제 PostgreSQL 의
+    on conflict do update(RLS 적용)로도 SQLite·가짜 백엔드와 같은 결과. 둘째 행이 NOT NULL 을 어기면 묶음 전체가 안 들어간다."""
+    from tests.test_cloud_store import EXPECTED_RULE, request_rule_scenario
+    a, b = users
+    with As(conn, a) as s:
+        store = CloudStore(_PgClient(conn), a)
+        assert request_rule_scenario(store, a) == EXPECTED_RULE
+        before = s.q("select count(*) from wardrobe_items")
+        bad = [{"name": "첫째", "category": "상의", "warmth": 2, "rain_ok": 0, "request_id": str(uuid.uuid4())},
+               {"name": None, "category": "상의", "warmth": 2, "rain_ok": 0}]
+        with pytest.raises(psycopg.errors.NotNullViolation):
+            with conn.transaction():
+                store.create_wardrobe_items(a, bad)
+        assert s.q("select count(*) from wardrobe_items") == before
+    with As(conn, b) as s:                       # B 가 A 와 같은 요청 id 를 써도 A 의 행을 고치지 못하고 자기 행이 생긴다
+        sb = CloudStore(_PgClient(conn), b)
+        sb.create_wardrobe_items(b, [{"name": "B 옷", "category": "상의", "warmth": 2, "rain_ok": 0,
+                                      "request_id": "6f1c1e0a-3a52-4c63-9a0e-000000000001"}])
+        assert [r[0] for r in s.q("select name from wardrobe_items")] == ["B 옷"]
+    with As(conn, a) as s:
+        assert ("A(고침)",) in s.q("select name from wardrobe_items")
+
+
+def test_keyset_paging_and_log_export_on_real_postgres(conn, users, monkeypatch):
+    """실제 SQL 로: 서버 반환 한도(2줄)가 PAGE(3)보다 작고, 쪽 사이에 옷이 추가·삭제돼도 중복·건너뜀이 없다.
+    추천 로그는 DB 함수 하나(jsonb)로 받아 반환 한도를 받지 않고, 추천 없는 세션의 NULL 순위도 SQLite 처럼 정렬된다."""
+    from core import cloud_store
+    monkeypatch.setattr(cloud_store, "PAGE", 3)
+    a, b = users
+    with As(conn, a) as s:
+        client = _PgClient(conn, max_rows=2)
+        store = CloudStore(client, a)
+        ids = store.create_wardrobe_items(a, [{"name": f"옷{i}", "category": "상의", "warmth": 2, "rain_ok": 0}
+                                              for i in range(6)])
+        top = sorted(ids, reverse=True)
+        client.after_select += [lambda: store.create_wardrobe_item(a, "새 옷", "상의", None, None, 2, 0),
+                                lambda: store.soft_delete_item(top[0], a)]
+        got = [x["id"] for x in store.list_wardrobe_items(a)]
+        assert got == top and len(got) == len(set(got))            # 새 옷은 이번 목록 밖, 지운 옷은 이미 받음
+        res = [{"score": 0.9, "pieces": [{"id": 1, "name": "셔츠"}, {"id": 2, "name": "운동화"}], "reasons": [],
+                "components": {}}] * 2
+        store.save_recommendation_session(a, str(uuid.uuid4()), "등교", 12, 11, 60, 0, False, 8, "manual", res)
+        store.save_recommendation_session(a, str(uuid.uuid4()), "운동", 20, 20, 50, 0, False, 5, "manual", [])
+        rows = store.export_user_logs(a).to_dict("records")
+        assert [(r["purpose"], r["rank"] if r["rank"] == r["rank"] else None) for r in rows] == \
+            [("운동", None), ("등교", 1), ("등교", 2)]
+        assert rows[1]["outfit"] == "셔츠 + 운동화" and len(rows) == 3        # 서버 한도 2줄과 상관없이 3줄
+        assert s.q("select count(*) from recommendations") == [(2,)]
+    with As(conn, b):
+        assert CloudStore(_PgClient(conn), b).export_user_logs(b).empty   # 남의 기록은 함수로도 안 보임

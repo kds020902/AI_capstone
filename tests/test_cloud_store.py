@@ -298,29 +298,90 @@ def test_recommendation_bundle_is_all_or_nothing_and_retry_safe(tmp_path, monkey
     assert len(cloud.export_user_logs(client.uid)) == 6
 
 
-def test_same_request_id_registers_once(tmp_path):
-    """사진 등록·구매 후보: 같은 요청 id로 다시 저장하면(응답 유실 뒤 재시도) 새로 넣지 않고 처음 id를 돌려준다 (두 저장소 같음)."""
-    db.DB_PATH = tmp_path / "once.sqlite3"
+def _req(n):
+    return f"6f1c1e0a-3a52-4c63-9a0e-{n:012d}"
+
+
+def request_rule_scenario(store, uid):
+    """등록 요청 id 규칙: id 없으면 늘 새 행, 있으면 같은 id 행을 지금 값으로 고침(없으면 넣음), 묶음 안 반복은 한 행·나중 값.
+    tests/test_rls_sql.py 가 같은 장면을 실제 PostgreSQL 에도 돌린다."""
+    shirt = {"name": "셔츠", "category": "상의", "subcategory": "셔츠", "color": "white", "warmth": 2, "rain_ok": 0}
+    out = {}
+    both = [{**shirt, "name": "A", "request_id": _req(1)}, {**shirt, "name": "B", "request_id": _req(2)}]
+    a = store.create_wardrobe_items(uid, both)                                   # 전부 요청 id
+    out["uuid_retry"] = store.create_wardrobe_items(uid, both) == a
+    nulls = [{**shirt, "name": "N1"}, {**shirt, "name": "N2", "request_id": None}]
+    n1, n2 = store.create_wardrobe_items(uid, nulls), store.create_wardrobe_items(uid, nulls)   # 전부 없음
+    out["null_new_each_time"] = len(set(n1) | set(n2)) == 4
+    mixed = [{**shirt, "name": "M", "request_id": _req(3)}, {**shirt, "name": "M0", "request_id": None}]
+    m1, m2 = store.create_wardrobe_items(uid, mixed), store.create_wardrobe_items(uid, mixed)   # 섞임 + 재시도
+    out["mixed_retry"] = (m1[0] == m2[0], m1[1] != m2[1])
+    edited = store.create_wardrobe_items(uid, [{**shirt, "name": "A(고침)", "color": "black", "request_id": _req(1)}])
+    out["edit_after_retry"] = edited == a[:1]
+    r = store.create_wardrobe_items(uid, [{**shirt, "name": "R1", "request_id": _req(4)},
+                                          {**shirt, "name": "R2", "request_id": _req(4)}, {**shirt, "name": "R3"}])
+    out["repeat_in_batch"] = (r[0] == r[1], r[2] not in r[:2])
+    out["empty"] = store.create_wardrobe_items(uid, [])
+    c1 = store.create_candidate(uid, "후보", "아우터", "코트", "beige", 3, 0, request_id=_req(5))
+    c2 = store.create_candidate(uid, "후보(고침)", "아우터", "코트", "beige", 3, 0, link="https://example.com/x",
+                                request_id=_req(5))
+    out["candidate_edit_same_row"] = c1 == c2
+    store.create_candidate(uid, "사진 없는 후보", "상의", "니트", "red", 3, 0)
+    store.create_candidate(uid, "사진 없는 후보", "상의", "니트", "red", 3, 0)
+    out["items"] = sorted((x["name"], x["color"]) for x in store.list_wardrobe_items(uid))
+    out["candidates"] = sorted((x["name"], x["link"]) for x in store.list_candidates(uid))
+    return out
+
+
+EXPECTED_RULE = {
+    "uuid_retry": True, "null_new_each_time": True, "mixed_retry": (True, True), "edit_after_retry": True,
+    "repeat_in_batch": (True, True), "empty": [], "candidate_edit_same_row": True,
+    "items": sorted([("A(고침)", "black"), ("B", "white"), ("N1", "white"), ("N2", "white"), ("N1", "white"),
+                     ("N2", "white"), ("M", "white"), ("M0", "white"), ("M0", "white"), ("R2", "white"),
+                     ("R3", "white")]),
+    "candidates": [("사진 없는 후보", ""), ("사진 없는 후보", ""), ("후보(고침)", "https://example.com/x")],
+}
+
+
+def test_request_id_rule_is_the_same_in_both_stores(tmp_path):
+    db.DB_PATH = tmp_path / "rule.sqlite3"
     db.init_db()
-    local_uid = db.create_user("나", "male", 0, 0)
-    client = signed_in_client(FakeBackend(), "once@example.com")
+    client = signed_in_client(FakeBackend(), "rule@example.com")
     cloud = CloudStore(client, client.uid)
     cloud.create_user("나", "male", 0, 0)
-    rows = [{"name": f"셔츠{i}", "category": "상의", "subcategory": "셔츠", "color": "white", "warmth": 2,
-             "rain_ok": 0, "image_path": f"p{i}.jpg", "request_id": f"6f1c1e0a-3a52-4c63-9a0e-00000000000{i}"}
-            for i in range(3)]
-    out = {}
-    for name, store, uid in (("local", db, local_uid), ("cloud", cloud, client.uid)):
-        first = store.create_wardrobe_items(uid, rows[:2])
-        again = store.create_wardrobe_items(uid, rows)                 # 앞 2벌은 이미 있음, 셋째만 새로
-        cand = store.create_candidate(uid, "후보", "아우터", "코트", "beige", 3, 0, request_id=REQ)
-        out[name] = (len(first), again[:2] == first, len(set(again)),
-                     store.create_candidate(uid, "후보(고침)", "아우터", "코트", "beige", 3, 0, request_id=REQ) == cand,
-                     sorted(x["name"] for x in store.list_wardrobe_items(uid)),
-                     [c["name"] for c in store.list_candidates(uid)])
-        store.create_wardrobe_items(uid, [{**rows[0], "request_id": None, "name": "요청 id 없음"}] * 2)  # 예전처럼 매번 새로
-        assert len(store.list_wardrobe_items(uid)) == 5
-    assert out["local"] == out["cloud"] == (2, True, 3, True, ["셔츠0", "셔츠1", "셔츠2"], ["후보"])
+    assert request_rule_scenario(db, db.create_user("나", "male", 0, 0)) == EXPECTED_RULE
+    assert request_rule_scenario(cloud, client.uid) == EXPECTED_RULE
+
+
+def test_batch_save_is_all_or_nothing(tmp_path, monkeypatch):
+    """묶음 저장 중간(둘째 행)에 실패하면 앞 행도 남지 않는다 (SQLite 거래, 가짜 백엔드도 요청 하나를 되돌림)."""
+    shirt = {"name": "셔츠", "category": "상의", "subcategory": "셔츠", "color": "white", "warmth": 2, "rain_ok": 0}
+    batch = [{**shirt, "request_id": _req(1)}, {**shirt, "name": "둘째"}]
+    db.DB_PATH = tmp_path / "atomic.sqlite3"
+    db.init_db()
+    uid = db.create_user("나", "male", 0, 0)
+    real, seen = db._insert, []
+
+    def second_fails(c, table, values):
+        seen.append(table)
+        if table == "wardrobe_items" and seen.count("wardrobe_items") == 2:
+            raise RuntimeError("둘째 행 실패")
+        return real(c, table, values)
+    monkeypatch.setattr(db, "_insert", second_fails)
+    with pytest.raises(RuntimeError):
+        db.create_wardrobe_items(uid, batch)
+    monkeypatch.undo()
+    assert db.list_wardrobe_items(uid) == []
+
+    backend = FakeBackend()
+    client = signed_in_client(backend, "atomic@example.com")
+    cloud = CloudStore(client, client.uid)
+    cloud.create_user("나", "male", 0, 0)
+    backend.faults[("wardrobe_items", "upsert")] = "partial"          # 첫 행을 넣은 뒤 실패
+    with pytest.raises(FakeAPIError):
+        cloud.create_wardrobe_items(client.uid, batch)
+    assert cloud.list_wardrobe_items(client.uid) == [] and backend.rows("wardrobe_items") == []
+    assert len(cloud.create_wardrobe_items(client.uid, batch)) == 2    # 다시 하면 둘 다
 
 
 def test_photo_with_request_key_is_saved_once(tmp_path):
@@ -353,3 +414,74 @@ def test_photo_cache_drops_oldest_when_full():
     assert cache["a"] == b"1234"            # a를 최근에 씀 → b가 가장 오래됨
     cache["c"] = b"9012"
     assert "b" not in cache and "a" in cache and "c" in cache and len(cache) == 2
+
+
+def _six(monkeypatch, max_rows=1000):
+    from core import cloud_store
+    monkeypatch.setattr(cloud_store, "PAGE", 3)
+    backend = FakeBackend()
+    backend.max_rows = max_rows
+    client = signed_in_client(backend, "page@example.com")
+    store = CloudStore(client, client.uid)
+    store.create_user("나", "male", 0, 0)
+    store.create_wardrobe_items(client.uid, [{"name": f"옷{i}", "category": "상의", "warmth": 2, "rain_ok": 0}
+                                             for i in range(1, 7)])
+    return backend, client, store
+
+
+@pytest.mark.parametrize("change, expected", [
+    ("add", [6, 5, 4, 3, 2, 1]),              # 첫 쪽 뒤 새 옷(id 7): 이미 받은 id 위라 이번 목록엔 없고 중복도 없음
+    ("delete_fetched", [6, 5, 4, 3, 2, 1]),   # 이미 받은 6을 지워도 3을 건너뛰지 않음 (offset 방식은 3이 빠짐)
+    ("delete_unfetched", [6, 5, 4, 3, 1]),    # 아직 안 받은 2를 지우면 2만 없음
+    ("deactivate", [6, 5, 4, 3, 2]),          # 조회 조건 변경: 아직 안 받은 1을 넣어 두면 1만 없음
+    ("delete_many", [6, 5, 4]),               # 남은 줄보다 많이 지워도 범위 오류(416) 없이 끝남
+])
+def test_list_paging_is_stable_when_rows_change_between_pages(monkeypatch, change, expected):
+    backend, client, store = _six(monkeypatch)
+    uid = client.uid
+    act = {"add": lambda: store.create_wardrobe_item(uid, "옷7", "상의", None, None, 2, 0),
+           "delete_fetched": lambda: store.soft_delete_item(6, uid),
+           "delete_unfetched": lambda: store.soft_delete_item(2, uid),
+           "deactivate": lambda: store.deactivate_item(1, uid),
+           "delete_many": lambda: [store.soft_delete_item(i, uid) for i in (1, 2, 3)]}[change]
+    backend.after_select.append(act)
+    ids = [x["id"] for x in store.list_wardrobe_items(uid)]
+    assert ids == expected and len(ids) == len(set(ids))
+
+
+def test_paging_with_server_limit_smaller_than_page_and_empty_results(monkeypatch):
+    """서버가 한 번에 2줄만 줘도(PAGE 3) 전체 줄 수만큼 이어 받는다. 새 사용자는 모든 목록이 빈 결과."""
+    backend, client, store = _six(monkeypatch, max_rows=2)
+    backend.calls.clear()
+    assert [x["id"] for x in store.list_wardrobe_items(client.uid)] == [6, 5, 4, 3, 2, 1]
+    assert backend.calls.count(("wardrobe_items", "select")) == 3
+    other = signed_in_client(backend, "empty@example.com")
+    so = CloudStore(other, other.uid)
+    so.create_user("빈", "male", 0, 0)
+    assert so.list_wardrobe_items(other.uid) == [] and so.list_candidates(other.uid) == []
+    assert so.list_saved_outfits(other.uid) == [] and so.disliked_item_sets(other.uid) == set()
+    assert so.export_user_logs(other.uid).empty
+
+
+def test_log_export_order_with_sessions_without_results(tmp_path):
+    """추천 로그: 세션 최신순, 세션 안은 순위순, 추천이 없는 세션(순위·추천 id 가 NULL)도 한 줄 — SQLite 와 같은 순서."""
+    db.DB_PATH = tmp_path / "log.sqlite3"
+    db.init_db()
+    client = signed_in_client(FakeBackend(), "log@example.com")
+    cloud = CloudStore(client, client.uid)
+    cloud.create_user("나", "male", 0, 0)
+    res = [{"score": 0.9 - i / 10, "pieces": [{"id": i, "name": f"옷{i}"}, {"id": 9, "name": "신발"}], "reasons": [],
+            "components": {}} for i in range(3)]
+    out = {}
+    for name, store, uid in (("local", db, db.create_user("나", "male", 0, 0)), ("cloud", cloud, client.uid)):
+        store.save_recommendation_session(uid, _req(1), "등교", 12, 11, 60, 0, False, 8, "manual", res)
+        store.save_recommendation_session(uid, _req(2), "운동", 20, 20, 50, 0, False, 5, "manual", [])
+        store.save_recommendation_session(uid, _req(3), "외출", 5, 3, 70, 1, True, 9, "manual", res[:2])
+        store.save_recommendation_session(uid, _req(4), "격식", 25, 26, 40, 0, False, 2, "manual", [])
+        logs = store.export_user_logs(uid)
+        out[name] = (list(logs.columns), [(r["purpose"], None if r["rank"] != r["rank"] else r["rank"],
+                                           r.get("outfit") if isinstance(r.get("outfit"), str) else None)
+                                          for r in logs.to_dict("records")])
+    assert out["local"] == out["cloud"]
+    assert [x[0] for x in out["local"][1]] == ["격식", "외출", "외출", "운동", "등교", "등교", "등교"]
+    assert out["local"][1][1] == ("외출", 1, "옷0 + 신발") and out["local"][1][0][1] is None

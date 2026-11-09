@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import uuid
 from types import SimpleNamespace
 
@@ -84,7 +85,7 @@ def _sort_key(col):
 
 
 def _fault(backend, key):
-    """시험용 실패 주입: backend.faults[key] = "error"(저장 전 실패) / "lost"(저장은 됐는데 응답 유실),
+    """시험용 실패 주입: backend.faults[key] = "error"(저장 전 실패) / "lost"(저장은 됐는데 응답 유실) / "partial"(첫 행 뒤 실패),
     또는 [None, "error"] 처럼 부를 때마다 하나씩. key = (표, 동작) 또는 ("storage", "upload")."""
     v = backend.faults.get(key)
     if isinstance(v, list):
@@ -105,6 +106,7 @@ class FakeBackend:
         self.max_rows = 1000  # Supabase API 의 한 번 조회 최대 줄 수 (시험에서 작게 바꿔 나눠 받기를 확인)
         self.rpc_faults = {}  # DB 함수 이름 -> "error"(중간 실패, 되돌림) / "lost"(저장됐는데 응답 유실). 한 번만 적용
         self.faults = {}      # 표 쓰기·사진 올리기 실패 주입 (_fault 참고)
+        self.after_select = []  # 시험용: 조회 한 번이 끝날 때마다 하나씩 꺼내 실행 (쪽 사이에 행 추가·삭제 흉내)
 
     def rows(self, table):
         return self.tables.setdefault(table, [])
@@ -119,11 +121,23 @@ class _Query:
         self.client, self.table = client, table
         self.op, self.payload, self.filters = "select", None, []
         self.order_by, self.on_conflict, self.ignore_dup = [], None, False
-        self.count, self.window = None, None
+        self.count, self.window, self.row_limit = None, None, None
 
     # 조건
     def select(self, cols="*", count=None, **kw):
         self.op, self.count = "select", count
+        return self
+
+    def lt(self, col, val):
+        self.filters.append(lambda r: r.get(col) is not None and r.get(col) < val)
+        return self
+
+    def gt(self, col, val):
+        self.filters.append(lambda r: r.get(col) is not None and r.get(col) > val)
+        return self
+
+    def limit(self, n):
+        self.row_limit = n
         return self
 
     def range(self, start, end):
@@ -190,9 +204,16 @@ class _Query:
         for f in self.filters:
             rows = [r for r in rows if f(r)]
         fault = None if self.op == "select" else _fault(b, (self.table, self.op))
+        self.partial_fault = fault == "partial"
         if fault == "error":
             raise FakeAPIError(f"server error while writing {self.table}")
-        result = self._apply(b, uid, rows)
+        before = None if self.op == "select" else copy.deepcopy((b.tables, b.next_id))
+        try:
+            result = self._apply(b, uid, rows)
+        except Exception:                 # 요청 하나 = 문장 하나 = 거래 하나: 중간에 실패하면 아무것도 안 바뀜
+            if before is not None:
+                b.tables, b.next_id = before
+            raise
         if fault == "lost":
             raise FakeAPIError(f"connection lost after writing {self.table}")
         return result
@@ -204,8 +225,15 @@ class _Query:
                 out.sort(key=_sort_key(col), reverse=desc)
             total = len(out)
             if self.window:
+                if self.count == "exact" and self.window[0] > 0 and self.window[0] >= total:
+                    raise FakeAPIError("PGRST103 Requested range not satisfiable (416)")   # PostgREST 흉내 (근사)
                 out = out[self.window[0]:self.window[1] + 1]
-            return _Result(data=out[:b.max_rows], count=total if self.count == "exact" else None)
+            if self.row_limit is not None:
+                out = out[:self.row_limit]
+            result = _Result(data=out[:b.max_rows], count=total if self.count == "exact" else None)
+            if b.after_select and self.table != "profiles":
+                b.after_select.pop(0)()
+            return result
         if self.op == "update":
             for r in rows:
                 r.update(copy.deepcopy(self.payload))
@@ -215,14 +243,22 @@ class _Query:
             b.tables[self.table] = [r for r in b.rows(self.table) if id(r) not in gone]
             return _Result(data=copy.deepcopy(rows))
         payload = self.payload if isinstance(self.payload, list) else [self.payload]
-        created = []
+        created, touched = [], set()
         for row in payload:
             row = copy.deepcopy(row)
             self._check_row(row, uid)
             if self.table in UNIQUE and all(row.get(k) is not None for k in UNIQUE[self.table]):
                 keys = UNIQUE[self.table]
-                if any(all(r.get(k) == row.get(k) for k in keys) for r in b.rows(self.table)):
-                    if self.op == "upsert" and self.ignore_dup:
+                same = next((r for r in b.rows(self.table) if all(r.get(k) == row.get(k) for k in keys)), None)
+                if same is not None:
+                    if self.op == "upsert" and self.ignore_dup:      # on conflict do nothing
+                        continue
+                    if self.op == "upsert":                          # on conflict do update (merge-duplicates)
+                        if id(same) in touched:
+                            raise FakeAPIError("ON CONFLICT DO UPDATE command cannot affect row a second time")
+                        touched.add(id(same))
+                        same.update(row)
+                        created.append(copy.deepcopy(same))
                         continue
                     raise FakeAPIError("duplicate key value violates unique constraint")
             if self.table == "profiles":
@@ -234,7 +270,10 @@ class _Query:
             for col, default in DEFAULTS.get(self.table, {}).items():
                 row.setdefault(col, default)
             b.rows(self.table).append(row)
+            touched.add(id(row))
             created.append(copy.deepcopy(row))
+            if self.partial_fault:                   # 시험용: 첫 행을 넣은 뒤 실패 (요청 전체가 되돌아가야 함)
+                raise FakeAPIError(f"server error in the middle of writing {self.table}")
         return _Result(data=created)
 
 
@@ -247,6 +286,7 @@ class _RPC:
         "save_recommendation_session": {"p_request_id", "p_purpose", "p_temperature", "p_apparent_temperature",
                                         "p_humidity", "p_precipitation", "p_rain", "p_wind_speed",
                                         "p_weather_source", "p_started_at", "p_results"},
+        "export_user_logs": set(),
     }
 
     def __init__(self, client, fn, params):
@@ -288,6 +328,19 @@ class _RPC:
             "ai_subcategory": c["ai_subcategory"], "ai_confidence": c["ai_confidence"],
             "created_at": p["p_created_at"]}).execute().data
         return [{"new_item_id": new[0]["id"]}]
+
+    def _export_user_logs(self, p):
+        """jsonb 하나(목록)를 돌려주는 함수: PostgREST 는 그 값을 그대로 data 로 준다 (반환 줄 한도 없음)."""
+        rows = _view_rows(self.client.backend, self.client.uid, "recommendation_log_rows")
+        rows.sort(key=lambda r: (r["recommendation_id"] is not None, r["recommendation_id"] or 0))
+        rows.sort(key=lambda r: (r["rank"] is not None, r["rank"] or 0))
+        rows.sort(key=lambda r: r["session_id"], reverse=True)
+        out = []
+        for r in rows:
+            d = {k: v for k, v in r.items() if k not in ("user_id", "pieces_json")}
+            d["outfit"] = None if r["pieces_json"] is None else " + ".join(x["name"] for x in json.loads(r["pieces_json"]))
+            out.append(d)
+        return out
 
     def _save_recommendation_session(self, p):
         t, uid = self.client.table, self.client.uid

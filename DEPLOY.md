@@ -20,7 +20,7 @@ PC나 Colab을 켜 두지 않아도 되는 무료 서비스만 씁니다. 비용
 
 1. <https://supabase.com> 에 가입하고 **New project** (Free). 지역은 `Northeast Asia (Seoul)` 권장. DB 비밀번호는 따로 적어 둡니다.
 2. 왼쪽 **SQL Editor → New query** 에 저장소의 `supabase/schema.sql` 내용을 전부 붙여 넣고 **Run**.
-   - 표 7개, 사용자별 접근 정책(RLS), 비공개 사진 버킷 `wardrobe`(파일당 5MB, jpg/png/webp), 한 거래로 처리하는 DB 함수 2개(`buy_candidate` '샀어요', `save_recommendation_session` 추천 기록), 기록 조회용 뷰 4개(저장 코디·'별로'·추천 로그·KPI, PostgreSQL 15 이상 필요 — 새 Supabase 프로젝트는 해당)가 만들어집니다.
+   - 표 7개, 사용자별 접근 정책(RLS), 비공개 사진 버킷 `wardrobe`(파일당 5MB, jpg/png/webp), 한 거래로 처리하는 DB 함수 2개(`buy_candidate` '샀어요', `save_recommendation_session` 추천 기록), 추천 로그 CSV 함수(`export_user_logs`), 기록 조회용 뷰 4개(저장 코디·'별로'·추천 로그·KPI, PostgreSQL 15 이상 필요 — 새 Supabase 프로젝트는 해당)가 만들어집니다.
    - 여러 번 실행해도 안전합니다.
    - **이미 배포한 프로젝트도 `schema.sql` 이 바뀌면 다시 Run 한 뒤에 새 코드를 배포(push)합니다.** 2026-11-09 코드부터 앱이 위 DB 함수·뷰와 요청 id 열을 쓰므로, 다시 실행하지 않으면 '샀어요'·추천 저장·사진 등록·저장 코디·KPI 화면이 오류가 납니다.
 3. **Authentication → Sign In / Providers → Email** 에서 **Confirm email 을 끕니다.**
@@ -148,6 +148,7 @@ python scripts/migrate_to_supabase.py --user-id 1 --email me@example.com
 | 증상 | 확인할 것 |
 |---|---|
 | 앱이 "service_role/secret 키가 들어 있어요" 로 멈춤 | Secrets 의 `SUPABASE_KEY` 를 publishable 키(`sb_publishable_...`)로 교체 |
+| `schema.sql` 실행 중 `cannot change name of view column` / `cannot drop columns from view` | 같은 이름인데 열이 다른 옛 실험판 뷰가 있음. SQL Editor에서 `select pg_get_viewdef('public.<뷰 이름>')` 로 정의를 확인하고, 이 저장소 뷰(`saved_outfit_rows`·`disliked_outfit_rows`·`recommendation_log_rows`·`kpi_rows`)가 아니면 그 뷰만 `drop view public.<뷰 이름>;` (CASCADE 없이, 다른 것이 쓰면 오류로 멈춤) 한 뒤 `schema.sql` 다시 Run |
 | 앱이 "… 는 있는데 … 가 없어요" 로 멈춤 | Secrets 에 `SUPABASE_URL`·`SUPABASE_KEY` 를 둘 다 넣기 (로그인 없는 공용 로컬 모드로 열리지 않게 일부러 멈춤) |
 | 앱이 "Streamlit Secrets 설정을 읽지 못했어요 (형식 오류, line n)" 로 멈춤 | Secrets 의 n번째 줄 형식 확인: `NAME = "값"` (값은 큰따옴표) |
 | Logs 에 "예전 anon public 키" 경고 | 1-4 의 순서대로 publishable 키로 교체 (예전 키는 2026년 말까지 폐지 예정) |

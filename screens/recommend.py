@@ -1,6 +1,8 @@
 """오늘의 추천: 날씨(자동·수동)와 외출 목적으로 TOP 3 코디를 만들고 저장·피드백을 받는다."""
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import date
 
@@ -8,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from core import weather
-from core.recommender import explain_score_breakdown, outfit_key, recommend
+from core.recommender import explain_score_breakdown, recommend
 from core.taxonomy import PURPOSES
 from core.weather import CITY_PRESETS, RETURN_HOURS, coldest_until
 from screens.common import THERMAL_FEEDBACK, tryon_button
@@ -112,7 +114,7 @@ def _make_recommendation(app, user, items, w, purpose):
               w["source"])
     sid, rids = app.store.save_recommendation_session(user["id"], _request_id(fields, out["results"]), *fields,
                                                       out["results"])
-    st.session_state.rec_request = None
+    st.session_state.rec_pending = {}       # 정상 저장 → 다음 버튼은 새 세션
     for result, rid in zip(out["results"], rids):
         result["recommendation_id"] = rid
     st.session_state.recommendations = out["results"]
@@ -120,14 +122,26 @@ def _make_recommendation(app, user, items, w, purpose):
     st.session_state.rec_meta = {"warnings": out["warnings"], "context": out["context"]}
 
 
+def request_key(fields, results):
+    """저장할 본문 전체(세션 값 + 결과마다 점수·옷·이유·근거를 저장소와 같은 방식으로 직렬화)의 지문.
+    점수·옷 id만 같고 옷 이름·이유(저녁 안내 등)·근거가 다르면 다른 요청이다."""
+    body = [list(fields), [[r["score"], json.dumps(r["pieces"], ensure_ascii=False),
+                            json.dumps(r["reasons"], ensure_ascii=False),
+                            json.dumps(r["components"], ensure_ascii=False)] for r in results]]
+    return hashlib.sha256(json.dumps(body, ensure_ascii=False, default=str).encode()).hexdigest()
+
+
 def _request_id(fields, results):
-    """추천 저장 요청 id. 저장이 오류로 끝난 뒤 같은 추천을 다시 저장하면 같은 id를 써서, 사실은 저장이 됐더라도
-    (응답만 못 받은 경우) 세션이 두 번 생기지 않게 한다. 저장에 성공하면 비워서 다음 버튼은 새 세션이 된다."""
-    key = repr((fields, [(r["score"], sorted(outfit_key(r["pieces"]))) for r in results]))
-    pending = st.session_state.get("rec_request")
-    if not pending or pending["key"] != key:
-        pending = st.session_state.rec_request = {"id": str(uuid.uuid4()), "key": key}
-    return pending["id"]
+    """추천 저장 요청 id. 저장이 오류로 끝난 요청은 본문 지문별로 기억해 두고, 같은 본문을 다시 저장하면 같은 id를 쓴다
+    (사실은 저장이 됐어도 응답만 못 받은 경우 세션이 두 번 생기지 않게. A→B→A로 바꿔 다시 눌러도 A의 id).
+    본문이 하나라도 다르면 새 id라서, DB가 돌려주는 추천 id는 항상 화면에 보이는 내용과 같은 기록이다."""
+    pending = st.session_state.get("rec_pending") or {}
+    key = request_key(fields, results)
+    if key not in pending:
+        pending = dict(list(pending.items())[-19:])     # 실패한 요청은 최근 20개까지만 기억
+        pending[key] = str(uuid.uuid4())
+        st.session_state.rec_pending = pending
+    return pending[key]
 
 
 def _context_caption(ctx):

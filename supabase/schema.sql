@@ -272,6 +272,29 @@ select (select count(*) from public.recommendation_sessions) as sessions,
           join public.recommendation_sessions rs on rs.id = r.session_id
          where rs.user_id = s.user_id) as accepted_sessions;
 
+-- 추천 로그 CSV 전체를 JSON 하나로 (core/db.py export_user_logs 와 같은 열·순서). 한 문장이라 한 시점의 결과이고,
+-- 표가 아니라 값 하나를 돌려줘서 API 반환 줄 한도(기본 1,000줄)를 받지 않는다. 옷 이름 줄(outfit)은 여기서 만든다.
+create or replace function public.export_user_logs()
+returns jsonb
+language sql stable security invoker set search_path = ''
+as $$
+    select coalesce(jsonb_agg(jsonb_build_object(
+               'session_id', l.session_id, 'started_at', l.started_at, 'completed_at', l.completed_at,
+               'purpose', l.purpose, 'temperature', l.temperature, 'apparent_temperature', l.apparent_temperature,
+               'humidity', l.humidity, 'precipitation', l.precipitation, 'rain', l.rain, 'wind_speed', l.wind_speed,
+               'weather_source', l.weather_source, 'recommendation_id', l.recommendation_id, 'rank', l.rank,
+               'score', l.score, 'rating', l.rating, 'worn', l.worn, 'thermal_feedback', l.thermal_feedback,
+               'satisfaction', l.satisfaction,
+               'outfit', case when l.pieces_json is null then null else coalesce(
+                   (select string_agg(p.v ->> 'name', ' + ' order by p.o)
+                      from jsonb_array_elements(l.pieces_json::jsonb) with ordinality as p(v, o)), '') end)
+             order by l.session_id desc, l.rank asc nulls first, l.recommendation_id asc nulls first), '[]'::jsonb)
+      from public.recommendation_log_rows l
+     where l.user_id = (select auth.uid())
+$$;
+revoke execute on function public.export_user_logs() from public, anon;
+grant execute on function public.export_user_logs() to authenticated;
+
 revoke all on public.saved_outfit_rows, public.disliked_outfit_rows, public.recommendation_log_rows,
     public.kpi_rows from anon;
 grant select on public.saved_outfit_rows, public.disliked_outfit_rows, public.recommendation_log_rows,

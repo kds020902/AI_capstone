@@ -89,16 +89,16 @@ def _add_candidate(app, user):
     name = st.text_input("이름", value=f"{COLOR_KO[color]} {sub}", key=f"cand_name_{color}_{sub}")
     link = st.text_input("상품 링크 (선택, 메모용)", key="cand_link")
     if st.button("구매 후보로 저장", type="primary", disabled=not name.strip()):
-        fields = (name.strip(), sub, color, warmth, rain, link.strip())
         try:
             path = _candidate_photo(app, user, up) if up else ""
             app.store.create_candidate(user["id"], name.strip(), main_category_for_subcategory(sub), sub, color, warmth,
                                        rain, image_path=path, link=link.strip(),
                                        ai_subcategory=ai.get("subcategory") if ai_ok else None,   # 기록용: AI 1등 답
                                        ai_confidence=ai.get("confidence") if ai else None,
-                                       request_id=_candidate_request(up, fields))
+                                       request_id=_candidate_request())
         except Exception as e:
-            st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요. 다시 눌러도 두 번 저장되지 않아요.")
+            st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요. 다시 누르면 내용을 고쳤더라도 "
+                     "지금 내용으로 후보 하나만 저장돼요 (앞의 저장이 사실은 됐다면 그 후보를 지금 내용으로 고쳐요).")
             return
         st.session_state.cand_request = st.session_state.cand_photo = None
         st.rerun()
@@ -116,13 +116,15 @@ def _candidate_photo(app, user, up):
     return p["path"]
 
 
-def _candidate_request(up, fields):
-    """구매 후보 저장 요청 id. 저장이 오류로 끝난 뒤 같은 내용으로 다시 누르면 같은 id를 써서 후보가 두 번 생기지 않게 한다."""
-    key = repr((up.file_id if up else None, fields))
-    pending = st.session_state.get("cand_request")
-    if not pending or pending["key"] != key:
-        pending = st.session_state.cand_request = {"key": key, "id": str(uuid.uuid4())}
-    return pending["id"]
+def _candidate_request():
+    """구매 후보 등록 작업 id. 저장에 성공할 때까지 같은 id를 쓴다: 저장이 오류로 끝난 뒤 이름·링크·사진을 고치거나
+    A→B→A로 바꿔 다시 눌러도 같은 등록이라, 앞의 저장이 사실은 됐다면 그 후보를 지금 내용으로 고치고(저장소의 요청 id
+    규칙) 아니면 새로 넣는다. 저장에 성공하면 비워서, 다음 저장(같은 사진이어도)은 새 후보가 된다."""
+    req = st.session_state.get("cand_request")
+    if not req:
+        req = st.session_state.cand_request = str(uuid.uuid4())
+    return req
+
 
 
 VERDICT_BOX = {"dup": st.warning, "none": st.error, "gap": st.success, "fit": st.info}

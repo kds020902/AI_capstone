@@ -26,8 +26,8 @@ for key, value in {
     "active_user_id": None,
     "recommendations": None,
     "recommendation_session_id": None,
-    "rec_request": None,          # 저장이 오류로 끝난 추천의 요청 id (같은 추천을 다시 저장할 때 재사용)
-    "cand_request": None,         # 구매 후보: 저장이 오류로 끝난 요청 id, 이미 올린 상품 사진
+    "rec_pending": {},            # 저장이 오류로 끝난 추천: 본문 지문 → 요청 id (같은 본문을 다시 저장할 때 재사용)
+    "cand_request": None,         # 구매 후보: 저장에 성공할 때까지 쓰는 등록 작업 id, 이미 올린 상품 사진
     "cand_photo": None,
     "rec_meta": None,
     "weather_cache": None,

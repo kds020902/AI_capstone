@@ -226,7 +226,7 @@ def ba_fields(card):
 def ba_save(app, user, cards):
     """카드들을 옷장에 한 번에 넣는다. 사진은 한 장씩 저장소에, 옷 정보는 한 번에 DB에.
     카드마다 고정된 요청 id 를 쓴다: 중간에 실패해 다시 눌러도 이미 올린 사진은 그 경로를 다시 쓰고(사진 이름도 요청 id라
-    응답만 못 받은 사진은 같은 파일에 덮어씀), 이미 DB에 들어간 옷은 다시 넣지 않는다. 실패한 저장의 사진을 지우지 않는
+    응답만 못 받은 사진은 같은 파일에 덮어씀), 이미 DB에 들어간 옷은 새로 넣지 않고 지금 카드 내용으로 고친다. 실패한 저장의 사진을 지우지 않는
     이유: 응답만 유실돼 실제로는 DB에 연결됐을 수 있다. 남는 사진은 버린 카드당 1장을 넘지 않는다."""
     rows = []
     for c in cards:
@@ -347,7 +347,8 @@ def _save(app, user, cards, to_save):
     try:
         ba_save(app, user, to_save)
     except Exception as e:
-        st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요.")
+        st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요. 다시 누르면 카드를 고쳤더라도 "
+                 "사진마다 지금 내용으로 한 벌씩만 저장돼요.")
         return
     saved = {id(c) for c in to_save}
     ss.ba_cards = [c for c in cards if id(c) not in saved]
