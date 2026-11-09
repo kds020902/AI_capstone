@@ -91,17 +91,28 @@ def _add_candidate(app, user):
     if st.button("구매 후보로 저장", type="primary", disabled=not name.strip()):
         try:
             path = _candidate_photo(app, user, up) if up else ""
-            app.store.create_candidate(user["id"], name.strip(), main_category_for_subcategory(sub), sub, color, warmth,
-                                       rain, image_path=path, link=link.strip(),
-                                       ai_subcategory=ai.get("subcategory") if ai_ok else None,   # 기록용: AI 1등 답
-                                       ai_confidence=ai.get("confidence") if ai else None,
-                                       request_id=_candidate_request())
+            for _ in range(2):
+                closed = []
+                app.store.create_candidate(user["id"], name.strip(), main_category_for_subcategory(sub), sub, color,
+                                           warmth, rain, image_path=path, link=link.strip(),
+                                           ai_subcategory=ai.get("subcategory") if ai_ok else None,  # 기록용: AI 1등 답
+                                           ai_confidence=ai.get("confidence") if ai else None,
+                                           request_id=_candidate_request(), conflicts=closed)
+                if not closed:
+                    break
+                # 이 등록 작업의 후보는 (다른 창 등에서) 이미 지웠거나 산 '끝난 등록' → 새 등록 작업으로 한 번 더 저장
+                _end_candidate_task()
         except Exception as e:
             st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요. 다시 누르면 내용을 고쳤더라도 "
                      "지금 내용으로 후보 하나만 저장돼요 (앞의 저장이 사실은 됐다면 그 후보를 지금 내용으로 고쳐요).")
             return
-        st.session_state.cand_request = st.session_state.cand_photo = None
+        _end_candidate_task()
         st.rerun()
+
+
+def _end_candidate_task():
+    """구매 후보 등록 작업을 끝낸다: 다음 저장은 새 등록 작업 id·새 사진 이름으로 새 후보가 된다."""
+    st.session_state.cand_request = st.session_state.cand_photo = None
 
 
 def _candidate_photo(app, user, up):
@@ -145,12 +156,17 @@ def _candidate_card(app, user, cand, rep, items, view):
         st.dataframe(table, width="stretch")
         _example_outfits(rep["cells"][view], *view)
         c_a, c_b = st.columns(2)
+        ends_task = cand.get("request_id") and cand.get("request_id") == st.session_state.get("cand_request")
         if c_a.button("샀어요 · 옷장에 넣기", key=f"buy_{cand['id']}"):
             app.store.buy_candidate(cand["id"], user["id"])
+            if ends_task:          # 응답을 못 받았던 저장이 사실 이 후보였다면, 그 등록 작업도 끝난 것
+                _end_candidate_task()
             st.toast(f"{cand['name']}을(를) 옷장에 넣었어요.")
             st.rerun()
         if c_b.button("후보에서 지우기", key=f"cdel_{cand['id']}"):
             app.store.delete_candidate(cand["id"], user["id"])
+            if ends_task:
+                _end_candidate_task()
             st.rerun()
 
 

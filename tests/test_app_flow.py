@@ -157,33 +157,51 @@ def _shown_matches_db(at, cloud):
 
 def test_cloud_recommendation_retry_with_changed_content_never_reuses_old_ids(cloud):
     """응답 유실 뒤 저녁 외출을 켜서 이유(저녁 안내)만 달라진 추천은 새 요청: 옛 기록 id를 새 내용에 붙이지 않는다.
-    실패한 A → 실패한 B → 다시 A 는 A의 처음 요청 id로 돌아가 세션이 늘지 않는다."""
+    그 추천이 성공한 뒤 처음(응답 유실된) 추천을 다시 누르면, 다른 추천의 성공으로 잊지 않고 처음 요청 id를 다시 써서
+    세션이 늘지 않는다. 실패한 A → 실패한 B → 다시 A 도 A의 요청 id. 정상 저장한 추천을 또 누르면 새 세션."""
+    rows = lambda: cloud.rows("recommendation_sessions")                       # noqa: E731
     at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
     _signup(at, "rk@example.com")
     _make_profile_recommend_and_save(at, "RK")                                   # 세션 1
     _goto(at, "오늘의 추천")
     _by_label(at.radio, "날씨").set_value("수동 입력").run()
     cloud.rpc_faults["save_recommendation_session"] = "lost"
-    _button(at, "TOP 3 추천 생성").click().run()                                 # 세션 2 (응답 유실)
+    _button(at, "TOP 3 추천 생성").click().run()                                 # P: 세션 2 (응답 유실)
     _by_label(at.checkbox, "저녁 늦게까지 밖에 있어요").check().run()
-    _button(at, "TOP 3 추천 생성").click().run()                                 # 내용이 달라 새 세션 3
-    assert not at.exception and len(cloud.rows("recommendation_sessions")) == 3
+    _button(at, "TOP 3 추천 생성").click().run()                                 # 내용이 달라 새 세션 3 (성공)
+    assert not at.exception and len(rows()) == 3
     assert any("저녁" in x for r in at.session_state["recommendations"] for x in r["reasons"])
     assert _shown_matches_db(at, cloud)
-
     _by_label(at.checkbox, "저녁 늦게까지 밖에 있어요").uncheck().run()
+    _button(at, "TOP 3 추천 생성").click().run()                                 # 다시 P: 세션 2 재사용
+    assert not at.exception and len(rows()) == 3
+    assert at.session_state["recommendation_session_id"] == rows()[1]["id"] and _shown_matches_db(at, cloud)
+
     cloud.rpc_faults["save_recommendation_session"] = "lost"
-    _button(at, "TOP 3 추천 생성").click().run()                                 # A: 세션 4 (응답 유실)
+    _button(at, "TOP 3 추천 생성").click().run()                                 # A(=P, 성공해서 잊음): 세션 4 (유실)
     _by_label(at.selectbox, "외출 목적").set_value("운동").run()
     cloud.rpc_faults["save_recommendation_session"] = "lost"
-    _button(at, "TOP 3 추천 생성").click().run()                                 # B: 세션 5 (응답 유실)
+    _button(at, "TOP 3 추천 생성").click().run()                                 # B: 세션 5 (유실)
     _by_label(at.selectbox, "외출 목적").set_value("등교").run()
     _button(at, "TOP 3 추천 생성").click().run()                                 # 다시 A: 세션 4 재사용
-    assert not at.exception and len(cloud.rows("recommendation_sessions")) == 5
-    assert at.session_state["recommendation_session_id"] == cloud.rows("recommendation_sessions")[3]["id"]
-    assert _shown_matches_db(at, cloud)
+    assert not at.exception and len(rows()) == 5
+    assert at.session_state["recommendation_session_id"] == rows()[3]["id"] and _shown_matches_db(at, cloud)
     _button(at, "TOP 3 추천 생성").click().run()                                 # 정상 저장 뒤엔 새 세션
-    assert len(cloud.rows("recommendation_sessions")) == 6 and _shown_matches_db(at, cloud)
+    assert len(rows()) == 6 and _shown_matches_db(at, cloud)
+
+
+def test_recommendation_pending_requests_are_bounded(monkeypatch):
+    """결과를 모르는 요청은 세션에서 REC_PENDING_MAX 개까지 기억하고, 넘치면 가장 오래된 것부터 잊는다."""
+    import streamlit as st
+
+    from screens import recommend as rec
+    class _State(dict):                       # st.session_state 처럼 ss.x / ss["x"] 둘 다
+        __getattr__, __setattr__ = dict.__getitem__, dict.__setitem__
+    monkeypatch.setattr(rec, "REC_PENDING_MAX", 3)
+    monkeypatch.setattr(st, "session_state", _State())
+    ids = [rec._request_id(k) for k in "abcd"]
+    assert list(st.session_state["rec_pending"]) == ["b", "c", "d"] and rec._request_id("d") == ids[3]
+    assert rec._request_id("a") != ids[0]
 
 
 def test_cloud_mode_signup_with_email_confirmation(cloud):
@@ -339,7 +357,7 @@ def test_cloud_candidate_edit_after_lost_response_updates_same_candidate(cloud):
     _button(at, "구매 후보로 저장").click().run()                          # A 저장됨, 응답 유실
     _cand_name(at).input("B 코트").run()
     next(t for t in at.text_input if t.label.startswith("상품 링크")).input("https://example.com/b").run()
-    cloud.faults[("purchase_candidates", "upsert")] = "lost"
+    cloud.faults[("purchase_candidates", "update")] = "lost"            # 이미 있는 행은 고치기 단계에서 응답 유실
     _button(at, "구매 후보로 저장").click().run()                          # 같은 등록을 B 로 고침, 또 응답 유실
     assert [(c["name"], c["link"]) for c in cloud.rows("purchase_candidates")] == [("B 코트", "https://example.com/b")]
     _cand_name(at).input("A 코트").run()
@@ -359,6 +377,60 @@ def test_cloud_candidate_edit_after_lost_response_updates_same_candidate(cloud):
     _button(bt, "구매 후보로 저장").click().run()
     mine = [c for c in cloud.rows("purchase_candidates") if c["name"].startswith("사진 없는")]
     assert [c["name"] for c in mine] == ["사진 없는 니트(고침)"] and not bt.exception
+
+
+def test_cloud_direct_add_retry_keeps_edit_made_in_wardrobe_list(cloud):
+    """등록 성공(응답 유실) → 옷장 목록에서 '정보 수정' → 등록 카드 재시도: 목록에서 고친 내용이 남고, 그렇다고 알린다."""
+    from core.cloud_store import CloudStore
+    from tests.fake_supabase import signed_in_client
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    _signup(at, "edit@example.com")
+    _goto(at, "프로필")
+    _by_label(at.text_input, "이름 / 닉네임").input("E")
+    _button(at, "저장").click().run()
+    _goto(at, "내 옷장")
+    next(u for u in at.file_uploader if u.label == "저장할 의류를 넣어 주세요 (최대 10장까지)").set_value([_photo(9)]).run()
+    next(t for t in at.text_input if t.label == "이름").input("카드 셔츠").run()
+    cloud.faults[("wardrobe_items", "upsert")] = "lost"
+    _button(at, "저장").click().run()                                        # 저장됨, 응답 유실
+    other = signed_in_client(cloud, "edit@example.com")                      # 같은 사용자의 다른 창에서 목록 수정
+    store = CloudStore(other, other.uid)
+    item = store.list_wardrobe_items(other.uid)[0]
+    store.update_wardrobe_item(item["id"], other.uid, "목록에서 고친 이름", "상의", "셔츠", "navy", 3, 0)
+    next(t for t in at.text_input if t.label == "이름").input("카드에서 고친 이름").run()
+    at.button(key="ba_save").click().run()                                   # 카드 재시도 (목록의 '저장'과 구분)
+    assert not at.exception and len(at.session_state.ba_cards) == 0
+    assert [r["name"] for r in cloud.rows("wardrobe_items")] == ["목록에서 고친 이름"]
+    assert any("목록 쪽을 그대로 뒀어요" in t.value for t in at.toast)
+
+
+def test_cloud_candidate_saved_after_earlier_one_was_deleted_or_bought_is_visible(cloud):
+    """후보 A 저장 응답 유실 → A 를 지우거나 사면 → 다른 후보 B 를 저장해도 B 가 목록에 보인다 (끝난 A 를 고치지 않음).
+    다른 창에서 A 를 지운 경우도 저장소가 '끝난 등록'으로 알려 새 등록으로 저장한다."""
+    from core.cloud_store import CloudStore
+    from tests.fake_supabase import signed_in_client
+    for end in ("지우기", "사기", "다른 창에서 지우기"):
+        email = f"end{len(end)}@example.com"
+        at = AppTest.from_file(APP, default_timeout=TIMEOUT)
+        _candidate_form(at, cloud, email)
+        _cand_name(at).input("A 코트").run()
+        cloud.faults[("purchase_candidates", "upsert")] = "lost"
+        _button(at, "구매 후보로 저장").click().run()                          # A 저장됨, 응답 유실
+        at.run()                                                             # 목록에 A 가 보임
+        if end == "지우기":
+            _button(at, "후보에서 지우기").click().run()
+        elif end == "사기":
+            _button(at, "샀어요 · 옷장에 넣기").click().run()
+        else:
+            other = signed_in_client(cloud, email)
+            st2 = CloudStore(other, other.uid)
+            st2.delete_candidate(st2.list_candidates(other.uid)[0]["id"], other.uid)
+        _cand_name(at).input("B 니트").run()
+        _button(at, "구매 후보로 저장").click().run()
+        assert not at.exception, end
+        mine = [c for c in cloud.rows("purchase_candidates") if c["user_id"] == at.session_state["user_id"]]
+        assert [(c["name"], c["deleted"]) for c in mine] == [("A 코트", 1), ("B 니트", 0)], end
+        assert any(m.value == "### B 니트" for m in at.markdown), end
 
 
 def _local_app(tmp_path, monkeypatch):

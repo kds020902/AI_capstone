@@ -37,9 +37,12 @@ create table if not exists public.wardrobe_items (
     active integer not null default 1,
     deleted integer not null default 0,
     created_at text not null,
-    request_id uuid
+    request_id uuid,
+    edited_at text
 );
 create index if not exists wardrobe_items_user_idx on public.wardrobe_items (user_id);
+-- '정보 수정'으로 고친 시각. 등록 재시도는 이 값이 있는 행을 카드 내용으로 덮어쓰지 않는다 (예전 DB에도 추가, 기존 행은 NULL)
+alter table public.wardrobe_items add column if not exists edited_at text;
 -- 사진 등록 한 장마다 앱이 정하는 요청 id. 저장 응답을 못 받고 다시 보내도 옷이 한 벌만 들어가게 한다 (예전 DB에도 추가)
 alter table public.wardrobe_items add column if not exists request_id uuid;
 create unique index if not exists wardrobe_items_request_idx on public.wardrobe_items (user_id, request_id);

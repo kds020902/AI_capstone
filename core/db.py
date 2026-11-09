@@ -168,6 +168,8 @@ def init_db():
             c.execute("ALTER TABLE wardrobe_items ADD COLUMN ai_subcategory TEXT")
         if not _has_column(c, "wardrobe_items", "seasons"):  # 직접 고른 계절 ('여름|겨울'), NULL이면 종류로 자동
             c.execute("ALTER TABLE wardrobe_items ADD COLUMN seasons TEXT")
+        if not _has_column(c, "wardrobe_items", "edited_at"):   # '정보 수정'으로 고친 시각 (등록 재시도가 덮어쓰지 않게)
+            c.execute("ALTER TABLE wardrobe_items ADD COLUMN edited_at TEXT")
         # 같은 등록·추천 요청을 다시 보내도 한 번만 저장 (앱이 정하는 요청 id)
         for table in ("recommendation_sessions", "wardrobe_items", "purchase_candidates"):
             if not _has_column(c, table, "request_id"):
@@ -223,31 +225,43 @@ def create_wardrobe_item(
     with conn() as c:
         return _insert(c, "wardrobe_items", wardrobe_row(user_id, item, datetime.now().isoformat(timespec="seconds")))
 
-def _save_by_request(c, table, row):
-    """등록 요청 id 규칙 (Supabase 판과 같음): id 가 없으면 늘 새 행. 있으면 같은 id 행이 이미 있을 때 그 행을 지금 값으로
-    고치고(응답을 못 받은 저장 뒤 내용을 고쳐 다시 저장해도 한 행), 없으면 새로 넣는다. → 행 id"""
-    old = row.get("request_id") and c.execute(f"SELECT id FROM {table} WHERE user_id=? AND request_id=?",
-                                              (row["user_id"], row["request_id"])).fetchone()
+def _open_request(table):
+    """같은 요청 id 로 다시 저장할 때 등록 내용으로 고쳐도 되는 행: 아직 지우지(산 후보 포함) 않았고, 옷은 '정보 수정'으로
+    따로 고치지 않은 행. 그 밖의 행은 그대로 두고 충돌로 알린다 (목록에서 한 일을 등록 재시도가 덮어쓰지 않게)."""
+    return "deleted=0" + (" AND edited_at IS NULL" if table == "wardrobe_items" else "")
+
+def _save_by_request(c, table, row, conflicts=None):
+    """등록 요청 id 규칙 (Supabase 판과 같음): id 가 없으면 늘 새 행. 있으면 같은 id 행이 없을 때 넣고, 있을 때는 그 행이
+    아직 등록 상태 그대로면(_open_request) 지금 값으로 고친다(응답을 못 받은 저장 뒤 카드를 고쳐 다시 저장해도 한 행).
+    그렇지 않으면 행을 그대로 두고 요청 id 를 conflicts 에 넣는다. → 행 id"""
+    rid = row.get("request_id")
+    old = rid and c.execute(f"SELECT id FROM {table} WHERE user_id=? AND request_id=?", (row["user_id"], rid)).fetchone()
     if not old:
         return _insert(c, table, row)
     values = {k: v for k, v in row.items() if k not in ("user_id", "request_id")}
-    c.execute(f"UPDATE {table} SET {', '.join(f'{k}=?' for k in values)} WHERE id=?", [*values.values(), old["id"]])
+    done = c.execute(f"UPDATE {table} SET {', '.join(f'{k}=?' for k in values)} WHERE id=? AND {_open_request(table)}",
+                     [*values.values(), old["id"]]).rowcount
+    if not done and conflicts is not None:
+        conflicts.append(rid)
     return old["id"]
 
-def create_wardrobe_items(user_id, items):
+def create_wardrobe_items(user_id, items, conflicts=None):
     """여러 벌을 한 번에(한 거래로) 저장 (사진 여러 장 등록). items: create_wardrobe_item 의 인자 이름을 키로 갖는 dict 목록.
-    id 목록을 넣은 순서대로 돌려준다. request_id 규칙은 _save_by_request (같은 id 가 묶음 안에 반복되면 한 행, 나중 값)."""
+    id 목록을 넣은 순서대로 돌려준다. request_id 규칙은 _save_by_request (같은 id 가 묶음 안에 반복되면 한 행, 나중 값).
+    conflicts(목록)를 주면 목록에서 고치거나 지운 행이라 카드 내용으로 바꾸지 않은 요청 id 를 담는다."""
     now = datetime.now().isoformat(timespec="seconds")
     with conn() as c:
-        return [_save_by_request(c, "wardrobe_items", wardrobe_row(user_id, x, now)) for x in items]
+        return [_save_by_request(c, "wardrobe_items", wardrobe_row(user_id, x, now), conflicts) for x in items]
 
 def update_wardrobe_item(item_id, user_id, name, category, subcategory, color, warmth, rain_ok, material="", notes=""):
-    """저장한 옷의 정보 고치기 (AI 기록·사진·계절은 그대로). 지운 옷은 고치지 않는다."""
+    """저장한 옷의 정보 고치기 (AI 기록·사진·계절은 그대로). 지운 옷은 고치지 않는다. 고친 시각(edited_at)을 남겨
+    등록 재시도가 이 내용을 덮어쓰지 않게 한다."""
     with conn() as c:
         c.execute(
             "UPDATE wardrobe_items SET name=?, category=?, subcategory=?, color=?, warmth=?, rain_ok=?, material=?, "
-            "notes=? WHERE id=? AND user_id=? AND deleted=0",
-            (name, category, subcategory, color, int(warmth), int(bool(rain_ok)), material, notes, item_id, user_id),
+            "notes=?, edited_at=? WHERE id=? AND user_id=? AND deleted=0",
+            (name, category, subcategory, color, int(warmth), int(bool(rain_ok)), material, notes,
+             datetime.now().isoformat(timespec="seconds"), item_id, user_id),
         )
 
 def list_wardrobe_items(user_id, active_only=True):
@@ -307,13 +321,14 @@ def soft_delete_item(item_id, user_id):
         )
 
 def create_candidate(user_id, name, category, subcategory, color, warmth, rain_ok, image_path="", link="",
-                     ai_subcategory=None, ai_confidence=None, request_id=None):
-    """구매 후보 저장 → id. request_id 규칙은 _save_by_request (같은 등록을 다시 저장하면 그 후보를 지금 값으로 고침)."""
+                     ai_subcategory=None, ai_confidence=None, request_id=None, conflicts=None):
+    """구매 후보 저장 → id. request_id 규칙은 _save_by_request: 같은 등록을 다시 저장하면 그 후보를 지금 값으로 고치고,
+    이미 지웠거나 산 후보(끝난 등록)면 그대로 두고 conflicts 에 요청 id 를 넣는다 (화면은 새 등록으로 다시 저장)."""
     now = datetime.now().isoformat(timespec="seconds")
     with conn() as c:
         return _save_by_request(c, "purchase_candidates", candidate_row(
             user_id, name, category, subcategory, color, warmth, rain_ok, image_path, link, ai_subcategory,
-            ai_confidence, now, request_id))
+            ai_confidence, now, request_id), conflicts)
 
 def list_candidates(user_id):
     with conn() as c:

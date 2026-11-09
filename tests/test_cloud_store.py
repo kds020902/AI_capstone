@@ -9,7 +9,8 @@ from tests.fake_supabase import FakeAPIError, FakeBackend, signed_in_client
 
 REQ, REQ2 = "6f1c1e0a-3a52-4c63-9a0e-2f1d1a0b9c01", "6f1c1e0a-3a52-4c63-9a0e-2f1d1a0b9c02"
 DROP = {"id", "user_id", "created_at", "started_at", "completed_at", "saved_at", "updated_at", "session_id",
-        "recommendation_id"}
+        "recommendation_id", "edited_at",
+        "request_id"}   # Supabase 판은 요청 id 없이 넣은 행에도 이번 저장에서만 쓰는 id 를 붙인다 (값 비교 대상 아님)
 
 
 def _clean(rows):
@@ -45,6 +46,8 @@ def _scenario(store, uid):
                                material="데님", notes="밑단 접어 입기")
     store.soft_delete_item(new_ids[2], uid)
     store.update_wardrobe_item(new_ids[2], uid, "바뀌면 안 됨", "상의", "니트", "red", 5, False)
+    out["edited_marked"] = sorted(x["name"] for x in store.list_wardrobe_items(uid, active_only=False)
+                                  if x.get("edited_at"))                # '정보 수정'으로 고친 옷만 고친 시각이 있음
     out["inactive"] = sorted(x["name"] for x in store.list_inactive_items(uid))
     out["count"] = store.count_wardrobe_items(uid)
     out["items"] = _clean(store.list_wardrobe_items(uid))
@@ -116,6 +119,7 @@ def test_cloud_store_matches_sqlite(tmp_path, max_rows):
     assert not any(x["name"] == "바뀌면 안 됨" for x in local["items"])
     assert local["disliked_ok"] and remote["disliked_ok"]
     assert local["bundle_n"] == 3 and local["bundle_again_same"] and local["bundle_empty_n"] == 0
+    assert local["edited_marked"] == ["연청 청바지"]
     assert local["sessions"] == 4
     for key in local:
         assert remote[key] == local[key], key
@@ -328,6 +332,20 @@ def request_rule_scenario(store, uid):
     out["candidate_edit_same_row"] = c1 == c2
     store.create_candidate(uid, "사진 없는 후보", "상의", "니트", "red", 3, 0)
     store.create_candidate(uid, "사진 없는 후보", "상의", "니트", "red", 3, 0)
+    # 등록 성공(응답 유실) → 옷장 목록에서 '정보 수정' → 카드 재시도: 목록에서 고친 내용이 남고 충돌로 알린다
+    conflicts = []
+    e = store.create_wardrobe_items(uid, [{**shirt, "name": "카드 셔츠", "request_id": _req(6)}])
+    store.update_wardrobe_item(e[0], uid, "목록에서 고침", "상의", "셔츠", "navy", 3, 0)
+    again = store.create_wardrobe_items(uid, [{**shirt, "name": "카드에서 고침", "request_id": _req(6)}], conflicts=conflicts)
+    # 등록 성공(응답 유실) → 목록에서 지움 → 카드 재시도: 되살리지 않고 충돌
+    d = store.create_wardrobe_items(uid, [{**shirt, "name": "지운 옷", "request_id": _req(7)}])
+    store.soft_delete_item(d[0], uid)
+    store.create_wardrobe_items(uid, [{**shirt, "name": "지운 옷(카드)", "request_id": _req(7)}], conflicts=conflicts)
+    # 후보 등록 성공(응답 유실) → 지움 → 같은 요청 id 로 다른 후보: 지운 후보를 고치지 않고 충돌 (화면은 새 등록으로)
+    k = store.create_candidate(uid, "끝난 후보", "아우터", "코트", "beige", 3, 0, request_id=_req(8))
+    store.delete_candidate(k, uid)
+    store.create_candidate(uid, "새 후보", "아우터", "코트", "black", 3, 0, request_id=_req(8), conflicts=conflicts)
+    out["conflicts"] = (again == e, conflicts == [_req(6), _req(7), _req(8)])
     out["items"] = sorted((x["name"], x["color"]) for x in store.list_wardrobe_items(uid))
     out["candidates"] = sorted((x["name"], x["link"]) for x in store.list_candidates(uid))
     return out
@@ -335,10 +353,10 @@ def request_rule_scenario(store, uid):
 
 EXPECTED_RULE = {
     "uuid_retry": True, "null_new_each_time": True, "mixed_retry": (True, True), "edit_after_retry": True,
-    "repeat_in_batch": (True, True), "empty": [], "candidate_edit_same_row": True,
+    "repeat_in_batch": (True, True), "empty": [], "candidate_edit_same_row": True, "conflicts": (True, True),
     "items": sorted([("A(고침)", "black"), ("B", "white"), ("N1", "white"), ("N2", "white"), ("N1", "white"),
                      ("N2", "white"), ("M", "white"), ("M0", "white"), ("M0", "white"), ("R2", "white"),
-                     ("R3", "white")]),
+                     ("R3", "white"), ("목록에서 고침", "navy")]),
     "candidates": [("사진 없는 후보", ""), ("사진 없는 후보", ""), ("후보(고침)", "https://example.com/x")],
 }
 
@@ -485,3 +503,54 @@ def test_log_export_order_with_sessions_without_results(tmp_path):
     assert out["local"] == out["cloud"]
     assert [x[0] for x in out["local"][1]] == ["격식", "외출", "외출", "운동", "등교", "등교", "등교"]
     assert out["local"][1][1] == ("외출", 1, "옷0 + 신발") and out["local"][1][0][1] is None
+
+
+def test_dislikes_that_appear_during_paging_are_not_cut_off(monkeypatch):
+    """비선호 피드백 id 1,2,3,5,6,7 (PAGE 3)에서 첫 쪽 뒤 4를 '별로'로 바꿔도 7까지 받는다 (첫 쪽 개수로 끝내지 않음)."""
+    from core import cloud_store
+    monkeypatch.setattr(cloud_store, "PAGE", 3)
+    backend = FakeBackend()
+    client = signed_in_client(backend, "dis@example.com")
+    store = CloudStore(client, client.uid)
+    store.create_user("나", "male", 0, 0)
+    res = [{"score": 0.9, "pieces": [{"id": i, "name": f"옷{i}"}], "reasons": [], "components": {}} for i in range(1, 8)]
+    _, rids = store.save_recommendation_session(client.uid, _req(1), "등교", 12, 11, 60, 0, False, 8, "m", res)
+    for i, rid in enumerate(rids, 1):
+        store.upsert_feedback(client.uid, rid, rating="like" if i == 4 else "dislike")
+    backend.after_select.append(lambda: store.upsert_feedback(client.uid, rids[3], rating="dislike"))
+    assert sorted(min(k) for k in store.disliked_item_sets(client.uid)) == [1, 2, 3, 4, 5, 6, 7]
+
+
+def _csv_without_ids(df):
+    return df.drop(columns=["session_id", "started_at", "completed_at", "recommendation_id"]).to_csv(index=False)
+
+
+def test_log_csv_keeps_float_format_like_sqlite(tmp_path):
+    """정수처럼 보이는 실수(22.0, 70.0, 0.0, 점수 1.0)만 있어도 CSV 문자열이 SQLite 판과 같다 (JSON 을 거쳐도 "22.0")."""
+    db.DB_PATH = tmp_path / "csv.sqlite3"
+    db.init_db()
+    client = signed_in_client(FakeBackend(), "csv@example.com")
+    cloud = CloudStore(client, client.uid)
+    cloud.create_user("나", "male", 0, 0)
+    res = [{"score": 1.0, "pieces": [{"id": 1, "name": "셔츠"}], "reasons": [], "components": {}}]
+    csv = {}
+    for name, store, uid in (("local", db, db.create_user("나", "male", 0, 0)), ("cloud", cloud, client.uid)):
+        store.save_recommendation_session(uid, _req(1), "등교", 22.0, 22.0, 70.0, 0.0, False, 8.0, "manual", res)
+        store.save_recommendation_session(uid, _req(2), "운동", 18.0, None, 50.0, 0.0, False, 3.0, "manual", [])
+        csv[name] = _csv_without_ids(store.export_user_logs(uid))
+    assert csv["local"] == csv["cloud"] and ",22.0,22.0,70.0,0.0," in csv["cloud"]
+
+
+def test_ids_do_not_depend_on_returning_order():
+    """요청 id 가 없는 행도 저장할 때 붙이는 id 로 맞추므로, 서버가 넣은 행을 다른 순서로 돌려줘도 id 가 바뀌지 않는다
+    (실제 PostgREST 에서 순서가 바뀐 사례를 본 것은 아니다. 순서에 기대지 않게만 했다)."""
+    backend = FakeBackend()
+    backend.reverse_returning = True
+    client = signed_in_client(backend, "order@example.com")
+    store = CloudStore(client, client.uid)
+    store.create_user("나", "male", 0, 0)
+    shirt = {"category": "상의", "warmth": 2, "rain_ok": 0}
+    ids = store.create_wardrobe_items(client.uid, [{**shirt, "name": "첫째"}, {**shirt, "name": "둘째", "request_id": _req(1)},
+                                                   {**shirt, "name": "셋째"}])
+    names = {x["id"]: x["name"] for x in store.list_wardrobe_items(client.uid)}
+    assert [names[i] for i in ids] == ["첫째", "둘째", "셋째"]

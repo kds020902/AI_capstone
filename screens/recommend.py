@@ -112,9 +112,9 @@ def _make_recommendation(app, user, items, w, purpose):
     )
     fields = (purpose, w["temperature"], w["apparent"], w["humidity"], w["precipitation"], w["rain"], w["wind"],
               w["source"])
-    sid, rids = app.store.save_recommendation_session(user["id"], _request_id(fields, out["results"]), *fields,
-                                                      out["results"])
-    st.session_state.rec_pending = {}       # 정상 저장 → 다음 버튼은 새 세션
+    key = request_key(fields, out["results"])
+    sid, rids = app.store.save_recommendation_session(user["id"], _request_id(key), *fields, out["results"])
+    st.session_state.rec_pending.pop(key, None)    # 성공한 요청만 지운다 → 같은 추천을 또 누르면 새 세션
     for result, rid in zip(out["results"], rids):
         result["recommendation_id"] = rid
     st.session_state.recommendations = out["results"]
@@ -131,16 +131,21 @@ def request_key(fields, results):
     return hashlib.sha256(json.dumps(body, ensure_ascii=False, default=str).encode()).hexdigest()
 
 
-def _request_id(fields, results):
-    """추천 저장 요청 id. 저장이 오류로 끝난 요청은 본문 지문별로 기억해 두고, 같은 본문을 다시 저장하면 같은 id를 쓴다
-    (사실은 저장이 됐어도 응답만 못 받은 경우 세션이 두 번 생기지 않게. A→B→A로 바꿔 다시 눌러도 A의 id).
-    본문이 하나라도 다르면 새 id라서, DB가 돌려주는 추천 id는 항상 화면에 보이는 내용과 같은 기록이다."""
-    pending = st.session_state.get("rec_pending") or {}
-    key = request_key(fields, results)
+REC_PENDING_MAX = 200   # 결과를 모르는 추천 요청을 세션에서 기억하는 수 (실패할 때만 늘고, 넘치면 가장 오래된 것부터 잊음)
+
+
+def _request_id(key):
+    """추천 저장 요청 id. 저장이 오류로 끝나 결과를 모르는 요청은 본문 지문별로 세션이 끝날 때까지 기억하고, 같은 본문을
+    다시 저장하면 같은 id를 쓴다 (사실은 저장이 됐어도 응답만 못 받은 경우 세션이 두 번 생기지 않게. 그사이 다른 추천이
+    성공했거나 A→B→A로 바꿔도 A의 id). 성공하면 그 요청만 잊는다. 본문이 하나라도 다르면 새 id라서, DB가 돌려주는
+    추천 id는 항상 화면에 보이는 내용과 같은 기록이다."""
+    pending = st.session_state.get("rec_pending")
+    if pending is None:
+        pending = st.session_state.rec_pending = {}
     if key not in pending:
-        pending = dict(list(pending.items())[-19:])     # 실패한 요청은 최근 20개까지만 기억
+        while len(pending) >= REC_PENDING_MAX:
+            pending.pop(next(iter(pending)))
         pending[key] = str(uuid.uuid4())
-        st.session_state.rec_pending = pending
     return pending[key]
 
 

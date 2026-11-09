@@ -26,7 +26,7 @@ PARENT_CHECK = {  # 표: (가리키는 열, 상위 표)
     "feedback": ("recommendation_id", "recommendations"),
 }
 DEFAULTS = {  # supabase/schema.sql 의 기본값 (DB는 빠진 열도 채워서 돌려준다)
-    "wardrobe_items": {"seasons": None, "active": 1, "deleted": 0, "request_id": None},
+    "wardrobe_items": {"seasons": None, "active": 1, "deleted": 0, "request_id": None, "edited_at": None},
     "purchase_candidates": {"deleted": 0, "request_id": None},
     "recommendation_sessions": {"completed_at": None, "decision_seconds": None, "request_id": None},
 }
@@ -107,6 +107,7 @@ class FakeBackend:
         self.rpc_faults = {}  # DB 함수 이름 -> "error"(중간 실패, 되돌림) / "lost"(저장됐는데 응답 유실). 한 번만 적용
         self.faults = {}      # 표 쓰기·사진 올리기 실패 주입 (_fault 참고)
         self.after_select = []  # 시험용: 조회 한 번이 끝날 때마다 하나씩 꺼내 실행 (쪽 사이에 행 추가·삭제 흉내)
+        self.reverse_returning = False  # 시험용: 넣은 행을 거꾸로 돌려줌 (응답 순서에 기대는 코드가 없는지 확인)
 
     def rows(self, table):
         return self.tables.setdefault(table, [])
@@ -274,7 +275,7 @@ class _Query:
             created.append(copy.deepcopy(row))
             if self.partial_fault:                   # 시험용: 첫 행을 넣은 뒤 실패 (요청 전체가 되돌아가야 함)
                 raise FakeAPIError(f"server error in the middle of writing {self.table}")
-        return _Result(data=created)
+        return _Result(data=created[::-1] if b.reverse_returning else created)
 
 
 class _RPC:
@@ -337,7 +338,8 @@ class _RPC:
         rows.sort(key=lambda r: r["session_id"], reverse=True)
         out = []
         for r in rows:
-            d = {k: v for k, v in r.items() if k not in ("user_id", "pieces_json")}
+            d = {k: (int(v) if isinstance(v, float) and v.is_integer() else v)    # jsonb 처럼 22.0 → 22
+                 for k, v in r.items() if k not in ("user_id", "pieces_json")}
             d["outfit"] = None if r["pieces_json"] is None else " + ".join(x["name"] for x in json.loads(r["pieces_json"]))
             out.append(d)
         return out

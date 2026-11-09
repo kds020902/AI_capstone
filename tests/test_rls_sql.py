@@ -516,3 +516,34 @@ def test_keyset_paging_and_log_export_on_real_postgres(conn, users, monkeypatch)
         assert s.q("select count(*) from recommendations") == [(2,)]
     with As(conn, b):
         assert CloudStore(_PgClient(conn), b).export_user_logs(b).empty   # 남의 기록은 함수로도 안 보임
+
+
+def test_paging_end_and_log_csv_format_on_real_postgres(conn, users, tmp_path, monkeypatch):
+    """실제 SQL 로: 비선호 피드백 1,2,3,5,6,7 (PAGE 3)에서 첫 쪽 뒤 4 를 '별로'로 바꿔도 7 까지 받는다 (쪽마다 남은 줄 수로
+    끝을 판단). 정수처럼 보이는 실수만 있는 추천 로그 CSV 가 SQLite 판과 같은 문자열이다 (jsonb 를 거쳐도 "22.0")."""
+    from core import cloud_store
+    from tests.test_cloud_store import _csv_without_ids
+    monkeypatch.setattr(cloud_store, "PAGE", 3)
+    a, _ = users
+    with As(conn, a):
+        client = _PgClient(conn)
+        store = CloudStore(client, a)
+        res = [{"score": 0.9, "pieces": [{"id": i, "name": f"옷{i}"}], "reasons": [], "components": {}} for i in range(1, 8)]
+        _, rids = store.save_recommendation_session(a, str(uuid.uuid4()), "등교", 12, 11, 60, 0, False, 8, "m", res)
+        for i, rid in enumerate(rids, 1):
+            store.upsert_feedback(a, rid, rating="like" if i == 4 else "dislike")
+        client.after_select.append(lambda: store.upsert_feedback(a, rids[3], rating="dislike"))
+        assert sorted(min(k) for k in store.disliked_item_sets(a)) == [1, 2, 3, 4, 5, 6, 7]
+    with As(conn, users[1]):
+        b = users[1]
+        store = CloudStore(_PgClient(conn), b)
+        one = [{"score": 1.0, "pieces": [{"id": 1, "name": "셔츠"}], "reasons": [], "components": {}}]
+        store.save_recommendation_session(b, str(uuid.uuid4()), "등교", 22.0, 22.0, 70.0, 0.0, False, 8.0, "manual", one)
+        store.save_recommendation_session(b, str(uuid.uuid4()), "운동", 18.0, None, 50.0, 0.0, False, 3.0, "manual", [])
+        cloud_csv = _csv_without_ids(store.export_user_logs(b))
+    db.DB_PATH = tmp_path / "csv.sqlite3"
+    db.init_db()
+    uid = db.create_user("나", "male", 0, 0)
+    db.save_recommendation_session(uid, "r1", "등교", 22.0, 22.0, 70.0, 0.0, False, 8.0, "manual", one)
+    db.save_recommendation_session(uid, "r2", "운동", 18.0, None, 50.0, 0.0, False, 3.0, "manual", [])
+    assert cloud_csv == _csv_without_ids(db.export_user_logs(uid)) and ",22.0,22.0,70.0,0.0," in cloud_csv

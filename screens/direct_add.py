@@ -226,8 +226,9 @@ def ba_fields(card):
 def ba_save(app, user, cards):
     """카드들을 옷장에 한 번에 넣는다. 사진은 한 장씩 저장소에, 옷 정보는 한 번에 DB에.
     카드마다 고정된 요청 id 를 쓴다: 중간에 실패해 다시 눌러도 이미 올린 사진은 그 경로를 다시 쓰고(사진 이름도 요청 id라
-    응답만 못 받은 사진은 같은 파일에 덮어씀), 이미 DB에 들어간 옷은 새로 넣지 않고 지금 카드 내용으로 고친다. 실패한 저장의 사진을 지우지 않는
-    이유: 응답만 유실돼 실제로는 DB에 연결됐을 수 있다. 남는 사진은 버린 카드당 1장을 넘지 않는다."""
+    응답만 못 받은 사진은 같은 파일에 덮어씀), 이미 DB에 들어간 옷은 새로 넣지 않고 지금 카드 내용으로 고친다. 단, 그사이
+    옷장 목록에서 '정보 수정'으로 고쳤거나 지운 옷은 목록 쪽을 그대로 두고 그 수를 돌려준다(충돌). 실패한 저장의 사진을
+    지우지 않는 이유: 응답만 유실돼 실제로는 DB에 연결됐을 수 있다. 남는 사진은 버린 카드당 1장을 넘지 않는다."""
     rows = []
     for c in cards:
         c.setdefault("req", str(uuid.uuid4()))
@@ -239,7 +240,9 @@ def ba_save(app, user, cards):
                      "image_path": c["path"], "notes": c["notes"].strip(), "ai_category": ai.get("category"),
                      "ai_subcategory": ai.get("subcategory"), "ai_confidence": ai.get("confidence"),
                      "request_id": c["req"]})
-    app.store.create_wardrobe_items(user["id"], rows)     # 저장소가 지난 추천을 비운다 (screens/context.py)
+    conflicts = []
+    app.store.create_wardrobe_items(user["id"], rows, conflicts=conflicts)   # 저장소가 지난 추천을 비운다 (screens/context.py)
+    return len(conflicts)
 
 
 def render(app, user):
@@ -345,14 +348,17 @@ def _actions(cards):
 def _save(app, user, cards, to_save):
     ss = st.session_state
     try:
-        ba_save(app, user, to_save)
+        kept = ba_save(app, user, to_save)
     except Exception as e:
         st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요. 다시 누르면 카드를 고쳤더라도 "
-                 "사진마다 지금 내용으로 한 벌씩만 저장돼요.")
+                 "사진마다 한 벌씩만 저장돼요 (그사이 옷장 목록에서 고치거나 지운 옷은 목록 쪽을 그대로 둬요).")
         return
     saved = {id(c) for c in to_save}
     ss.ba_cards = [c for c in cards if id(c) not in saved]
     ss.ba_idx = 0
     ss.ba_flash.append(("success", f"{len(to_save)}벌을 옷장에 넣었어요. '옷장 목록'에서 볼 수 있어요."
                         + (f" 남은 사진 {len(ss.ba_cards)}장도 확인해 주세요." if ss.ba_cards else "")))
+    if kept:
+        ss.ba_flash.append(("warning", f"{kept}벌은 앞의 저장이 이미 되어 있었고 그 뒤 옷장 목록에서 고치거나 지워서, "
+                                       "카드 내용으로 바꾸지 않고 목록 쪽을 그대로 뒀어요."))
     st.rerun()

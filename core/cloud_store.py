@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -22,6 +23,8 @@ PAGE = 1000          # 한 번에 받을 줄 수 (Supabase 기본 반환 한도)
 LOG_COLS = ("session_id", "started_at", "completed_at", "purpose", "temperature", "apparent_temperature", "humidity",
             "precipitation", "rain", "wind_speed", "weather_source", "recommendation_id", "rank", "score",
             "rating", "worn", "thermal_feedback", "satisfaction")    # core/db.py export 와 같은 순서 (+ 있으면 outfit)
+# SQLite 에서 REAL 인 열. JSON(jsonb)을 거치면 22.0 이 22 로 와서 CSV 가 "22" 가 되므로 실수로 되돌린다 (SQLite 판은 "22.0")
+LOG_FLOAT_COLS = ("temperature", "apparent_temperature", "humidity", "precipitation", "wind_speed", "score")
 
 
 def _now():
@@ -56,17 +59,17 @@ class CloudStore:
         """여러 줄 조회를 끝까지 받는다 (키셋). make_query() 는 select(..., count="exact") 와 조건까지 정한 새 쿼리.
         id(고유하고 늘어나기만 함) 순서로 받고, 다음 쪽은 받은 마지막 id 다음부터라서 받는 도중 행이 추가·삭제돼도
         이미 받은 행이 다시 오거나 남은 행을 건너뛰지 않는다 (offset 방식은 밀리거나 당겨지고, 범위를 넘으면 416).
-        첫 쪽의 전체 줄 수(count)만큼 받을 때까지 이어 받아서 서버 반환 한도가 PAGE 보다 작아도 끝까지 받는다."""
-        out, total = [], None
+        끝은 쪽마다 새로 받은 '남은 줄 수'(커서 뒤 count)로 판단한다: 첫 쪽의 전체 개수로 끝내면 받는 도중 커서 뒤에
+        새로 들어온 행 때문에 원래 있던 마지막 행을 놓친다. 서버 반환 한도가 PAGE 보다 작아도 남은 줄이 있으면 이어 받는다."""
+        out = []
         while True:
             q = make_query()
             if out:
                 q = q.lt("id", out[-1]["id"]) if desc else q.gt("id", out[-1]["id"])
             res = q.order("id", desc=desc).limit(PAGE).execute()
             rows = list(res.data or [])
-            total = res.count if total is None else total
             out += rows
-            if not rows or (len(out) >= total if total is not None else len(rows) < PAGE):
+            if not rows or (len(rows) >= res.count if res.count is not None else len(rows) < PAGE):
                 return out
 
     def _insert(self, table, row):
@@ -113,29 +116,43 @@ class CloudStore:
             "rain_ok": rain_ok, "material": material, "image_path": image_path, "notes": notes,
             "ai_category": ai_category, "ai_subcategory": ai_subcategory, "ai_confidence": ai_confidence}, _now()))
 
-    def _save_by_request(self, table, rows):
-        """등록 요청 id 규칙 (SQLite 판과 같음): id 가 없는 행은 늘 새로, 있는 행은 같은 id 행이 있으면 지금 값으로 고치고
-        없으면 넣는다. upsert 한 번(= 한 거래)이라 중간에 실패하면 아무것도 안 바뀐다. id 를 넣은 순서대로 돌려준다.
-        같은 id 가 묶음 안에 반복되면 나중 값 하나만 보낸다 (PostgreSQL 은 한 문장에서 같은 행을 두 번 고칠 수 없다)."""
+    def _save_by_request(self, table, rows, conflicts=None):
+        """등록 요청 id 규칙 (SQLite 판과 같음): id 가 없는 행은 늘 새로, 있는 행은 같은 id 행이 없으면 넣고, 있으면 아직
+        등록 상태 그대로일 때만(지우지 않았고, 옷은 '정보 수정'으로 따로 고치지 않음) 지금 값으로 고친다. 그 밖의 행은
+        그대로 두고 요청 id 를 conflicts 에 넣는다. 새 행 넣기는 문장 하나(on conflict do nothing)라 중간에 실패하면
+        아무것도 안 들어가고, 고치기는 행마다 조건부라 다시 해도 같다. id 를 넣은 순서대로 돌려준다.
+        요청 id 가 없는 행에도 이번 저장에서만 쓰는 id 를 붙여, 돌아온 행을 응답 순서가 아니라 id 로 맞춘다."""
         if not rows:
             return []
-        last = {r["request_id"]: i for i, r in enumerate(rows) if r["request_id"]}
-        send = [r for i, r in enumerate(rows) if not r["request_id"] or last[r["request_id"]] == i]
-        data = self._t(table).upsert(send, on_conflict="user_id,request_id").execute().data
-        by_request = {d["request_id"]: d["id"] for d in data if d.get("request_id")}
-        fresh = iter(d["id"] for d in data if not d.get("request_id"))   # 요청 id 없는 행은 보낸 순서대로 돌아온다
-        return [by_request[r["request_id"]] if r["request_id"] else next(fresh) for r in rows]
+        rows = [r if r["request_id"] else {**r, "request_id": str(uuid.uuid4())} for r in rows]
+        last = {r["request_id"]: i for i, r in enumerate(rows)}        # 묶음 안 반복은 나중 값 하나만
+        send = [r for i, r in enumerate(rows) if last[r["request_id"]] == i]
+        added = {d["request_id"] for d in self._t(table).upsert(send, on_conflict="user_id,request_id",
+                                                                 ignore_duplicates=True).execute().data}
+        for r in send:
+            if r["request_id"] in added:
+                continue
+            q = (self._t(table).update({k: v for k, v in r.items() if k not in ("user_id", "request_id")})
+                 .eq("user_id", self.uid).eq("request_id", r["request_id"]).eq("deleted", 0))
+            if table == "wardrobe_items":
+                q = q.is_("edited_at", "null")
+            if not q.execute().data and conflicts is not None:
+                conflicts.append(r["request_id"])
+        keys = list(last)
+        ids = {d["request_id"]: d["id"] for d in self._all(lambda: self._t(table).select("id,request_id", count="exact")
+                                                           .eq("user_id", self.uid).in_("request_id", keys))}
+        return [ids[r["request_id"]] for r in rows]
 
-    def create_wardrobe_items(self, user_id, items):
+    def create_wardrobe_items(self, user_id, items, conflicts=None):
         self._own(user_id)
-        return self._save_by_request("wardrobe_items", [wardrobe_row(self.uid, x, _now()) for x in items])
+        return self._save_by_request("wardrobe_items", [wardrobe_row(self.uid, x, _now()) for x in items], conflicts)
 
     def update_wardrobe_item(self, item_id, user_id, name, category, subcategory, color, warmth, rain_ok,
                              material="", notes=""):
         self._own(user_id)
         self._set_item(item_id, {"name": name, "category": category, "subcategory": subcategory, "color": color,
                                  "warmth": int(warmth), "rain_ok": int(bool(rain_ok)), "material": material,
-                                 "notes": notes}, only_kept=True)
+                                 "notes": notes, "edited_at": _now()}, only_kept=True)
 
     def list_wardrobe_items(self, user_id, active_only=True):
         self._own(user_id)
@@ -198,11 +215,11 @@ class CloudStore:
 
     # ------------------------------------------------------------ 구매 후보
     def create_candidate(self, user_id, name, category, subcategory, color, warmth, rain_ok, image_path="",
-                         link="", ai_subcategory=None, ai_confidence=None, request_id=None):
+                         link="", ai_subcategory=None, ai_confidence=None, request_id=None, conflicts=None):
         self._own(user_id)
         return self._save_by_request("purchase_candidates", [candidate_row(
             self.uid, name, category, subcategory, color, warmth, rain_ok, image_path, link, ai_subcategory,
-            ai_confidence, _now(), request_id)])[0]
+            ai_confidence, _now(), request_id)], conflicts)[0]
 
     def list_candidates(self, user_id):
         self._own(user_id)
@@ -320,7 +337,7 @@ class CloudStore:
         self._own(user_id)
         data = []
         for r in self._rpc("export_user_logs", {}):
-            d = {k: r[k] for k in LOG_COLS}
+            d = {k: (float(r[k]) if k in LOG_FLOAT_COLS and r[k] is not None else r[k]) for k in LOG_COLS}
             if r.get("outfit") is not None:
                 d["outfit"] = r["outfit"]
             data.append(d)
