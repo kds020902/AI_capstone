@@ -59,6 +59,7 @@
 | `supabase/schema.sql` | 표·접근 정책·사진 버킷 (여러 번 실행해도 안전) |
 | `tryon_space/` | Hugging Face Space에 올리는 가상 착용 앱. 옷 사진 주소가 다른 곳으로 넘어가면 넘어갈 때마다 허용 목록을 다시 확인(최대 3번) |
 | `scripts/` | 데이터 받기·학습(`open_datasets.py`, `prepare_dataset.py`, `train_classifier.py`), 웹 체험판 만들기(`build_web.py`), Supabase 점검·이전 |
+| `notebooks/` | Colab 노트북: 앱 실행(`COLAB_RUN.ipynb`), CatVTON 가상 착용 시험(`CATVTON_TEST.ipynb`) |
 | `web/` | 웹 체험판 (`src/closet.js` 추천 규칙·후보 자격, `src/closetnet.js` 분류 모델 계산). 규칙 숫자는 `build_web.py`가 파이썬 소스에서 뽑아 넣는다 |
 | `tests/` | 자동 시험 (`docs/test-plan.md`) |
 

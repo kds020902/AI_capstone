@@ -1,6 +1,6 @@
 # 테스트 계획 및 결과 — AI 옷장
 
-작성 기준: 2026-11-07, 처음 작성 2026-10-20. 기능 기준은 `docs/prd.md`, 분류기 평가 조건은 `docs/evaluation.md`.
+작성 기준: 2026-11-09, 처음 작성 2026-10-20. 기능 기준은 `docs/prd.md`, 분류기 평가 조건은 `docs/evaluation.md`.
 
 ## 1. 실행 방법
 
@@ -46,6 +46,8 @@ SUPABASE_URL=... SUPABASE_KEY=... python scripts/check_supabase.py --email-a 시
 
 | 날짜 | 시험 | 환경 | 결과 |
 |---|---|---|---|
+| 2026-11-09 | 저장소 정리 후 (T-12: `이전버전/` → 태그 `before-deploy`, 노트북 → `notebooks/`, `models/.gitkeep` 삭제, CI 상태 확인 `pg_isready -U postgres`) | Python 3.13 개발 환경 (PostgreSQL DSN 없음), 커밋 `c7516f4` + 작업 중 변경. 코드 변경 없음 | ruff 통과, pytest **207 통과, 0 실패, 6 건너뜀** (RLS 6개는 DSN이 없어 건너뜀, CI에서 돎). 노트북 2개는 `/content/...` 절대 경로만 써서 옮겨도 그대로 동작 (셀 내용 확인, Colab에서 실행은 안 해 봄). 태그 `before-deploy` = 커밋 `74c3210`. GitHub CI 결과는 push 뒤 확인 |
+| 2026-11-07 | GitHub Actions CI 첫 실행 | `.github/workflows/ci.yml`, 커밋 `c7516f4`, ubuntu-latest + Python 3.12 + Node 22 + PostgreSQL 16 서비스 | **성공**: ruff 통과, pytest **213 통과, 0 건너뜀** (RLS 6개 포함), 약 2분. 같은 push의 Pages 배포도 성공 (공개 페이지에 `DATA.THERMAL_TYPES` 반영 확인). 로그에 PostgreSQL 'role "root" does not exist' 줄이 반복됨 (상태 확인 명령이 사용자 이름 없이 돌아서 생긴 것, 시험 결과와 무관) → 2026-11-09 수정 |
 | 2026-11-07 | CI 단계 그대로 (큰 함수 나누기 + CI 추가 후) | Python **3.12**(배포와 같은 버전) 새 가상환경에 `requirements-dev.txt` + ruff + psycopg, Node 22, PostgreSQL 16 (UTF-8, `schema.sql` 두 번 적용), 커밋 `6216398` + 작업 중 변경 | ruff 통과, pytest **213 통과, 0 실패, 0 건너뜀** (RLS 6개 포함). 같은 변경으로 Python 3.13(DSN 없음): 207 통과·6 건너뜀. 함수 복잡도(radon) 21 이상 0개 (전: `recommend` 40, 화면 함수 31~38, `_later_advice` 27, `candidate_report` 25 → 가장 큰 것 17). 웹 체험판 브라우저 확인: 체감 성향 5단계 표시, 청바지 사진 87% '자동 입력됨', 오류 0 |
 | 2026-11-07 | **배포 주소 핵심 흐름 (T-01) + 속도 (T-05)** | `https://aicapstone44587.streamlit.app/`, 커밋 `4ec61c1` 자동 재배포본, 실제 Supabase, Chromium(Playwright) 1280×900, 새 시험 계정 1개 | **통과**: 가입 → 프로필 저장 → 스타터 30벌 → 직접 추가 사진 1장(청바지 사진 → "AI 판단: 청바지 84%") → 저장 → 옷장 목록에 표시 → 오늘의 추천(수동·비) TOP 3, v2 표시 "실제 체감 22.0℃ · 추천 기준 22.0℃" → 코디 저장 → 저장 코디 표시. 화면 오류 0, 브라우저 오류 0. 걸린 시간(앱 실행 상태가 끝날 때까지): 로그인 3.1초, 내 옷장(31벌·사진 1장) 2.0초, 내 옷장 다시 그리기 0.8초, 사진 → AI 후보 1.7초(모델이 이미 서버 메모리에 있을 때), 사진 저장 1.2초, 화면 전환 0.9~1.1초, 추천 TOP 3 1.7초. 11-02 실측(AI 10.9초, 옷 저장 후 목록 12.2초, 추천 4.7초)보다 빨라짐. 서버가 막 깨어난 뒤 첫 AI 분류 시간은 재지 않음. 시험 뒤 계정의 행·프로필·사진 모두 지움(남은 것 0), 계정은 남음 (T-02) |
 | 2026-11-07 | 웹 체험판 공개 배포 (GitHub Pages) | `https://kds020902.github.io/AI_capstone/`, 커밋 `4ec61c1`, Chromium(Playwright) 노트북 1280×900 + 휴대폰 390×844 | **통과**: Pages 켠 뒤 배포 성공(Actions 실행 #3 두 번째 시도), 공개 페이지가 저장소 `web/index.html`과 바이트까지 같음, 모델 파일 200, 추천 TOP 3 표시("실제 체감 11℃ → 추천 기준 11℃", 1위 93.3%), 아래 '평가 조건과 결과 보기' 링크, 가로 넘침 없음, 페이지 오류 0. 휴대폰 사진 시험 중 청바지 사진 1장 → 청바지 87%·슬랙스 2%·레깅스 1% (1.6초) |

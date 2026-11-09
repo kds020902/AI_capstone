@@ -1,5 +1,12 @@
 # AI 옷장
 
+날씨·외출 목적·체질에 맞춰 **내 옷장 속 옷으로 코디를 추천**하고, 옷 사진을 올리면 **AI가 옷 종류(42종)를 자동으로 분류**하는 웹 서비스입니다.
+사기 전에 후보 옷이 내 옷장과 어울리는지도 맞춰 볼 수 있습니다.
+
+- 앱: <https://aicapstone44587.streamlit.app/> (무료 서버라 오래 안 쓰면 잠들어, 첫 접속 때 깨우는 데 시간이 걸릴 수 있습니다)
+- 설치 없는 웹 체험판: <https://kds020902.github.io/AI_capstone/> (추천 + 사진 AI 분류, 날씨는 직접 입력)
+- 개발 문서: 아래 [개발 문서](#개발-문서) 표
+
 ## 실행 방법
 
 Python 3.10 이상이 필요합니다.
@@ -19,7 +26,8 @@ streamlit run app.py
   ```
 
 - Windows에서는 설치 후 `run_windows.bat` 을 더블클릭해도 됩니다.
-- Google Colab에서는 `COLAB_RUN.ipynb` 를 열고 셀을 순서대로 실행합니다.
+- Google Colab에서는 [`notebooks/COLAB_RUN.ipynb`](https://colab.research.google.com/github/kds020902/AI_capstone/blob/main/notebooks/COLAB_RUN.ipynb) 를 열고 셀을 순서대로 실행합니다.
+  `notebooks/CATVTON_TEST.ipynb` 는 가상 착용(CatVTON)을 Colab GPU로 시험해 본 노트북입니다.
 
 ## 체험판 웹 페이지
 
@@ -38,7 +46,7 @@ python -m http.server -d web 8000
 - 앱: Streamlit Community Cloud · 로그인·DB·옷 사진: Supabase (사용자별 접근 제한) · 가상 착용(예시): Hugging Face ZeroGPU Space (`tryon_space/`) · 웹 체험판: GitHub Pages
 - 설정 이름: `SUPABASE_URL`, `SUPABASE_KEY`(공개용 키만), `TRYON_SPACE_URL`(선택), `WEB_TRIAL_URL`(선택) — 예시는 `.streamlit/secrets.toml.example`
 - 이 설정이 없으면 위 실행 방법 그대로 로컬 모드(로그인 없음, SQLite)로 동작합니다.
-- 공개 배포 작업 전의 저장소 전체는 `이전버전/AI옷장_배포전_74c3210.zip` 에 압축해 두었습니다.
+- 공개 배포 작업 전 버전(로그인 없이 내 PC에서만 도는 SQLite 버전)은 Git 태그 `before-deploy`(커밋 `74c3210`)로 남겨 두었습니다. 압축 파일: <https://github.com/kds020902/AI_capstone/archive/refs/tags/before-deploy.zip>
 - 무료 요금제라 잠들기(앱 12시간·Supabase 1주일 무활동)와 가상 착용 하루 사용량 제한이 있습니다. 자세한 한도는 `DEPLOY.md` 5절.
 
 시험: `pip install -r requirements-dev.txt` 후 `pytest` (Supabase 대신 가짜 백엔드로 두 계정 분리·화면 흐름까지 확인). GitHub에 push하면 같은 시험이 GitHub Actions(`.github/workflows/ci.yml`)에서 자동으로 돈다.
