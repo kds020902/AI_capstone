@@ -86,5 +86,7 @@ def test_sure_when_confident(monkeypatch):
 
 def test_web_uses_same_confidence_threshold():
     """웹 체험판이 '자동 입력됨 / 후보 중에서 골라 주세요'를 가르는 기준이 앱과 같은지."""
+    from scripts.build_web import closet_data
     web = (v.ROOT / "web" / "src" / "app_body.html").read_text(encoding="utf-8")
-    assert f"conf >= {v.SURE_CONFIDENCE}" in web
+    assert "conf >= DATA.SURE_CONFIDENCE" in web                      # 숫자를 손으로 옮겨 적지 않고
+    assert closet_data()["SURE_CONFIDENCE"] == v.SURE_CONFIDENCE      # 파이썬 값을 그대로 받는다

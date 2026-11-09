@@ -242,60 +242,80 @@ def render(app, user):
                  duration="long" if kind == "warning" else "short")
     ss.ba_flash = []
     cards = ss.ba_cards
-
-    if not cards or ss.ba_more:
-        if len(cards) < MAX_PHOTOS:
-            label = ("저장할 의류를 넣어 주세요 (최대 10장까지)" if not cards
-                     else f"사진 더 넣기 (지금 {len(cards)}장 · 최대 {MAX_PHOTOS}장까지)")
-            files = st.file_uploader(label, type=["jpg", "jpeg", "png"], accept_multiple_files=True,
-                                     key=f"ba_up_{ss.ba_nonce}")
-            if files:
-                ba_ingest(app, files)
-                st.rerun()
-        else:
-            st.info(f"이미 {MAX_PHOTOS}장이에요. 사진을 빼거나 저장하면 더 넣을 수 있어요.")
-        if not cards:
-            st.caption("올리면 AI가 종류·색·이름을 먼저 채워 줘요. 한 장씩 확인하고 저장하세요.")
-            return
-        with st.container(horizontal=True):
-            if st.button("닫기", key="ba_more_close"):
-                ss.ba_more = False
-                st.rerun()
-            st.button("지금 사진 모두 빼고 처음부터", key="ba_clear", type="tertiary", on_click=ba_clear)
-
-    n = len(cards)
-    ss.ba_idx = min(ss.ba_idx, n - 1)
-    idx, card = ss.ba_idx, cards[ss.ba_idx]
-    done = sum(c["confirmed"] for c in cards)
-    multi = n > 1
-    ai_note = "AI 분류 완료" if all(c["cands"] for c in cards) else "AI 분류를 못 한 사진은 종류를 직접 골라 주세요"
-    with st.container(horizontal=True, vertical_alignment="bottom"):
-        if multi:
-            st.progress(done / n, text=f"📎 사진 {n}장 · 확인 {done} / {n}")
-        else:
-            st.caption(f"📎 사진 1장 · {ai_note}")
-        if st.button("목록", icon=":material/grid_view:", key="ba_list", disabled=not multi):
-            ba_list_dialog()
-
+    if (not cards or ss.ba_more) and not _uploader(app, cards):
+        return
+    ss.ba_idx = min(ss.ba_idx, len(cards) - 1)
+    card = cards[ss.ba_idx]
+    _progress(cards)
     ba_sync(card)
     ba_seed(card)
     with st.container(height=480, border=True, key=f"ba_scroll_{card['uid']}"):
         c_photo, c_form = st.columns([1, 1.2], gap="medium")
         with c_photo:
-            with st.container(horizontal=True, vertical_alignment="center", key="ba_photo"):
-                st.button("‹", key="ba_prev", on_click=ba_go, args=(-1,), disabled=not multi, help="이전 사진")
-                st.image(card["view"], width="stretch")
-                st.button("›", key="ba_next", on_click=ba_go, args=(1,), disabled=not multi, help="다음 사진")
-            line = f":gray-badge[{idx + 1} / {n}]"
-            if multi:
-                line += " " + (":green-badge[✓ 확인함]" if card["confirmed"] else ":orange-badge[확인 전]") + " &nbsp; "
-                line += " ".join(":red[◉]" if i == idx else (":green[●]" if c["confirmed"] else ":gray[●]")
-                                 for i, c in enumerate(cards))
-            st.markdown(line)
+            _photo(cards, ss.ba_idx)
         with c_form:
             ba_fields(card)
+    to_save = _actions(cards)
+    if to_save:
+        _save(app, user, cards, to_save)
 
-    all_done = done == n
+
+def _uploader(app, cards):
+    """올리기 칸 (처음이거나 [다시 올리기]를 눌렀을 때). 확인할 카드가 있으면 True."""
+    ss = st.session_state
+    if len(cards) < MAX_PHOTOS:
+        label = ("저장할 의류를 넣어 주세요 (최대 10장까지)" if not cards
+                 else f"사진 더 넣기 (지금 {len(cards)}장 · 최대 {MAX_PHOTOS}장까지)")
+        files = st.file_uploader(label, type=["jpg", "jpeg", "png"], accept_multiple_files=True,
+                                 key=f"ba_up_{ss.ba_nonce}")
+        if files:
+            ba_ingest(app, files)
+            st.rerun()
+    else:
+        st.info(f"이미 {MAX_PHOTOS}장이에요. 사진을 빼거나 저장하면 더 넣을 수 있어요.")
+    if not cards:
+        st.caption("올리면 AI가 종류·색·이름을 먼저 채워 줘요. 한 장씩 확인하고 저장하세요.")
+        return False
+    with st.container(horizontal=True):
+        if st.button("닫기", key="ba_more_close"):
+            ss.ba_more = False
+            st.rerun()
+        st.button("지금 사진 모두 빼고 처음부터", key="ba_clear", type="tertiary", on_click=ba_clear)
+    return True
+
+
+def _progress(cards):
+    n, done = len(cards), sum(c["confirmed"] for c in cards)
+    with st.container(horizontal=True, vertical_alignment="bottom"):
+        if n > 1:
+            st.progress(done / n, text=f"📎 사진 {n}장 · 확인 {done} / {n}")
+        else:
+            note = "AI 분류 완료" if cards[0]["cands"] else "AI 분류를 못 한 사진은 종류를 직접 골라 주세요"
+            st.caption(f"📎 사진 1장 · {note}")
+        if st.button("목록", icon=":material/grid_view:", key="ba_list", disabled=n == 1):
+            ba_list_dialog()
+
+
+def _photo(cards, idx):
+    """사진과 ‹ › 이동, 몇 번째인지·확인 여부 표시."""
+    n, card, multi = len(cards), cards[idx], len(cards) > 1
+    with st.container(horizontal=True, vertical_alignment="center", key="ba_photo"):
+        st.button("‹", key="ba_prev", on_click=ba_go, args=(-1,), disabled=not multi, help="이전 사진")
+        st.image(card["view"], width="stretch")
+        st.button("›", key="ba_next", on_click=ba_go, args=(1,), disabled=not multi, help="다음 사진")
+    line = f":gray-badge[{idx + 1} / {n}]"
+    if multi:
+        line += " " + (":green-badge[✓ 확인함]" if card["confirmed"] else ":orange-badge[확인 전]") + " &nbsp; "
+        line += " ".join(":red[◉]" if i == idx else (":green[●]" if c["confirmed"] else ":gray[●]")
+                         for i, c in enumerate(cards))
+    st.markdown(line)
+
+
+def _actions(cards):
+    """[확인하고 다음] [사진 빼기] [다시 올리기] [저장]. 저장을 눌렀으면 저장할 카드 목록, 아니면 []."""
+    ss = st.session_state
+    multi = len(cards) > 1
+    all_done = all(c["confirmed"] for c in cards)
     if multi:
         st.button("✓ 모두 확인했어요" if all_done else "✓ 확인하고 다음 ›", key="ba_confirm", type="primary",
                   width="stretch", on_click=ba_confirm_next, disabled=all_done)
@@ -309,15 +329,19 @@ def render(app, user):
                          type="primary" if (all_done or not multi) else "secondary", disabled=not to_save)
     if multi and not all_done:
         st.caption("'확인하고 다음'을 누른 사진만 저장해요. 목록에서 원하는 사진으로 바로 갈 수 있어요.")
-    if save:
-        try:
-            ba_save(app, user, to_save)
-        except Exception as e:
-            st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요.")
-            return
-        saved = {id(c) for c in to_save}
-        ss.ba_cards = [c for c in cards if id(c) not in saved]
-        ss.ba_idx = 0
-        ss.ba_flash.append(("success", f"{len(to_save)}벌을 옷장에 넣었어요. '옷장 목록'에서 볼 수 있어요."
-                            + (f" 남은 사진 {len(ss.ba_cards)}장도 확인해 주세요." if ss.ba_cards else "")))
-        st.rerun()
+    return to_save if save else []
+
+
+def _save(app, user, cards, to_save):
+    ss = st.session_state
+    try:
+        ba_save(app, user, to_save)
+    except Exception as e:
+        st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요.")
+        return
+    saved = {id(c) for c in to_save}
+    ss.ba_cards = [c for c in cards if id(c) not in saved]
+    ss.ba_idx = 0
+    ss.ba_flash.append(("success", f"{len(to_save)}벌을 옷장에 넣었어요. '옷장 목록'에서 볼 수 있어요."
+                        + (f" 남은 사진 {len(ss.ba_cards)}장도 확인해 주세요." if ss.ba_cards else "")))
+    st.rerun()

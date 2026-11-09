@@ -99,7 +99,7 @@ def export_model(checkpoint=ROOT / "models" / "clothing_classifier.pt"):
 
 
 def closet_data():
-    from core import catalog, colors, eligibility as E, recommender as R, shopping, taxonomy as T
+    from core import catalog, colors, eligibility as E, recommender as R, shopping, taxonomy as T, vision
     return {
         "MAIN_CATEGORIES": T.MAIN_CATEGORIES, "PURPOSES": T.PURPOSES,
         "RULES": {k: {**v, "blocked_purposes": sorted(v["blocked_purposes"]),
@@ -112,6 +112,8 @@ def closet_data():
         "ALIASES": [[list(keys), name] for keys, name in colors._ALIASES],
         "THERMAL_SHIFT": E.THERMAL_SHIFT, "EXERCISE_SHIFT": E.EXERCISE_SHIFT, "RAIN_CHILL": E.RAIN_CHILL,
         "RAIN_CHILL_WARM": E.RAIN_CHILL_WARM, "RAIN_CHILL_SPAN": E.RAIN_CHILL_SPAN, "TIERS": E.TIERS,
+        "THERMAL_TYPES": [[label, cold, heat] for label, (cold, heat) in E.THERMAL_TYPES.items()],
+        "SURE_CONFIDENCE": vision.SURE_CONFIDENCE,
         "RAIN_MIX": R.RAIN_MIX, "WET_PARTS": R.WET_PARTS, "SCORE_SCALE": R.SCORE_SCALE, "BUCKET": R.BUCKET,
         "WARMTH_CONTRIB": R.WARMTH_CONTRIB, "TARGET_CURVE": R.TARGET_CURVE,
         "OUTER_REQUIRED_AT": R.OUTER_REQUIRED_AT, "LAYER_MAX_TEMP": R.LAYER_MAX_TEMP,

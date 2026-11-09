@@ -1,12 +1,7 @@
 from core.catalog import FEMALE_STARTER, MALE_STARTER
+from core.eligibility import THERMAL_TYPES
 
-THERMAL = {
-    "추위를 잘 탐": (1.0, 0.0),
-    "추위를 조금 탐": (0.6, 0.1),
-    "보통": (0.0, 0.0),
-    "더위를 조금 탐": (0.1, 0.6),
-    "더위를 잘 탐": (0.0, 1.0),
-}
+THERMAL = THERMAL_TYPES  # 앱 프로필·웹 체험판과 같은 체감 성향 5단계
 
 
 def starter_items(gender):

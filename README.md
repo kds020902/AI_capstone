@@ -41,7 +41,7 @@ python -m http.server -d web 8000
 - 공개 배포 작업 전의 저장소 전체는 `이전버전/AI옷장_배포전_74c3210.zip` 에 압축해 두었습니다.
 - 무료 요금제라 잠들기(앱 12시간·Supabase 1주일 무활동)와 가상 착용 하루 사용량 제한이 있습니다. 자세한 한도는 `DEPLOY.md` 5절.
 
-시험: `pip install -r requirements-dev.txt` 후 `pytest` (Supabase 대신 가짜 백엔드로 두 계정 분리·화면 흐름까지 확인).
+시험: `pip install -r requirements-dev.txt` 후 `pytest` (Supabase 대신 가짜 백엔드로 두 계정 분리·화면 흐름까지 확인). GitHub에 push하면 같은 시험이 GitHub Actions(`.github/workflows/ci.yml`)에서 자동으로 돈다.
 PostgreSQL 이 있으면 `AI_CLOSET_TEST_PG_DSN` 을 설정해 `supabase/schema.sql` 의 접근 정책(RLS)도 실제 DB에서 확인합니다.
 
 ## 개발 문서

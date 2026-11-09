@@ -332,7 +332,7 @@ footer a { color: var(--accent); }
   const swatch = (color) => SWATCH[C.normalizeColor(color)] || "transparent";
   const colorKo = (color) => KO[C.normalizeColor(color)] || (color || "색 미상");
   const ROLE = { 상의: "상의", 이너: "이너", 하의: "하의", 원피스: "원피스", 아우터: "겉옷", 신발: "신발" };
-  const THERMAL = [["추위를 잘 탐", 1, 0], ["추위를 조금 탐", 0.6, 0.1], ["보통", 0, 0], ["더위를 조금 탐", 0.1, 0.6], ["더위를 잘 탐", 0, 1]];
+  const THERMAL = DATA.THERMAL_TYPES;   // [이름, 추위 민감도, 더위 민감도] — core/eligibility.py 와 같은 표
   const PRESETS = [
     { label: "한겨울", t: -5, a: -9, rain: false }, { label: "쌀쌀한 날", t: 12, a: 11, rain: false },
     { label: "봄비", t: 14, a: 12, rain: true }, { label: "일교차 큰 날", t: 21, a: 21, rain: false, late: true, l: 9 }, { label: "초여름", t: 23, a: 24, rain: false }, { label: "한여름", t: 31, a: 34, rain: false },
@@ -722,7 +722,7 @@ footer a { color: var(--accent); }
     $("cands").innerHTML = order.map(([p, i]) =>
       `<button class="chip" type="button" data-sub="${spec.classes[i]}" aria-pressed="false">${spec.classes[i]}<span class="num">${(p * 100).toFixed(0)}%</span></button>`).join("");
     $("cand-wrap").hidden = false;
-    const sure = conf >= 0.7;
+    const sure = conf >= DATA.SURE_CONFIDENCE;   // 앱(core/vision.py)과 같은 확신 기준
     $("auto-badge").textContent = sure ? "자동 입력됨" : "후보 중에서 골라 주세요";
     $("auto-badge").className = "auto" + (sure ? "" : " check");
     applySub(top); markCand(top);

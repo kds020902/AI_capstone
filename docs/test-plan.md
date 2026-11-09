@@ -7,6 +7,10 @@
 ```bash
 pip install -r requirements-dev.txt
 pytest                                    # 전체 (웹-앱 비교 시험은 Node.js 가 있어야 돈다)
+ruff check --select F,E9 app.py core screens scripts tests tryon_space conftest.py
+
+# GitHub Actions (.github/workflows/ci.yml): main push·PR마다 위 두 줄을 Python 3.12 + Node 22 + PostgreSQL 16 에서 자동 실행
+# (RLS 시험 6개도 CI에서는 돈다)
 
 # 접근 정책(RLS)을 실제 PostgreSQL 에서 (빈 DB 필요, psycopg 설치)
 AI_CLOSET_TEST_PG_DSN="postgresql://postgres@127.0.0.1:5432/빈DB" pytest tests/test_rls_sql.py
@@ -15,7 +19,7 @@ AI_CLOSET_TEST_PG_DSN="postgresql://postgres@127.0.0.1:5432/빈DB" pytest tests/
 SUPABASE_URL=... SUPABASE_KEY=... python scripts/check_supabase.py --email-a 시험1 --email-b 시험2
 ```
 
-## 2. 자동 시험 구성 (pytest 212개)
+## 2. 자동 시험 구성 (pytest 213개)
 
 | 파일 | 개수 | 확인하는 것 |
 |---|---|---|
@@ -25,11 +29,11 @@ SUPABASE_URL=... SUPABASE_KEY=... python scripts/check_supabase.py --email-a 시
 | `test_taxonomy.py` | 11 | 42종 규칙표 일관성, 스타터 옷장 구성, 계절 계산·직접 지정 |
 | `test_db.py` | 10 | 로컬 SQLite 저장·수정, 연결이 with 블록 뒤에 닫힘(오류면 되돌림), 앱 흐름에서 닫히지 않은 연결 경고 0 |
 | `test_app_flow.py` | 9 | 화면 흐름(AppTest): 로컬 모드 전체 흐름, 공개 모드 로그인·두 계정 분리·가상 착용 창, 이메일 인증 설정, 공개 모드 직접 추가, 옷장을 바꾸면 지난 추천이 비워짐, 도시별 날씨, 내 옷장 다시 그릴 때 DB 2번·사진 다시 안 받음, 사용자 없을 때 화면마다 안내, 사기 전에 맞춰보기 판정·'샀어요' |
-| `test_vision.py` | 8 | 분류기 못 쓸 때 원인 안내, 대표색, 상위 3개 후보·확신 기준(웹과 같은 70%) |
+| `test_vision.py` | 8 | 분류기 못 쓸 때 원인 안내, 대표색, 상위 3개 후보·확신 기준(웹은 파이썬 값 70%를 그대로 받음) |
 | `test_cloud_store.py` | 7 | Supabase 저장소가 SQLite 판과 같은 결과, 두 계정 분리, 지운 옷은 정보 수정 안 됨, 로그아웃 시 차단, '샀어요' 중간 실패 시 후보 유지·다시 눌러도 한 벌(두 저장소), 사진 캐시 크기 한도 |
 | `test_shopping.py` | 6 | 구매 판정 (중복→코디 없음→빈 곳 채움→잘 어울림) |
 | `test_rls_sql.py` | 6 | 실제 PostgreSQL 에서 RLS: 본인 행만, 남의 행 쓰기 불가, 하위 표 부모 확인, 비로그인 차단, 사진 폴더 정책, 삭제 (DSN 없으면 건너뜀) |
-| `test_web_parity.py` | 5 | 웹(JS)과 앱(Python): 모든 후보 코디의 순위·점수·이유 문구·경고·저녁 안내와 다양화 후 TOP 3, 온도·후보 자격·젖음 부담(모든 종류 × 기온 × 목적 × 비 × 사용자 체크), 계절, 구매 판정, 분류기 |
+| `test_web_parity.py` | 6 | 웹(JS)과 앱(Python): 모든 후보 코디의 순위·점수·이유 문구·경고·저녁 안내와 다양화 후 TOP 3, 온도·후보 자격·젖음 부담(모든 종류 × 기온 × 목적 × 비 × 사용자 체크), 계절, 구매 판정, 분류기, 체감 성향 표를 파이썬에서 받음 |
 | `test_tryon_fetch.py` | 5 | 가상 착용 Space가 옷 사진 주소의 리다이렉트로 허용 목록을 빠져나가지 못함 (다른 호스트 거절, 같은 호스트는 따라감, 반복 멈춤, http·비슷한 호스트 거절) |
 | `test_prepare_dataset.py` | 5 | 데이터셋 변환 |
 | `test_batch_add.py` | 5 | 직접 추가 계산: 10장 제한, 끝과 처음이 이어진 이동, 다음 확인 안 한 사진, 사진 뺀 뒤 위치, 겹치지 않는 자동 이름 |
@@ -42,6 +46,7 @@ SUPABASE_URL=... SUPABASE_KEY=... python scripts/check_supabase.py --email-a 시
 
 | 날짜 | 시험 | 환경 | 결과 |
 |---|---|---|---|
+| 2026-11-07 | CI 단계 그대로 (큰 함수 나누기 + CI 추가 후) | Python **3.12**(배포와 같은 버전) 새 가상환경에 `requirements-dev.txt` + ruff + psycopg, Node 22, PostgreSQL 16 (UTF-8, `schema.sql` 두 번 적용), 커밋 `6216398` + 작업 중 변경 | ruff 통과, pytest **213 통과, 0 실패, 0 건너뜀** (RLS 6개 포함). 같은 변경으로 Python 3.13(DSN 없음): 207 통과·6 건너뜀. 함수 복잡도(radon) 21 이상 0개 (전: `recommend` 40, 화면 함수 31~38, `_later_advice` 27, `candidate_report` 25 → 가장 큰 것 17). 웹 체험판 브라우저 확인: 체감 성향 5단계 표시, 청바지 사진 87% '자동 입력됨', 오류 0 |
 | 2026-11-07 | **배포 주소 핵심 흐름 (T-01) + 속도 (T-05)** | `https://aicapstone44587.streamlit.app/`, 커밋 `4ec61c1` 자동 재배포본, 실제 Supabase, Chromium(Playwright) 1280×900, 새 시험 계정 1개 | **통과**: 가입 → 프로필 저장 → 스타터 30벌 → 직접 추가 사진 1장(청바지 사진 → "AI 판단: 청바지 84%") → 저장 → 옷장 목록에 표시 → 오늘의 추천(수동·비) TOP 3, v2 표시 "실제 체감 22.0℃ · 추천 기준 22.0℃" → 코디 저장 → 저장 코디 표시. 화면 오류 0, 브라우저 오류 0. 걸린 시간(앱 실행 상태가 끝날 때까지): 로그인 3.1초, 내 옷장(31벌·사진 1장) 2.0초, 내 옷장 다시 그리기 0.8초, 사진 → AI 후보 1.7초(모델이 이미 서버 메모리에 있을 때), 사진 저장 1.2초, 화면 전환 0.9~1.1초, 추천 TOP 3 1.7초. 11-02 실측(AI 10.9초, 옷 저장 후 목록 12.2초, 추천 4.7초)보다 빨라짐. 서버가 막 깨어난 뒤 첫 AI 분류 시간은 재지 않음. 시험 뒤 계정의 행·프로필·사진 모두 지움(남은 것 0), 계정은 남음 (T-02) |
 | 2026-11-07 | 웹 체험판 공개 배포 (GitHub Pages) | `https://kds020902.github.io/AI_capstone/`, 커밋 `4ec61c1`, Chromium(Playwright) 노트북 1280×900 + 휴대폰 390×844 | **통과**: Pages 켠 뒤 배포 성공(Actions 실행 #3 두 번째 시도), 공개 페이지가 저장소 `web/index.html`과 바이트까지 같음, 모델 파일 200, 추천 TOP 3 표시("실제 체감 11℃ → 추천 기준 11℃", 1위 93.3%), 아래 '평가 조건과 결과 보기' 링크, 가로 넘침 없음, 페이지 오류 0. 휴대폰 사진 시험 중 청바지 사진 1장 → 청바지 87%·슬랙스 2%·레깅스 1% (1.6초) |
 | 2026-11-07 | 전체 pytest (추천 v2 + 성능 + 화면 분리 후) | Python 3.13, Node 22, 커밋 `0538aaa` + 작업 중 변경 | **206 통과, 0 실패, 6 건너뜀** (RLS 6개: PostgreSQL DSN 없음). 커버리지(문장+분기) app+core+screens 81%, `core/recommender.py` 95%, `core/eligibility.py` 97% |

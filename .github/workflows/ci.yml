@@ -1,0 +1,52 @@
+# push·PR마다 자동 시험: ruff(문법·안 쓰는 import 등) + pytest 전체.
+# - Python 3.12 (Streamlit Community Cloud 배포와 같은 버전), CPU 전용 PyTorch 는 requirements.txt 에서 설치
+# - Node.js: 웹 체험판(JS)과 앱(Python)의 결과 비교 시험
+# - PostgreSQL 16: supabase/schema.sql 의 접근 정책(RLS) 시험 (로컬에서는 DSN 이 없으면 건너뜀)
+# 비밀값은 쓰지 않는다 (실제 Supabase 에 접속하지 않음, 가짜 백엔드 tests/fake_supabase.py 사용).
+name: 시험 (CI)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      AI_CLOSET_TEST_PG_DSN: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt ruff "psycopg[binary]"
+      - name: ruff
+        run: ruff check --select F,E9 app.py core screens scripts tests tryon_space conftest.py
+      - name: pytest
+        run: python -m pytest -q -p no:cacheprovider

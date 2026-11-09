@@ -153,3 +153,11 @@ def test_js_classifier_matches_pytorch(tmp_path):
     js = torch.tensor(got["logits"])
     assert (js - ref).abs().max() < 0.25  # float16 가중치라 약간의 차이는 있음
     assert torch.equal(js.argmax(1), ref.argmax(1))
+
+
+def test_web_thermal_types_come_from_python():
+    """웹 체험판의 체감 성향 5단계가 앱(core/eligibility.py)과 같은 표에서 온다."""
+    from core.eligibility import THERMAL_TYPES
+    web = (ROOT / "web" / "src" / "app_body.html").read_text(encoding="utf-8")
+    assert "const THERMAL = DATA.THERMAL_TYPES;" in web
+    assert closet_data()["THERMAL_TYPES"] == [[k, c, h] for k, (c, h) in THERMAL_TYPES.items()]

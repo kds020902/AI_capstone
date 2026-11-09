@@ -14,7 +14,7 @@
 | 가상 착용 | Hugging Face ZeroGPU Space, Gradio, spaces, diffusers, transformers, CatVTON | Gradio 5.49.1, diffusers 0.41.0, transformers 5.19.0, CatVTON 커밋 7818397 |
 | 웹 체험판 | 순수 HTML·JavaScript (라이브러리 없음) | – |
 | 로컬 모드 | SQLite, 로컬 폴더 `data/uploads/` | – |
-| 시험 | pytest, Streamlit AppTest, Node.js(웹-앱 결과 비교) | – |
+| 시험 | pytest, Streamlit AppTest, Node.js(웹-앱 결과 비교), ruff, GitHub Actions CI (`.github/workflows/ci.yml`, PostgreSQL 16 서비스로 RLS 시험) | – |
 
 ## 2. 시스템 구조
 
@@ -49,7 +49,7 @@
 | `core/db.py` / `core/cloud_store.py` | 같은 함수 이름의 두 저장소: SQLite / Supabase. 화면 코드는 `store.함수()`만 부른다. 여러 벌 한 번에 넣기 `create_wardrobe_items`(Supabase는 insert 1번), 저장 후 고치기 `update_wardrobe_item`(지운 옷 제외) |
 | `core/media.py` | 사진 저장: `LocalMedia`(폴더) / `SupabaseMedia`(Storage, 서명 주소). `PhotoCache`(최근 쓴 순서, 크기 한도)를 세션에 두어 다시 그릴 때 사진을 다시 내려받지 않음, 목록용 작은 사진 `thumbnail_jpeg` |
 | `core/batch_add.py` | 직접 추가(사진 여러 장) 계산: 10장 제한, 끝과 처음이 이어진 이동, 다음 확인 안 한 사진, 겹치지 않는 자동 이름. 화면 상태(확인 카드)는 `st.session_state.ba_cards`에 두고, 안 보이는 카드의 입력값은 카드에 따로 보관한다 (Streamlit은 화면에 없는 위젯 값을 지움) |
-| `core/eligibility.py` | 온도 세 가지(실제 체감·추천 기준·두께 취향), 옷 하나의 후보 자격(절대 금지 / 목적 완화 / 기온 완화), 젖음 부담(사용자 체크 우선). 추천·구매 판정이 같이 쓰고, 계절 계산도 같은 기온 비교를 씀 |
+| `core/eligibility.py` | 온도 세 가지(실제 체감·추천 기준·두께 취향), 체감 성향 5단계 표(앱 프로필·시험·웹 체험판이 같이 씀), 옷 하나의 후보 자격(절대 금지 / 목적 완화 / 기온 완화), 젖음 부담(사용자 체크 우선). 추천·구매 판정이 같이 쓰고, 계절 계산도 같은 기온 비교를 씀 |
 | `core/recommender.py`, `core/taxonomy.py`, `data/clothing_taxonomy.csv` | 추천 단계(정상 → 목적 완화 → 기온 완화 → 둘 다, 코디가 나오는 첫 단계), 점수·순위(0.02 칸 → 색 → 점수 → FNV-1a 고정 순서), 42종 규칙표(착용 범위, 절대 금지·완화 목적, 젖음 부담, 비를 막는 겉옷), 겹쳐 입기·평소 피하는 조합, 계절 계산 |
 | `core/shopping.py` | 사기 전에 맞춰보기 |
 | `core/vision.py` | 분류 모델 불러오기·분류, 대표색 |
@@ -207,6 +207,7 @@ erDiagram
 | DB·로그인·사진 | Supabase 프로젝트에 `supabase/schema.sql` 실행, 이메일 인증 끔 |
 | 가상 착용 | Hugging Face ZeroGPU Space에 `tryon_space/` 파일 3개 업로드 |
 | 웹 체험판 | GitHub Actions `.github/workflows/pages.yml` → GitHub Pages (`web/` 변경 시 자동, 처음은 수동 실행) |
+| 자동 시험 | GitHub Actions `.github/workflows/ci.yml`: main push·PR마다 ruff + pytest (Python 3.12, Node 22, PostgreSQL 16). 비밀값 없이 가짜 Supabase로 시험 |
 
 무료 한도·잠들기·사용량 제한은 `DEPLOY.md` 5절.
 

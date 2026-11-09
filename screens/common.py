@@ -7,6 +7,7 @@ from pathlib import Path
 import streamlit as st
 
 from core.colors import COLOR_KO
+from core.eligibility import THERMAL_TYPES
 from core.media import open_upright
 from core.taxonomy import MAIN_CATEGORIES, SUBCATEGORIES, main_category_for_subcategory
 from core.tryon import MAX_GARMENTS, space_addresses, tryon_default, tryon_kind, tryon_link, tryon_order, tryon_supported
@@ -16,14 +17,8 @@ APP_NAME = "AI 옷장"
 MATERIALS = ["", "cotton", "polyester", "denim", "wool", "linen", "nylon", "other"]
 COLORS = list(COLOR_KO)
 
-THERMAL_OPTIONS = ["추위를 잘 탐", "추위를 조금 탐", "보통", "더위를 조금 탐", "더위를 잘 탐"]
-THERMAL_TO_SENSITIVITY = {
-    "추위를 잘 탐": (1.0, 0.0),
-    "추위를 조금 탐": (0.6, 0.1),
-    "보통": (0.0, 0.0),
-    "더위를 조금 탐": (0.1, 0.6),
-    "더위를 잘 탐": (0.0, 1.0),
-}
+THERMAL_TO_SENSITIVITY = THERMAL_TYPES          # 체감 성향 → (추위, 더위) 민감도 (core/eligibility.py 한 곳)
+THERMAL_OPTIONS = list(THERMAL_TYPES)
 THERMAL_FEEDBACK = {None: "응답 안 함", -2: "매우 추움", -1: "약간 추움", 0: "적당함", 1: "약간 더움", 2: "매우 더움"}
 
 
