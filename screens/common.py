@@ -1,6 +1,7 @@
 """여러 화면이 같이 쓰는 값과 위젯: 체질 선택지, 업로드 처리, AI 후보 고르기, 가상 착용, 옷 정보 수정."""
 from __future__ import annotations
 
+import inspect
 import io
 from pathlib import Path
 
@@ -37,6 +38,14 @@ def thermal_label(cold, heat):
     if heat >= 0.45:
         return "더위를 조금 탐"
     return "보통"
+
+
+def toast(body, icon=None, long=False):
+    """알림(st.toast). 오래 보이게(duration)는 그 인자가 있는 Streamlit 에서만 넘긴다 (공식 1.40 의 toast 에는 없음)."""
+    kwargs = {"icon": icon}
+    if "duration" in inspect.signature(st.toast).parameters:
+        kwargs["duration"] = "long" if long else "short"
+    st.toast(body, **kwargs)
 
 
 def upload_bytes(uploaded, rgb=False):

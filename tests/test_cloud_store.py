@@ -395,7 +395,7 @@ def test_batch_save_is_all_or_nothing(tmp_path, monkeypatch):
     client = signed_in_client(backend, "atomic@example.com")
     cloud = CloudStore(client, client.uid)
     cloud.create_user("나", "male", 0, 0)
-    backend.faults[("wardrobe_items", "upsert")] = "partial"          # 첫 행을 넣은 뒤 실패
+    backend.faults[("wardrobe_items", "insert")] = [None, "error"]    # 저장 함수 안에서 첫 행을 넣은 뒤 둘째에서 실패
     with pytest.raises(FakeAPIError):
         cloud.create_wardrobe_items(client.uid, batch)
     assert cloud.list_wardrobe_items(client.uid) == [] and backend.rows("wardrobe_items") == []
@@ -554,3 +554,46 @@ def test_ids_do_not_depend_on_returning_order():
                                                    {**shirt, "name": "셋째"}])
     names = {x["id"]: x["name"] for x in store.list_wardrobe_items(client.uid)}
     assert [names[i] for i in ids] == ["첫째", "둘째", "셋째"]
+
+
+def test_retry_that_fails_on_second_existing_row_changes_nothing_and_clears_recommendations(tmp_path, monkeypatch):
+    """이미 저장된 두 벌을 카드 내용으로 고치는 재시도에서 둘째 고치기가 실패하면, 첫째도 그대로다 (묶음 전체가 한 거래 —
+    SQLite·Supabase 같음). 실제로 바뀌었는지 모르는 실패라도 지난 추천은 비운다."""
+    from screens.context import WatchedStore
+    base = {"category": "상의", "warmth": 2, "rain_ok": 0}
+    first = [{**base, "name": "첫째", "request_id": _req(1)}, {**base, "name": "둘째", "request_id": _req(2)}]
+    retry = [{**base, "name": "첫째(고침)", "request_id": _req(1)}, {**base, "name": "둘째(고침)", "request_id": _req(2)}]
+
+    db.DB_PATH = tmp_path / "two.sqlite3"
+    db.init_db()
+    local_uid = db.create_user("나", "male", 0, 0)
+    backend = FakeBackend()
+    client = signed_in_client(backend, "two@example.com")
+    cloud = CloudStore(client, client.uid)
+    cloud.create_user("나", "male", 0, 0)
+    real_execute, updates = db.sqlite3.Connection.execute, []
+
+    def sqlite_second_update_fails(store_monkeypatch):
+        class Conn(db._Conn):
+            def execute(self, sql, *a):
+                if sql.startswith("UPDATE wardrobe_items SET name"):
+                    updates.append(1)
+                    if len(updates) == 2:
+                        raise RuntimeError("둘째 고치기 실패")
+                return real_execute(self, sql, *a)
+        store_monkeypatch.setattr(db, "_Conn", Conn)
+
+    for store, uid, break_it in ((db, local_uid, lambda: sqlite_second_update_fails(monkeypatch)),
+                                 (cloud, client.uid,
+                                  lambda: backend.faults.update({("wardrobe_items", "update"): [None, "error"]}))):
+        store.create_wardrobe_items(uid, first)
+        cleared = []
+        watched = WatchedStore(store, lambda: cleared.append(1))
+        break_it()
+        with pytest.raises(Exception):
+            watched.create_wardrobe_items(uid, retry)
+        monkeypatch.undo()
+        assert sorted(x["name"] for x in store.list_wardrobe_items(uid)) == ["둘째", "첫째"], store
+        assert cleared == [1], store
+        assert watched.create_wardrobe_items(uid, retry) and \
+            sorted(x["name"] for x in store.list_wardrobe_items(uid)) == ["둘째(고침)", "첫째(고침)"]

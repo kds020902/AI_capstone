@@ -26,7 +26,7 @@ def clear_recommendations():
 
 
 class WatchedStore:
-    """저장소(core/db.py 모듈 또는 CloudStore)를 감싸서, 옷장을 바꾸는 함수가 성공하면 on_change 를 부른다."""
+    """저장소(core/db.py 모듈 또는 CloudStore)를 감싸서, 옷장을 바꾸는 함수를 부르면(성공·실패 모두) on_change 를 부른다."""
 
     def __init__(self, store, on_change):
         self._store, self._on_change = store, on_change
@@ -37,9 +37,10 @@ class WatchedStore:
             return attr
 
         def call(*args, **kwargs):
-            result = attr(*args, **kwargs)
-            self._on_change()
-            return result
+            try:
+                return attr(*args, **kwargs)
+            finally:   # 실패·응답 유실로 실제로 바뀌었는지 모를 때도 비운다 (지난 추천에 바뀐 옷이 남지 않게)
+                self._on_change()
         return call
 
 

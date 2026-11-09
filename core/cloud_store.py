@@ -117,11 +117,11 @@ class CloudStore:
             "ai_category": ai_category, "ai_subcategory": ai_subcategory, "ai_confidence": ai_confidence}, _now()))
 
     def _save_by_request(self, table, rows, conflicts=None):
-        """등록 요청 id 규칙 (SQLite 판과 같음): id 가 없는 행은 늘 새로, 있는 행은 같은 id 행이 없으면 넣고, 있으면 아직
-        등록 상태 그대로일 때만(지우지 않았고, 옷은 '정보 수정'으로 따로 고치지 않음) 지금 값으로 고친다. 그 밖의 행은
-        그대로 두고 요청 id 를 conflicts 에 넣는다. 새 행 넣기는 문장 하나(on conflict do nothing)라 중간에 실패하면
-        아무것도 안 들어가고, 고치기는 행마다 조건부라 다시 해도 같다. id 를 넣은 순서대로 돌려준다.
-        요청 id 가 없는 행에도 이번 저장에서만 쓰는 id 를 붙여, 돌아온 행을 응답 순서가 아니라 id 로 맞춘다."""
+        """등록 요청 id 규칙 (SQLite 판과 같음) — 지금은 구매 후보 한 줄 저장에 쓴다 (옷 여러 벌은 DB 함수 한 번으로).
+        id 가 없는 행은 늘 새로, 있는 행은 같은 id 행이 없으면 넣고, 있으면 아직 등록 상태 그대로일 때만(지우지 않음)
+        지금 값으로 고친다. 그 밖의 행은 그대로 두고 요청 id 를 conflicts 에 넣는다. 한 줄이면 실제로 바뀌는 쓰기는
+        넣기(on conflict do nothing) 또는 조건부 고치기 중 하나뿐이다. 요청 id 가 없는 행에도 이번 저장에서만 쓰는 id 를
+        붙여, 돌아온 행을 응답 순서가 아니라 id 로 맞춘다."""
         if not rows:
             return []
         rows = [r if r["request_id"] else {**r, "request_id": str(uuid.uuid4())} for r in rows]
@@ -144,8 +144,18 @@ class CloudStore:
         return [ids[r["request_id"]] for r in rows]
 
     def create_wardrobe_items(self, user_id, items, conflicts=None):
+        """여러 벌을 DB 함수 하나(save_wardrobe_items, 한 거래)로 저장 → id 목록(넣은 순서). 요청 id 규칙·충돌은
+        SQLite 판과 같고, 중간에 실패하면 아무것도 안 바뀐다. 요청 id 가 없는 행에는 이번 저장에서만 쓰는 id 를 붙인다."""
         self._own(user_id)
-        return self._save_by_request("wardrobe_items", [wardrobe_row(self.uid, x, _now()) for x in items], conflicts)
+        rows = [wardrobe_row(self.uid, x, _now()) for x in items]
+        if not rows:
+            return []
+        rows = [r if r["request_id"] else {**r, "request_id": str(uuid.uuid4())} for r in rows]
+        out = self._rpc("save_wardrobe_items", {"p_rows": [{k: v for k, v in r.items() if k != "user_id"} for r in rows]})
+        ids = {str(o["req"]): o["item_id"] for o in out}
+        if conflicts is not None:
+            conflicts += [str(o["req"]) for o in out if o["kept_as_is"]]
+        return [ids[r["request_id"]] for r in rows]
 
     def update_wardrobe_item(self, item_id, user_id, name, category, subcategory, color, warmth, rain_ok,
                              material="", notes=""):

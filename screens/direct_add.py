@@ -13,7 +13,7 @@ from core.colors import COLOR_KO
 from core.media import open_upright, to_cloud_jpeg
 from core.taxonomy import MAIN_CATEGORIES, NUM_SUBCATEGORIES, RULES, SUBCATEGORIES, main_category_for_subcategory
 from core.vision import classify_clothing_image, dominant_color_name
-from screens.common import COLORS, MATERIALS, upload_bytes
+from screens.common import COLORS, MATERIALS, toast, upload_bytes
 
 OTHER_KIND = "다른 종류"
 # 사진·필드 부분만 따로 스크롤 (화면 맨 위에서 아래 버튼까지 한 화면에 들어오게, 최소 300px). 사진은 화면 높이에 맞춰 줄인다.
@@ -250,10 +250,9 @@ def render(app, user):
     ss = st.session_state
     st.html(BA_CSS)
     ss.ba_names = {x["name"] for x in app.wardrobe(user["id"])}
-    for kind, text in ss.ba_flash:      # 알림은 떠 있다 사라지게 (카드가 아래로 밀리지 않게)
-        st.toast(text, icon={"success": "✅", "info": "ℹ️"}.get(kind, "⚠️"),
-                 duration="long" if kind == "warning" else "short")
-    ss.ba_flash = []
+    flashes, ss.ba_flash = ss.ba_flash, []   # 먼저 비운다: 알림 표시에서 오류가 나도 다음 실행에 같은 알림이 남지 않게
+    for kind, text in flashes:      # 알림은 떠 있다 사라지게 (카드가 아래로 밀리지 않게)
+        toast(text, icon={"success": "✅", "info": "ℹ️"}.get(kind, "⚠️"), long=kind == "warning")
     cards = ss.ba_cards
     if (not cards or ss.ba_more) and not _uploader(app, cards):
         return

@@ -294,7 +294,7 @@ def test_cloud_direct_add_retry_does_not_duplicate_photos_or_items(cloud):
 
     more = next(u for u in at.file_uploader if u.label == "저장할 의류를 넣어 주세요 (최대 10장까지)")
     more.set_value([_noisy_photo(7), _noisy_photo(8)]).run()
-    cloud.faults[("wardrobe_items", "upsert")] = "lost"                 # DB에는 들어갔는데 응답만 유실
+    cloud.rpc_faults["save_wardrobe_items"] = "lost"                   # DB에는 들어갔는데 응답만 유실
     _confirm_all_and_save(at, 2)
     assert any("저장하지 못했어요" in e.value for e in at.error)
     assert len(cloud.rows("wardrobe_items")) == 5 and len(at.session_state.ba_cards) == 2
@@ -391,7 +391,7 @@ def test_cloud_direct_add_retry_keeps_edit_made_in_wardrobe_list(cloud):
     _goto(at, "내 옷장")
     next(u for u in at.file_uploader if u.label == "저장할 의류를 넣어 주세요 (최대 10장까지)").set_value([_photo(9)]).run()
     next(t for t in at.text_input if t.label == "이름").input("카드 셔츠").run()
-    cloud.faults[("wardrobe_items", "upsert")] = "lost"
+    cloud.rpc_faults["save_wardrobe_items"] = "lost"
     _button(at, "저장").click().run()                                        # 저장됨, 응답 유실
     other = signed_in_client(cloud, "edit@example.com")                      # 같은 사용자의 다른 창에서 목록 수정
     store = CloudStore(other, other.uid)
@@ -402,6 +402,35 @@ def test_cloud_direct_add_retry_keeps_edit_made_in_wardrobe_list(cloud):
     assert not at.exception and len(at.session_state.ba_cards) == 0
     assert [r["name"] for r in cloud.rows("wardrobe_items")] == ["목록에서 고친 이름"]
     assert any("목록 쪽을 그대로 뒀어요" in t.value for t in at.toast)
+
+
+def test_cloud_failed_retry_of_two_saved_cards_keeps_both_and_clears_old_recommendation(cloud):
+    """두 장 저장(응답 유실) → 추천 받기 → 두 카드를 고쳐 재시도하다 둘째 고치기가 실패: 두 옷 모두 그대로이고(한 거래),
+    결과를 모르는 실패라도 지난 추천은 비워진다 (바뀌었을지 모르는 옷이 든 추천이 남지 않게)."""
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    _signup(at, "two@example.com")
+    _make_profile_recommend_and_save(at, "T")
+    _goto(at, "내 옷장")
+    next(u for u in at.file_uploader if u.label == "저장할 의류를 넣어 주세요 (최대 10장까지)").set_value(
+        [_photo(11), _photo(12)]).run()
+    for _ in range(2):
+        _button(at, "✓ 확인하고 다음 ›").click().run()
+    cloud.rpc_faults["save_wardrobe_items"] = "lost"
+    at.button(key="ba_save").click().run()                                  # 두 벌 저장됨, 응답 유실
+    saved = sorted(r["name"] for r in cloud.rows("wardrobe_items") if r.get("request_id"))
+    _goto(at, "오늘의 추천")
+    _by_label(at.radio, "날씨").set_value("수동 입력").run()
+    _button(at, "TOP 3 추천 생성").click().run()
+    assert at.session_state["recommendations"]
+    _goto(at, "내 옷장")
+    for i in range(2):                                                     # 두 카드 이름 고치기
+        next(t for t in at.text_input if t.label == "이름").input(f"고친 카드 {i}").run()
+        _button(at, "›").click().run()
+    cloud.faults[("wardrobe_items", "update")] = [None, "error"]           # 첫째 고치기 성공, 둘째 실패
+    at.button(key="ba_save").click().run()
+    assert any("저장하지 못했어요" in e.value for e in at.error)
+    assert sorted(r["name"] for r in cloud.rows("wardrobe_items") if r.get("request_id")) == saved
+    assert at.session_state["recommendations"] is None
 
 
 def test_cloud_candidate_saved_after_earlier_one_was_deleted_or_bought_is_visible(cloud):

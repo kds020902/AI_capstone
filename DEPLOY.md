@@ -20,7 +20,7 @@ PC나 Colab을 켜 두지 않아도 되는 무료 서비스만 씁니다. 비용
 
 1. <https://supabase.com> 에 가입하고 **New project** (Free). 지역은 `Northeast Asia (Seoul)` 권장. DB 비밀번호는 따로 적어 둡니다.
 2. 왼쪽 **SQL Editor → New query** 에 저장소의 `supabase/schema.sql` 내용을 전부 붙여 넣고 **Run**.
-   - 표 7개, 사용자별 접근 정책(RLS), 비공개 사진 버킷 `wardrobe`(파일당 5MB, jpg/png/webp), 한 거래로 처리하는 DB 함수 2개(`buy_candidate` '샀어요', `save_recommendation_session` 추천 기록), 추천 로그 CSV 함수(`export_user_logs`), 옷의 '정보 수정' 시각 열(`edited_at`), 기록 조회용 뷰 4개(저장 코디·'별로'·추천 로그·KPI, PostgreSQL 15 이상 필요 — 새 Supabase 프로젝트는 해당)가 만들어집니다.
+   - 표 7개, 사용자별 접근 정책(RLS), 비공개 사진 버킷 `wardrobe`(파일당 5MB, jpg/png/webp), 한 거래로 처리하는 DB 함수 3개(`buy_candidate` '샀어요', `save_recommendation_session` 추천 기록, `save_wardrobe_items` 사진 여러 장 등록), 추천 로그 CSV 함수(`export_user_logs`), 옷의 '정보 수정' 시각 열(`edited_at`), 기록 조회용 뷰 4개(저장 코디·'별로'·추천 로그·KPI, PostgreSQL 15 이상 필요 — 새 Supabase 프로젝트는 해당)가 만들어집니다.
    - 여러 번 실행해도 안전합니다.
    - **이미 배포한 프로젝트도 `schema.sql` 이 바뀌면 다시 Run 한 뒤에 새 코드를 배포(push)합니다.** 2026-11-09 코드부터 앱이 위 DB 함수·뷰와 요청 id 열을 쓰므로, 다시 실행하지 않으면 '샀어요'·추천 저장·사진 등록·저장 코디·KPI 화면이 오류가 납니다.
 3. **Authentication → Sign In / Providers → Email** 에서 **Confirm email 을 끕니다.**

@@ -233,6 +233,48 @@ begin
       from public.recommendations x where x.session_id = sid;
 end $$;
 
+-- 사진 여러 장 등록(직접 추가) 묶음 저장. 한 거래라 중간에 실패하면 아무것도 안 바뀐다 (core/db.py 와 같은 규칙):
+-- 같은 요청 id 행이 없으면 넣고, 있으면 아직 등록 상태 그대로일 때만(지우지 않았고 '정보 수정'으로 고치지 않음)
+-- 보낸 값으로 고친다. 그 밖의 행은 그대로 두고 kept_as_is = true. 묶음 안 반복은 차례로 처리해 나중 값이 남는다.
+-- p_rows: [{"request_id": "...", "name": ..., "category": ..., ...}, ...] (모든 행에 요청 id, 순서대로 한 줄씩 결과)
+create or replace function public.save_wardrobe_items(p_rows jsonb)
+returns table (req uuid, item_id bigint, kept_as_is boolean)
+language plpgsql security invoker set search_path = ''
+as $$
+declare
+    r jsonb;
+    old public.wardrobe_items;
+    new_id bigint;
+begin
+    for r in select x.value from jsonb_array_elements(p_rows) as x loop
+        select * into old from public.wardrobe_items w
+         where w.user_id = auth.uid() and w.request_id = (r ->> 'request_id')::uuid;
+        if not found then
+            insert into public.wardrobe_items as w (user_id, request_id, name, category, subcategory, color, warmth,
+                rain_ok, material, image_path, notes, ai_category, ai_subcategory, ai_confidence, created_at)
+            values (auth.uid(), (r ->> 'request_id')::uuid, r ->> 'name', r ->> 'category', r ->> 'subcategory',
+                    r ->> 'color', (r ->> 'warmth')::integer, (r ->> 'rain_ok')::integer, r ->> 'material',
+                    r ->> 'image_path', r ->> 'notes', r ->> 'ai_category', r ->> 'ai_subcategory',
+                    (r ->> 'ai_confidence')::double precision, r ->> 'created_at')
+            returning w.id into new_id;
+            return query select (r ->> 'request_id')::uuid, new_id, false;
+        elsif old.deleted = 0 and old.edited_at is null then
+            update public.wardrobe_items w
+               set name = r ->> 'name', category = r ->> 'category', subcategory = r ->> 'subcategory',
+                   color = r ->> 'color', warmth = (r ->> 'warmth')::integer, rain_ok = (r ->> 'rain_ok')::integer,
+                   material = r ->> 'material', image_path = r ->> 'image_path', notes = r ->> 'notes',
+                   ai_category = r ->> 'ai_category', ai_subcategory = r ->> 'ai_subcategory',
+                   ai_confidence = (r ->> 'ai_confidence')::double precision, created_at = r ->> 'created_at'
+             where w.id = old.id;
+            return query select (r ->> 'request_id')::uuid, old.id, false;
+        else
+            return query select (r ->> 'request_id')::uuid, old.id, true;
+        end if;
+    end loop;
+end $$;
+
+revoke execute on function public.save_wardrobe_items(jsonb) from public, anon;
+grant execute on function public.save_wardrobe_items(jsonb) to authenticated;
 revoke execute on function public.buy_candidate(bigint, text) from public, anon;
 grant execute on function public.buy_candidate(bigint, text) to authenticated;
 revoke execute on function public.save_recommendation_session(uuid, text, double precision, double precision,

@@ -547,3 +547,31 @@ def test_paging_end_and_log_csv_format_on_real_postgres(conn, users, tmp_path, m
     db.save_recommendation_session(uid, "r1", "등교", 22.0, 22.0, 70.0, 0.0, False, 8.0, "manual", one)
     db.save_recommendation_session(uid, "r2", "운동", 18.0, None, 50.0, 0.0, False, 3.0, "manual", [])
     assert cloud_csv == _csv_without_ids(db.export_user_logs(uid)) and ",22.0,22.0,70.0,0.0," in cloud_csv
+
+
+def test_save_wardrobe_items_function_is_one_transaction(conn, users):
+    """옷 묶음 저장 DB 함수(save_wardrobe_items): 이미 저장된 두 벌을 고치는 재시도에서 둘째 행이 NOT NULL 을 어기면
+    첫째 고치기도 되돌아간다. 다른 사용자의 같은 요청 id 행은 건드리지 못한다. security invoker, anon 실행 권한 없음."""
+    a, b = users
+    base = {"category": "상의", "warmth": 2, "rain_ok": 0}
+    r1, r2 = str(uuid.uuid4()), str(uuid.uuid4())
+    with As(conn, a) as s:
+        store = CloudStore(_PgClient(conn), a)
+        ids = store.create_wardrobe_items(a, [{**base, "name": "첫째", "request_id": r1}, {**base, "name": "둘째", "request_id": r2}])
+        with pytest.raises(psycopg.errors.NotNullViolation):
+            with conn.transaction():
+                store.create_wardrobe_items(a, [{**base, "name": "첫째(고침)", "request_id": r1},
+                                                {**base, "name": None, "request_id": r2}])
+        assert sorted(x[0] for x in s.q("select name from wardrobe_items")) == ["둘째", "첫째"]
+        assert store.create_wardrobe_items(a, [{**base, "name": "첫째(고침)", "request_id": r1}]) == ids[:1]
+    with As(conn, b) as s:
+        kept = []
+        CloudStore(_PgClient(conn), b).create_wardrobe_items(b, [{**base, "name": "B", "request_id": r1}], conflicts=kept)
+        assert kept == [] and [x[0] for x in s.q("select name from wardrobe_items")] == ["B"]
+    with As(conn, a) as s:
+        assert sorted(x[0] for x in s.q("select name from wardrobe_items")) == ["둘째", "첫째(고침)"]
+    assert conn.execute("select prosecdef from pg_proc where proname='save_wardrobe_items'").fetchone() == (False,)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        with conn.transaction():
+            conn.execute("set local role anon")
+            conn.execute("select * from public.save_wardrobe_items('[]'::jsonb)")

@@ -96,3 +96,68 @@ def test_recommendation_request_key_covers_whole_stored_body():
         change(changed)
         assert request_key(fields, changed) != k
     assert request_key(("운동",) + fields[1:], base) != k
+
+
+def test_toast_works_with_streamlit_without_duration(monkeypatch):
+    """공식 Streamlit 1.40 의 st.toast(body, *, icon=None) 에는 duration 이 없다: 그런 버전에서도 알림이 오류 없이 뜨고,
+    있는 버전에서는 오래 보이기를 넘긴다."""
+    import streamlit as st
+
+    from screens import common
+    shown = []
+
+    def toast_140(body, *, icon=None):
+        shown.append((body, icon))
+
+    def toast_new(body, *, icon=None, duration="short"):
+        shown.append((body, icon, duration))
+    monkeypatch.setattr(st, "toast", toast_140)
+    common.toast("안내", icon="⚠️", long=True)
+    monkeypatch.setattr(st, "toast", toast_new)
+    common.toast("안내", icon="⚠️", long=True)
+    assert shown == [("안내", "⚠️"), ("안내", "⚠️", "long")]
+
+
+class _StateDict(dict):                       # st.session_state 처럼 ss.x / ss["x"] 둘 다
+    __getattr__, __setattr__ = dict.__getitem__, dict.__setitem__
+
+
+class _NoWardrobe:
+    def wardrobe(self, uid):
+        return []
+
+
+def _render_direct_add_flash(monkeypatch, toast_fn):
+    """직접 추가 화면을 알림 하나와 함께 그린다 (알림 다음의 사진 올리기 칸에서 멈춤). → (남은 알림, 알림 표시 오류)"""
+    import streamlit as st
+
+    from screens import direct_add
+    state = _StateDict(ba_flash=[("warning", "알림")], ba_names=set(), ba_cards=[], ba_more=False)
+    monkeypatch.setattr(st, "session_state", state)
+    monkeypatch.setattr(st, "html", lambda *a, **k: None)
+    monkeypatch.setattr(st, "toast", toast_fn)
+    monkeypatch.setattr(direct_add, "_uploader", lambda app, cards: False)
+    error = None
+    try:
+        direct_add.render(_NoWardrobe(), {"id": 1})
+    except TypeError as e:
+        error = e
+    return state["ba_flash"], error
+
+
+def test_direct_add_flash_works_on_streamlit_140_toast(monkeypatch):
+    """공식 Streamlit 1.40 시그니처의 st.toast 로도 직접 추가 화면의 알림이 오류 없이 뜨고 비워진다."""
+    shown = []
+
+    def toast_140(body, *, icon=None):
+        shown.append(body)
+    left, error = _render_direct_add_flash(monkeypatch, toast_140)
+    assert error is None and shown == ["알림"] and left == []
+
+
+def test_flash_messages_are_cleared_even_if_showing_fails(monkeypatch):
+    """알림 표시에서 오류가 나도 ba_flash 는 비워져, 다음 실행에서 같은 오류가 되풀이되지 않는다."""
+    def broken(body, **k):
+        raise TypeError("표시 실패")
+    left, error = _render_direct_add_flash(monkeypatch, broken)
+    assert error is not None and left == []

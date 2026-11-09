@@ -288,6 +288,7 @@ class _RPC:
                                         "p_humidity", "p_precipitation", "p_rain", "p_wind_speed",
                                         "p_weather_source", "p_started_at", "p_results"},
         "export_user_logs": set(),
+        "save_wardrobe_items": {"p_rows"},
     }
 
     def __init__(self, client, fn, params):
@@ -329,6 +330,22 @@ class _RPC:
             "ai_subcategory": c["ai_subcategory"], "ai_confidence": c["ai_confidence"],
             "created_at": p["p_created_at"]}).execute().data
         return [{"new_item_id": new[0]["id"]}]
+
+    def _save_wardrobe_items(self, p):
+        """옷 묶음 저장 함수: 행마다 차례로 넣거나(없으면) 조건부로 고친다(지우지 않았고 '정보 수정' 안 함). 안의 넣기·고치기는
+        표 요청을 그대로 써서 시험의 실패 주입(faults)도 함수 안에서 걸리고, 실패하면 함수 전체가 되돌아간다."""
+        t, out = self.client.table, []
+        for r in p["p_rows"]:
+            old = t("wardrobe_items").select("*").eq("request_id", r["request_id"]).execute().data
+            if not old:
+                new = t("wardrobe_items").insert({**r, "user_id": self.client.uid}).execute().data[0]
+                out.append({"req": r["request_id"], "item_id": new["id"], "kept_as_is": False})
+            elif old[0]["deleted"] == 0 and old[0]["edited_at"] is None:
+                t("wardrobe_items").update({k: v for k, v in r.items() if k != "request_id"}).eq("id", old[0]["id"]).execute()
+                out.append({"req": r["request_id"], "item_id": old[0]["id"], "kept_as_is": False})
+            else:
+                out.append({"req": r["request_id"], "item_id": old[0]["id"], "kept_as_is": True})
+        return out
 
     def _export_user_logs(self, p):
         """jsonb 하나(목록)를 돌려주는 함수: PostgREST 는 그 값을 그대로 data 로 준다 (반환 줄 한도 없음)."""
