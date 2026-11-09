@@ -624,3 +624,48 @@ def test_concurrent_edit_during_save_function_is_not_overwritten(conn, users):
     assert result["kept"] == [req]
     with As(conn, a) as s:
         assert s.q("select name, edited_at is not null from wardrobe_items where id = %s", (iid,)) == [("다른 창에서 고침", True)]
+
+
+def test_same_new_request_id_saved_at_once_fails_one_and_retry_recovers(conn, users):
+    """알려진 제한: 같은 새 요청 id 를 두 연결이 동시에 처음 저장하면, 먼저 넣은 쪽이 커밋할 때 다른 쪽은 고유 제약
+    오류로 끝난다(그 저장 전체가 되돌아감). 같은 id 로 다시 저장하면 이미 있는 행을 고쳐 그 id 를 돌려주고, 중복 행은 없다."""
+    import threading
+    import time
+    a, _ = users
+    req = str(uuid.uuid4())
+    card = {"category": "상의", "warmth": 2, "rain_ok": 0, "request_id": req}
+    window1 = psycopg.connect(DSN, autocommit=True)
+    window2 = psycopg.connect(DSN, autocommit=True)
+    first, errors = {}, []
+    try:
+        window1.execute("begin")
+        _become(window1, a)
+        first["ids"] = CloudStore(_PgClient(window1), a).create_wardrobe_items(a, [{**card, "name": "창 1"}])
+
+        def save_same_id():
+            try:
+                with As(window2, a):
+                    CloudStore(_PgClient(window2), a).create_wardrobe_items(a, [{**card, "name": "창 2"}])
+            except Exception as e:
+                errors.append(e)
+        t = threading.Thread(target=save_same_id)
+        t.start()
+        pid = window2.info.backend_pid
+        for _ in range(100):                             # 연결 2가 고유 색인에서 연결 1을 기다리는지 확인한 뒤 커밋
+            waiting = conn.execute("select wait_event_type from pg_stat_activity where pid = %s", (pid,)).fetchone()
+            if waiting and waiting[0] == "Lock":
+                break
+            time.sleep(0.05)
+        assert waiting and waiting[0] == "Lock", "연결 2가 잠금을 기다리지 않음"
+        window1.execute("commit")
+        t.join(10)
+    finally:
+        window1.close()
+        window2.close()
+    assert len(errors) == 1 and isinstance(errors[0], psycopg.errors.UniqueViolation), errors
+    kept = []
+    with As(conn, a):                                    # 화면이 '다시 눌러 주세요' 뒤 같은 카드(같은 요청 id)로 재시도
+        again = CloudStore(_PgClient(conn), a).create_wardrobe_items(a, [{**card, "name": "재시도"}], conflicts=kept)
+    assert again == first["ids"] and kept == []
+    with As(conn, a) as s:
+        assert s.q("select id, name from wardrobe_items where request_id = %s", (req,)) == [(first["ids"][0], "재시도")]
