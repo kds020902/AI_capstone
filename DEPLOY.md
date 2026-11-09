@@ -20,8 +20,9 @@ PC나 Colab을 켜 두지 않아도 되는 무료 서비스만 씁니다. 비용
 
 1. <https://supabase.com> 에 가입하고 **New project** (Free). 지역은 `Northeast Asia (Seoul)` 권장. DB 비밀번호는 따로 적어 둡니다.
 2. 왼쪽 **SQL Editor → New query** 에 저장소의 `supabase/schema.sql` 내용을 전부 붙여 넣고 **Run**.
-   - 표 7개, 사용자별 접근 정책(RLS), 비공개 사진 버킷 `wardrobe`(파일당 5MB, jpg/png/webp)가 만들어집니다.
+   - 표 7개, 사용자별 접근 정책(RLS), 비공개 사진 버킷 `wardrobe`(파일당 5MB, jpg/png/webp), 한 거래로 처리하는 DB 함수 2개(`buy_candidate` '샀어요', `save_recommendation_session` 추천 기록), 기록 조회용 뷰 4개(저장 코디·'별로'·추천 로그·KPI, PostgreSQL 15 이상 필요 — 새 Supabase 프로젝트는 해당)가 만들어집니다.
    - 여러 번 실행해도 안전합니다.
+   - **이미 배포한 프로젝트도 `schema.sql` 이 바뀌면 다시 Run 한 뒤에 새 코드를 배포(push)합니다.** 2026-11-09 코드부터 앱이 위 DB 함수·뷰와 요청 id 열을 쓰므로, 다시 실행하지 않으면 '샀어요'·추천 저장·사진 등록·저장 코디·KPI 화면이 오류가 납니다.
 3. **Authentication → Sign In / Providers → Email** 에서 **Confirm email 을 끕니다.**
    - Supabase 기본 메일 발송은 프로젝트 팀원 주소로만 보내고 시간당 2통으로 제한돼 있어서, 켜 두면 다른 사람은 가입 인증 메일을 받을 수 없습니다.
    - 끄면 가입 즉시 로그인됩니다. 대신 아무 이메일 주소로나 가입할 수 있고, 비밀번호 찾기 메일도 보낼 수 없습니다(앱에도 그 기능은 없음).
@@ -46,7 +47,7 @@ set SUPABASE_KEY=<publishable 키 (sb_publishable_...)>
 python scripts/check_supabase.py --email-a test1@example.com --email-b test2@example.com
 ```
 
-저장·추천·피드백·CSV·사진 올리기/서명 주소와 "B가 A의 데이터·사진을 못 읽고 못 바꾸는지"를 확인하고, 시험 데이터는 지웁니다.
+저장·추천 한 묶음 저장(같은 요청은 한 번만)·피드백·CSV·사진 올리기/서명 주소·'샀어요'(두 번 눌러도 한 벌)와 "B가 A의 데이터·사진을 못 읽고 못 바꾸는지"를 확인하고, 시험 데이터는 지웁니다. DB 함수가 없으면(스키마를 다시 실행 안 함) 여기서 실패합니다.
 
 ### (선택) 로컬 데이터 옮기기
 
@@ -147,6 +148,8 @@ python scripts/migrate_to_supabase.py --user-id 1 --email me@example.com
 | 증상 | 확인할 것 |
 |---|---|
 | 앱이 "service_role/secret 키가 들어 있어요" 로 멈춤 | Secrets 의 `SUPABASE_KEY` 를 publishable 키(`sb_publishable_...`)로 교체 |
+| 앱이 "… 는 있는데 … 가 없어요" 로 멈춤 | Secrets 에 `SUPABASE_URL`·`SUPABASE_KEY` 를 둘 다 넣기 (로그인 없는 공용 로컬 모드로 열리지 않게 일부러 멈춤) |
+| 앱이 "Streamlit Secrets 설정을 읽지 못했어요 (형식 오류, line n)" 로 멈춤 | Secrets 의 n번째 줄 형식 확인: `NAME = "값"` (값은 큰따옴표) |
 | Logs 에 "예전 anon public 키" 경고 | 1-4 의 순서대로 publishable 키로 교체 (예전 키는 2026년 말까지 폐지 예정) |
 | 예전 키를 끈 뒤 모두 로그인이 안 됨 | Secrets 에 아직 anon 키가 있음 → publishable 키로 바꾸거나, 예전 키를 잠시 다시 켬 |
 | 가입 후 "인증 링크를 확인해 주세요" 만 나오고 메일이 안 옴 | Supabase 의 Confirm email 이 켜져 있음 → 1-3 참고 |

@@ -576,9 +576,9 @@ footer a { color: var(--accent); }
       return;
     }
     const items = state.items.filter((x) => x.active), [, cold, heat] = THERMAL[state.thermal];
-    const byId = new Map(items.map((x) => [x.id, x]));
+    const byId = new Map(items.map((x) => [x.id, x])), base = C.baseline(items, { cold, heat });  // 후보끼리 같이 씀
     $("shop-list").innerHTML = cands.map((c) => {
-      const r = C.candidateReport(c, items, { cold, heat });
+      const r = C.candidateReport(c, items, { cold, heat, base });
       const gain = new Set(r.improves.map((x) => `${x.season}|${x.purpose}`));
       const rows = C.SEASONS.map((s) => `<tr><th>${s}</th>` + DATA.PURPOSES.map((p) => {
         const cell = r.cells[`${s}|${p}`], up = gain.has(`${s}|${p}`);

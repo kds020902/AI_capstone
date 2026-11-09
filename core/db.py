@@ -8,6 +8,7 @@ from datetime import datetime
 import pandas as pd
 
 from core.catalog import starter_for_gender
+from core.rows import candidate_row, wardrobe_row
 from core.taxonomy import LEGACY_RENAMES
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,6 +98,7 @@ def init_db():
                 started_at TEXT NOT NULL,
                 completed_at TEXT,
                 decision_seconds REAL,
+                request_id TEXT,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             );
 
@@ -166,6 +168,11 @@ def init_db():
             c.execute("ALTER TABLE wardrobe_items ADD COLUMN ai_subcategory TEXT")
         if not _has_column(c, "wardrobe_items", "seasons"):  # 직접 고른 계절 ('여름|겨울'), NULL이면 종류로 자동
             c.execute("ALTER TABLE wardrobe_items ADD COLUMN seasons TEXT")
+        # 같은 등록·추천 요청을 다시 보내도 한 번만 저장 (앱이 정하는 요청 id)
+        for table in ("recommendation_sessions", "wardrobe_items", "purchase_candidates"):
+            if not _has_column(c, table, "request_id"):
+                c.execute(f"ALTER TABLE {table} ADD COLUMN request_id TEXT")
+            c.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS {table}_request_idx ON {table}(user_id, request_id)")
 
         # 옛 DB 호환: 스타일 열 삭제. SQLite 3.35 미만이라 열을 못 지우면 남겨 두고 _insert가 빈 값으로 채운다
         for table, col in LEGACY_STYLE_COLUMNS:
@@ -210,32 +217,26 @@ def create_wardrobe_item(
     user_id, name, category, subcategory, color, warmth, rain_ok,
     material="", image_path="", notes="", ai_category=None, ai_subcategory=None, ai_confidence=None
 ):
+    item = {"name": name, "category": category, "subcategory": subcategory, "color": color, "warmth": warmth,
+            "rain_ok": rain_ok, "material": material, "image_path": image_path, "notes": notes,
+            "ai_category": ai_category, "ai_subcategory": ai_subcategory, "ai_confidence": ai_confidence}
     with conn() as c:
-        return _insert(c, "wardrobe_items", _item_values(
-            user_id, name, category, subcategory, color, warmth, rain_ok, material, image_path, notes,
-            ai_category, ai_subcategory, ai_confidence))
+        return _insert(c, "wardrobe_items", wardrobe_row(user_id, item, datetime.now().isoformat(timespec="seconds")))
 
-def _item_values(user_id, name, category, subcategory, color, warmth, rain_ok, material="", image_path="",
-                 notes="", ai_category=None, ai_subcategory=None, ai_confidence=None):
-    return {
-        "user_id": user_id, "name": name, "category": category, "subcategory": subcategory, "color": color,
-        "warmth": warmth, "rain_ok": int(bool(rain_ok)), "material": material, "image_path": image_path,
-        "notes": notes, "ai_category": ai_category, "ai_subcategory": ai_subcategory,
-        "ai_confidence": ai_confidence, "created_at": datetime.now().isoformat(timespec="seconds"),
-    }
+def _existing_request(c, table, user_id, request_id):
+    """같은 요청 id 로 이미 넣은 행의 id (없으면 None)."""
+    if not request_id:
+        return None
+    row = c.execute(f"SELECT id FROM {table} WHERE user_id=? AND request_id=?", (user_id, str(request_id))).fetchone()
+    return row["id"] if row else None
 
 def create_wardrobe_items(user_id, items):
     """여러 벌을 한 번에 저장 (사진 여러 장 등록). items: create_wardrobe_item 의 인자 이름을 키로 갖는 dict 목록.
-    새 id 목록을 넣은 순서대로 돌려준다."""
+    id 목록을 넣은 순서대로 돌려준다. request_id 가 있으면 같은 id 로 이미 넣은 옷은 다시 넣지 않고 그 id 를 준다."""
     now = datetime.now().isoformat(timespec="seconds")
     with conn() as c:
-        return [_insert(c, "wardrobe_items", {
-            "user_id": user_id, "name": x["name"], "category": x["category"], "subcategory": x.get("subcategory"),
-            "color": x.get("color"), "warmth": int(x["warmth"]), "rain_ok": int(bool(x["rain_ok"])),
-            "material": x.get("material", ""), "image_path": x.get("image_path", ""), "notes": x.get("notes", ""),
-            "ai_category": x.get("ai_category"), "ai_subcategory": x.get("ai_subcategory"),
-            "ai_confidence": x.get("ai_confidence"), "created_at": now,
-        }) for x in items]
+        return [_existing_request(c, "wardrobe_items", user_id, x.get("request_id"))
+                or _insert(c, "wardrobe_items", wardrobe_row(user_id, x, now)) for x in items]
 
 def update_wardrobe_item(item_id, user_id, name, category, subcategory, color, warmth, rain_ok, material="", notes=""):
     """저장한 옷의 정보 고치기 (AI 기록·사진·계절은 그대로). 지운 옷은 고치지 않는다."""
@@ -303,14 +304,13 @@ def soft_delete_item(item_id, user_id):
         )
 
 def create_candidate(user_id, name, category, subcategory, color, warmth, rain_ok, image_path="", link="",
-                     ai_subcategory=None, ai_confidence=None):
+                     ai_subcategory=None, ai_confidence=None, request_id=None):
+    """구매 후보 저장 → id. request_id 가 같으면 다시 넣지 않고 처음 넣은 후보의 id 를 준다."""
     now = datetime.now().isoformat(timespec="seconds")
     with conn() as c:
-        return _insert(c, "purchase_candidates", {
-            "user_id": user_id, "name": name, "category": category, "subcategory": subcategory, "color": color,
-            "warmth": warmth, "rain_ok": int(bool(rain_ok)), "image_path": image_path, "link": link,
-            "ai_subcategory": ai_subcategory, "ai_confidence": ai_confidence, "created_at": now,
-        })
+        return _existing_request(c, "purchase_candidates", user_id, request_id) or _insert(c, "purchase_candidates", candidate_row(
+            user_id, name, category, subcategory, color, warmth, rain_ok, image_path, link, ai_subcategory,
+            ai_confidence, now, request_id))
 
 def list_candidates(user_id):
     with conn() as c:
@@ -335,10 +335,11 @@ def buy_candidate(candidate_id, user_id):
         if taken != 1:
             return None
         r = dict(row)
-        return _insert(c, "wardrobe_items", _item_values(
-            user_id, r["name"], r["category"], r["subcategory"], r["color"], r["warmth"], r["rain_ok"],
-            image_path=r["image_path"] or "", notes=r["link"] or "",
-            ai_subcategory=r["ai_subcategory"], ai_confidence=r["ai_confidence"]))
+        return _insert(c, "wardrobe_items", wardrobe_row(user_id, {
+            "name": r["name"], "category": r["category"], "subcategory": r["subcategory"], "color": r["color"],
+            "warmth": r["warmth"], "rain_ok": r["rain_ok"], "image_path": r["image_path"] or "", "notes": r["link"] or "",
+            "ai_subcategory": r["ai_subcategory"], "ai_confidence": r["ai_confidence"]},
+            datetime.now().isoformat(timespec="seconds")))
 
 def add_starter_wardrobe(user_id):
     user = get_user(user_id)
@@ -377,27 +378,37 @@ def create_recommendation_session(
             "rain": int(bool(rain)), "wind_speed": wind_speed, "weather_source": weather_source, "started_at": now,
         })
 
+def _recommendation_values(session_id, rank, result, now):
+    return {"session_id": session_id, "rank": rank, "score": result["score"],
+            "pieces_json": json.dumps(result["pieces"], ensure_ascii=False),
+            "reasons_json": json.dumps(result["reasons"], ensure_ascii=False),
+            "components_json": json.dumps(result["components"], ensure_ascii=False), "created_at": now}
+
 def save_recommendation(session_id, rank, result):
     now = datetime.now().isoformat(timespec="seconds")
     with conn() as c:
-        cur = c.execute(
-            """
-            INSERT INTO recommendations(
-                session_id, rank, score, pieces_json, reasons_json, components_json, created_at
-            )
-            VALUES(?,?,?,?,?,?,?)
-            """,
-            (
-                session_id,
-                rank,
-                result["score"],
-                json.dumps(result["pieces"], ensure_ascii=False),
-                json.dumps(result["reasons"], ensure_ascii=False),
-                json.dumps(result["components"], ensure_ascii=False),
-                now,
-            ),
-        )
-        return cur.lastrowid
+        return _insert(c, "recommendations", _recommendation_values(session_id, rank, result, now))
+
+def save_recommendation_session(user_id, request_id, purpose, temperature, apparent_temperature, humidity,
+                                precipitation, rain, wind_speed, weather_source, results):
+    """추천 세션과 결과를 한 거래로 저장 → (세션 id, 추천 id 목록 순위순). 중간에 실패하면 아무것도 남지 않는다.
+    같은 request_id 로 다시 부르면 새로 넣지 않고 처음 저장한 묶음을 돌려준다 (Supabase 판과 같음)."""
+    now = datetime.now().isoformat(timespec="seconds")
+    with conn() as c:
+        old = c.execute("SELECT id FROM recommendation_sessions WHERE user_id=? AND request_id=?",
+                        (user_id, str(request_id))).fetchone()
+        if old:
+            sid = old["id"]
+        else:
+            sid = _insert(c, "recommendation_sessions", {
+                "user_id": user_id, "purpose": purpose, "temperature": temperature,
+                "apparent_temperature": apparent_temperature, "humidity": humidity, "precipitation": precipitation,
+                "rain": int(bool(rain)), "wind_speed": wind_speed, "weather_source": weather_source,
+                "started_at": now, "request_id": str(request_id)})
+            for rank, result in enumerate(results, 1):
+                _insert(c, "recommendations", _recommendation_values(sid, rank, result, now))
+        return sid, [r["id"] for r in c.execute("SELECT id FROM recommendations WHERE session_id=? ORDER BY rank",
+                                                (sid,)).fetchall()]
 
 def complete_recommendation_session(session_id):
     """코디를 저장하면 세션 완료 처리."""

@@ -15,6 +15,7 @@ import argparse
 import getpass
 import io
 import sys
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,14 +80,18 @@ def main():
         items = sa.list_wardrobe_items(ua)
         results.append(check("스타터 옷장 30벌 저장", n == 30 and len(items) == 30, f"{len(items)}벌"))
         rec = recommend(items, 12, 11, 60, 0, False, 8, "등교", 0, 0, 3)
-        sid = sa.create_recommendation_session(ua, "등교", 12, 11, 60, 0, False, 8, "check")
-        rid = sa.save_recommendation(sid, 1, rec["results"][0])
+        req, args = str(uuid.uuid4()), ("등교", 12, 11, 60, 0, False, 8, "check", rec["results"])
+        sid, rids = sa.save_recommendation_session(ua, req, *args)
+        results.append(check("추천 세션·TOP 3 한 묶음 저장 DB 함수 (같은 요청을 다시 보내도 세션 하나)",
+                             len(rids) == len(rec["results"]) and sa.save_recommendation_session(ua, req, *args)
+                             == (sid, rids) and sa.count_recommendation_sessions(ua) == 1))
+        rid = rids[0]
         sa.save_outfit(ua, rid)
         sa.save_outfit(ua, rid)
         sa.upsert_feedback(ua, rid, rating="dislike")
         results.append(check("추천 저장·코디 저장(중복 무시)·피드백",
                              len(sa.list_saved_outfits(ua)) == 1 and len(sa.disliked_item_sets(ua)) == 1))
-        results.append(check("CSV 기록 만들기", len(sa.export_user_logs(ua)) == 1))
+        results.append(check("CSV 기록 만들기", len(sa.export_user_logs(ua)) == len(rids)))
 
         buf = io.BytesIO()
         Image.new("RGB", (50, 50), (200, 0, 0)).save(buf, "PNG")
@@ -111,6 +116,12 @@ def main():
                              and _cannot_download(b, paths[0])))
         results.append(check("B가 A의 행을 못 지움", _delete_count(b, "wardrobe_items", items[0]["id"]) == 0
                              and len(sa.list_wardrobe_items(ua)) == 30))
+        cid = sa.create_candidate(ua, "시험 후보", "상의", "셔츠", "white", 2, 0)
+        b_try = sb.buy_candidate(cid, ub)
+        first, second = sa.buy_candidate(cid, ua), sa.buy_candidate(cid, ua)
+        results.append(check("'샀어요' DB 함수: B는 A의 후보를 못 사고, A가 두 번 눌러도 한 벌",
+                             b_try is None and bool(first) and second is None
+                             and len(sa.list_wardrobe_items(ua)) == 31 and sa.list_candidates(ua) == []))
     finally:
         cleanup(a, ua, paths, drop_profile=made_profile)
         cleanup(b, ub, [])

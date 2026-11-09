@@ -25,11 +25,71 @@ PARENT_CHECK = {  # 표: (가리키는 열, 상위 표)
     "feedback": ("recommendation_id", "recommendations"),
 }
 DEFAULTS = {  # supabase/schema.sql 의 기본값 (DB는 빠진 열도 채워서 돌려준다)
-    "wardrobe_items": {"seasons": None, "active": 1, "deleted": 0},
-    "purchase_candidates": {"deleted": 0},
-    "recommendation_sessions": {"completed_at": None, "decision_seconds": None},
+    "wardrobe_items": {"seasons": None, "active": 1, "deleted": 0, "request_id": None},
+    "purchase_candidates": {"deleted": 0, "request_id": None},
+    "recommendation_sessions": {"completed_at": None, "decision_seconds": None, "request_id": None},
 }
-UNIQUE = {"saved_outfits": ("user_id", "recommendation_id"), "feedback": ("user_id", "recommendation_id")}
+UNIQUE = {"saved_outfits": ("user_id", "recommendation_id"), "feedback": ("user_id", "recommendation_id"),
+          "wardrobe_items": ("user_id", "request_id"), "purchase_candidates": ("user_id", "request_id"),
+          "recommendation_sessions": ("user_id", "request_id")}   # 값이 NULL 이면 겹쳐도 됨 (PostgreSQL 과 같음)
+
+
+def _view_rows(b, uid, name):
+    """supabase/schema.sql 의 뷰를 흉내 낸다 (security_invoker: 아래 표에 RLS 가 적용돼 내 행만 보임)."""
+    mine = {t: [r for r in b.rows(t) if r.get("user_id") == uid]
+            for t in ("recommendation_sessions", "recommendations", "saved_outfits", "feedback")}
+    sessions = {s["id"]: s for s in mine["recommendation_sessions"]}
+    recs = {r["id"]: r for r in mine["recommendations"]}
+    if name == "saved_outfit_rows":
+        out = []
+        for s in mine["saved_outfits"]:
+            r = recs.get(s["recommendation_id"])
+            rs = sessions.get(r["session_id"]) if r else None
+            if rs:
+                out.append({"id": s["id"], "user_id": uid, "saved_at": s["saved_at"], "rank": r["rank"],
+                            "score": r["score"], "pieces_json": r["pieces_json"], "purpose": rs["purpose"],
+                            "temperature": rs["temperature"], "humidity": rs["humidity"]})
+        return out
+    if name == "disliked_outfit_rows":
+        return [{"id": f["id"], "user_id": uid, "pieces_json": recs[f["recommendation_id"]]["pieces_json"]}
+                for f in mine["feedback"] if f.get("rating") == "dislike" and f["recommendation_id"] in recs
+                and recs[f["recommendation_id"]]["session_id"] in sessions]
+    if name == "recommendation_log_rows":
+        fb = {f["recommendation_id"]: f for f in mine["feedback"]}
+        out = []
+        for rs in sessions.values():
+            for r in [r for r in recs.values() if r["session_id"] == rs["id"]] or [None]:
+                f = fb.get(r["id"]) if r else None
+                out.append({"user_id": uid, "session_id": rs["id"],
+                            **{k: rs[k] for k in ("started_at", "completed_at", "purpose", "temperature",
+                                                  "apparent_temperature", "humidity", "precipitation", "rain",
+                                                  "wind_speed", "weather_source")},
+                            "recommendation_id": r and r["id"], "rank": r and r["rank"], "score": r and r["score"],
+                            "pieces_json": r and r["pieces_json"],
+                            **{k: f and f[k] for k in ("rating", "worn", "thermal_feedback", "satisfaction")}})
+        return out
+    if name == "kpi_rows":
+        accepted = {recs[s["recommendation_id"]]["session_id"] for s in mine["saved_outfits"]
+                    if s["recommendation_id"] in recs and recs[s["recommendation_id"]]["session_id"] in sessions}
+        return [{"sessions": len(sessions), "accepted_sessions": len(accepted)}]
+    raise KeyError(name)
+
+
+VIEWS = {"saved_outfit_rows", "disliked_outfit_rows", "recommendation_log_rows", "kpi_rows"}
+
+
+def _sort_key(col):
+    """PostgreSQL 정렬처럼: 오름차순은 NULL 이 마지막, 내림차순(reverse)은 NULL 이 처음."""
+    return lambda r: (r.get(col) is None, r.get(col) if r.get(col) is not None else 0)
+
+
+def _fault(backend, key):
+    """시험용 실패 주입: backend.faults[key] = "error"(저장 전 실패) / "lost"(저장은 됐는데 응답 유실),
+    또는 [None, "error"] 처럼 부를 때마다 하나씩. key = (표, 동작) 또는 ("storage", "upload")."""
+    v = backend.faults.get(key)
+    if isinstance(v, list):
+        return v.pop(0) if v else None
+    return backend.faults.pop(key, None)
 
 
 class FakeBackend:
@@ -42,6 +102,9 @@ class FakeBackend:
         self.objects = {}     # "bucket/path" -> bytes
         self.autoconfirm = autoconfirm
         self.calls = []
+        self.max_rows = 1000  # Supabase API 의 한 번 조회 최대 줄 수 (시험에서 작게 바꿔 나눠 받기를 확인)
+        self.rpc_faults = {}  # DB 함수 이름 -> "error"(중간 실패, 되돌림) / "lost"(저장됐는데 응답 유실). 한 번만 적용
+        self.faults = {}      # 표 쓰기·사진 올리기 실패 주입 (_fault 참고)
 
     def rows(self, table):
         return self.tables.setdefault(table, [])
@@ -55,11 +118,17 @@ class _Query:
     def __init__(self, client, table):
         self.client, self.table = client, table
         self.op, self.payload, self.filters = "select", None, []
-        self.order_by, self.on_conflict, self.ignore_dup = None, None, False
+        self.order_by, self.on_conflict, self.ignore_dup = [], None, False
+        self.count, self.window = None, None
 
     # 조건
-    def select(self, cols="*", **kw):
-        self.op = "select"
+    def select(self, cols="*", count=None, **kw):
+        self.op, self.count = "select", count
+        return self
+
+    def range(self, start, end):
+        assert self.window is None, "postgrest-py 는 range 를 두 번 걸면 인자가 겹친다"
+        self.window = (start, end)
         return self
 
     def eq(self, col, val):
@@ -77,7 +146,7 @@ class _Query:
         return self
 
     def order(self, col, desc=False):
-        self.order_by = (col, desc)
+        self.order_by.append((col, desc))
         return self
 
     # 쓰기
@@ -98,6 +167,8 @@ class _Query:
         return self
 
     def _visible(self, uid):
+        if self.table in VIEWS:
+            return _view_rows(self.client.backend, uid, self.table)
         col = OWNER_COL.get(self.table, "user_id")
         return [r for r in self.client.backend.rows(self.table) if r.get(col) == uid]
 
@@ -118,12 +189,23 @@ class _Query:
         rows = self._visible(uid)
         for f in self.filters:
             rows = [r for r in rows if f(r)]
+        fault = None if self.op == "select" else _fault(b, (self.table, self.op))
+        if fault == "error":
+            raise FakeAPIError(f"server error while writing {self.table}")
+        result = self._apply(b, uid, rows)
+        if fault == "lost":
+            raise FakeAPIError(f"connection lost after writing {self.table}")
+        return result
+
+    def _apply(self, b, uid, rows):
         if self.op == "select":
             out = copy.deepcopy(rows)
-            if self.order_by:
-                col, desc = self.order_by
-                out.sort(key=lambda r: r.get(col), reverse=desc)
-            return _Result(data=out)
+            for col, desc in reversed(self.order_by):          # 뒤 정렬부터 (안정 정렬로 여러 열 정렬)
+                out.sort(key=_sort_key(col), reverse=desc)
+            total = len(out)
+            if self.window:
+                out = out[self.window[0]:self.window[1] + 1]
+            return _Result(data=out[:b.max_rows], count=total if self.count == "exact" else None)
         if self.op == "update":
             for r in rows:
                 r.update(copy.deepcopy(self.payload))
@@ -137,7 +219,7 @@ class _Query:
         for row in payload:
             row = copy.deepcopy(row)
             self._check_row(row, uid)
-            if self.table in UNIQUE:
+            if self.table in UNIQUE and all(row.get(k) is not None for k in UNIQUE[self.table]):
                 keys = UNIQUE[self.table]
                 if any(all(r.get(k) == row.get(k) for k in keys) for r in b.rows(self.table)):
                     if self.op == "upsert" and self.ignore_dup:
@@ -154,6 +236,78 @@ class _Query:
             b.rows(self.table).append(row)
             created.append(copy.deepcopy(row))
         return _Result(data=created)
+
+
+class _RPC:
+    """DB 함수(supabase/schema.sql 의 buy_candidate, save_recommendation_session) 흉내.
+    함수 한 번이 거래 하나라 중간에 실패하면 표 전체를 되돌린다. 진짜 거래·RLS 확인은 tests/test_rls_sql.py."""
+
+    PARAMS = {
+        "buy_candidate": {"p_candidate_id", "p_created_at"},
+        "save_recommendation_session": {"p_request_id", "p_purpose", "p_temperature", "p_apparent_temperature",
+                                        "p_humidity", "p_precipitation", "p_rain", "p_wind_speed",
+                                        "p_weather_source", "p_started_at", "p_results"},
+    }
+
+    def __init__(self, client, fn, params):
+        self.client, self.fn, self.params = client, fn, dict(params or {})
+
+    def execute(self):
+        b = self.client.backend
+        b.calls.append((self.fn, "rpc"))
+        if self.client.uid is None:
+            raise FakeAPIError("permission denied for function (not signed in)")
+        if set(self.params) != self.PARAMS.get(self.fn):
+            raise FakeAPIError(f"Could not find the function public.{self.fn} with these parameters")
+        fault = b.rpc_faults.pop(self.fn, None)
+        before, cap = copy.deepcopy((b.tables, b.next_id)), b.max_rows
+        b.max_rows = 10 ** 9                 # DB 함수 안의 조회는 API 반환 한도를 받지 않는다
+        try:
+            data = getattr(self, "_" + self.fn)(self.params)
+            if fault == "error":
+                raise FakeAPIError("server error in the middle of the function")
+        except Exception:
+            b.tables, b.next_id = before
+            raise
+        finally:
+            b.max_rows = cap
+        if fault == "lost":
+            raise FakeAPIError("connection lost after the function committed")
+        return _Result(data=data)
+
+    def _buy_candidate(self, p):
+        t = self.client.table
+        taken = t("purchase_candidates").update({"deleted": 1}).eq("id", p["p_candidate_id"]).eq("deleted", 0).execute().data
+        if not taken:
+            return []
+        c = taken[0]
+        new = t("wardrobe_items").insert({
+            "user_id": c["user_id"], "name": c["name"], "category": c["category"], "subcategory": c["subcategory"],
+            "color": c["color"], "warmth": c["warmth"], "rain_ok": c["rain_ok"], "material": "",
+            "image_path": c["image_path"] or "", "notes": c["link"] or "", "ai_category": None,
+            "ai_subcategory": c["ai_subcategory"], "ai_confidence": c["ai_confidence"],
+            "created_at": p["p_created_at"]}).execute().data
+        return [{"new_item_id": new[0]["id"]}]
+
+    def _save_recommendation_session(self, p):
+        t, uid = self.client.table, self.client.uid
+        old = t("recommendation_sessions").select("*").eq("request_id", p["p_request_id"]).execute().data
+        if old:
+            sid = old[0]["id"]
+        else:
+            sid = t("recommendation_sessions").insert({
+                "user_id": uid, "request_id": p["p_request_id"], "purpose": p["p_purpose"],
+                "temperature": p["p_temperature"], "apparent_temperature": p["p_apparent_temperature"],
+                "humidity": p["p_humidity"], "precipitation": p["p_precipitation"], "rain": p["p_rain"],
+                "wind_speed": p["p_wind_speed"], "weather_source": p["p_weather_source"],
+                "started_at": p["p_started_at"]}).execute().data[0]["id"]
+            rows = [{"user_id": uid, "session_id": sid, "rank": i, "score": r["score"], "pieces_json": r["pieces_json"],
+                     "reasons_json": r["reasons_json"], "components_json": r["components_json"],
+                     "created_at": p["p_started_at"]} for i, r in enumerate(p["p_results"], 1)]
+            if rows:
+                t("recommendations").insert(rows).execute()
+        recs = t("recommendations").select("*").eq("session_id", sid).order("rank").execute().data
+        return [{"new_session_id": sid, "new_recommendation_ids": [r["id"] for r in recs]}]
 
 
 class _Auth:
@@ -203,10 +357,15 @@ class _Bucket:
 
     def upload(self, path, data, file_options=None):
         self._check(path)
-        key = f"{self.name}/{path}"
-        if key in self.client.backend.objects:
+        b, key = self.client.backend, f"{self.name}/{path}"
+        fault = _fault(b, ("storage", "upload"))
+        if fault == "error":
+            raise FakeAPIError("upload failed")
+        if key in b.objects and str((file_options or {}).get("upsert", "false")).lower() != "true":
             raise FakeAPIError("The resource already exists")
-        self.client.backend.objects[key] = bytes(data)
+        b.objects[key] = bytes(data)
+        if fault == "lost":
+            raise FakeAPIError("connection lost after upload")
         return SimpleNamespace(path=path)
 
     def download(self, path):
@@ -248,6 +407,9 @@ class FakeClient:
 
     def table(self, name):
         return _Query(self, name)
+
+    def rpc(self, fn, params=None):
+        return _RPC(self, fn, params)
 
 
 def signed_in_client(backend, email, password="secret123"):

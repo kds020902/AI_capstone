@@ -132,7 +132,8 @@ def assemble(out=WEB / "index.html", body_only=False):
                 .replace("__CLOSET_JS__", (src / "closet.js").read_text(encoding="utf-8")))
     for placeholder in ("__CLOSET_DATA__", "__CLOSETNET_SRC__", "__CLOSET_JS__"):
         assert placeholder not in body, placeholder
-    out.write_text(body if body_only else SKELETON + body + "\n</body>\n</html>\n", encoding="utf-8")
+    out.write_text(body if body_only else SKELETON + body + "\n</body>\n</html>\n", encoding="utf-8",
+                   newline="\n")   # Windows에서 만들어도 같은 파일 (tests/test_web_parity.py 가 저장소 파일과 비교)
     shown = out.relative_to(ROOT) if out.resolve().is_relative_to(ROOT) else out
     print(f"페이지: {shown} ({out.stat().st_size / 1024:.0f}KB)")
 

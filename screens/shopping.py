@@ -1,6 +1,7 @@
 """사기 전에 맞춰보기: 구매 후보를 지금 옷장과 맞춰 보고, 샀으면 옷장에 넣는다."""
 from __future__ import annotations
 
+import uuid
 from datetime import date
 
 import pandas as pd
@@ -8,7 +9,7 @@ import streamlit as st
 
 from core.colors import COLOR_KO, normalize_color
 from core.media import open_upright
-from core.shopping import candidate_report
+from core.shopping import baseline, candidate_report
 from core.taxonomy import (
     PURPOSES, RULES, SEASONS, SUBCATEGORIES, current_season, main_category_for_subcategory, season_label,
 )
@@ -16,9 +17,15 @@ from core.vision import classify_clothing_image, dominant_color_name
 from screens.common import ai_candidate_pick, tryon_button, upload_bytes
 
 
+@st.cache_data(show_spinner=False, max_entries=16)
+def cached_baseline(items, cold, heat):
+    """후보 없이 지금 옷장의 상황별 최고 점수 (같은 옷장·체질이면 후보끼리 같이 씀)."""
+    return baseline(items, cold, heat)
+
+
 @st.cache_data(show_spinner=False, max_entries=64)
 def cached_candidate_report(cand, items, cold, heat):
-    return candidate_report(cand, items, cold, heat)
+    return candidate_report(cand, items, cold, heat, cached_baseline(items, cold, heat))
 
 
 def score_cell(cell, improved):
@@ -82,15 +89,40 @@ def _add_candidate(app, user):
     name = st.text_input("이름", value=f"{COLOR_KO[color]} {sub}", key=f"cand_name_{color}_{sub}")
     link = st.text_input("상품 링크 (선택, 메모용)", key="cand_link")
     if st.button("구매 후보로 저장", type="primary", disabled=not name.strip()):
-        path = ""
-        if up:
-            data, suffix = upload_bytes(up, rgb=True)
-            path = app.media.save(user["id"], "cand_", data, suffix)
-        app.store.create_candidate(user["id"], name.strip(), main_category_for_subcategory(sub), sub, color, warmth,
-                                   rain, image_path=path, link=link.strip(),
-                                   ai_subcategory=ai.get("subcategory") if ai_ok else None,   # 기록용: AI 1등 답
-                                   ai_confidence=ai.get("confidence") if ai else None)
+        fields = (name.strip(), sub, color, warmth, rain, link.strip())
+        try:
+            path = _candidate_photo(app, user, up) if up else ""
+            app.store.create_candidate(user["id"], name.strip(), main_category_for_subcategory(sub), sub, color, warmth,
+                                       rain, image_path=path, link=link.strip(),
+                                       ai_subcategory=ai.get("subcategory") if ai_ok else None,   # 기록용: AI 1등 답
+                                       ai_confidence=ai.get("confidence") if ai else None,
+                                       request_id=_candidate_request(up, fields))
+        except Exception as e:
+            st.error(f"저장하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 눌러 주세요. 다시 눌러도 두 번 저장되지 않아요.")
+            return
+        st.session_state.cand_request = st.session_state.cand_photo = None
         st.rerun()
+
+
+def _candidate_photo(app, user, up):
+    """올린 상품 사진은 파일마다 한 번만 저장소에 올린다. 저장이 실패해 다시 누르거나 이름 등을 고쳐도 그 경로를 다시 쓴다
+    (사진 이름이 고정이라 응답만 못 받은 사진도 같은 파일에 덮어씀)."""
+    p = st.session_state.get("cand_photo")
+    if not p or p["file_id"] != up.file_id:
+        p = st.session_state.cand_photo = {"file_id": up.file_id, "key": str(uuid.uuid4()), "path": ""}
+    if not p["path"]:
+        data, suffix = upload_bytes(up, rgb=True)
+        p["path"] = app.media.save(user["id"], "cand_", data, suffix, key=p["key"])
+    return p["path"]
+
+
+def _candidate_request(up, fields):
+    """구매 후보 저장 요청 id. 저장이 오류로 끝난 뒤 같은 내용으로 다시 누르면 같은 id를 써서 후보가 두 번 생기지 않게 한다."""
+    key = repr((up.file_id if up else None, fields))
+    pending = st.session_state.get("cand_request")
+    if not pending or pending["key"] != key:
+        pending = st.session_state.cand_request = {"key": key, "id": str(uuid.uuid4())}
+    return pending["id"]
 
 
 VERDICT_BOX = {"dup": st.warning, "none": st.error, "gap": st.success, "fit": st.info}

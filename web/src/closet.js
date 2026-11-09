@@ -367,12 +367,24 @@
         warnings.push(`추천 기준 ${fmt0(temp)}℃인데 두꺼운 겉옷(코트·패딩)이 옷장에 없어 보온이 부족할 수 있어요.`);
 
       if (mustInclude === null) prune(pools, temp);  // 특정 옷을 꼭 넣을 때는 덜어내지 않는다
-      const outers = outerRequired ? pools["아우터"] : [null, ...pools["아우터"]];
+      let units = topUnits(pools["상의"], temp), bottoms = pools["하의"], shoes = pools["신발"], dresses = pools["원피스"];
+      let outers = outerRequired ? pools["아우터"] : [null, ...pools["아우터"]];
+      if (mustInclude !== null) {  // 후보가 들어갈 자리만 후보로 좁힌다 (core/recommender.py _combos 와 같은 조합·순서)
+        const has = (x) => x !== null && +x.id === +mustInclude;
+        const cat = Object.keys(pools).find((c) => pools[c].some(has));
+        if (cat === undefined) { units = []; dresses = []; }
+        if (cat === "상의") units = units.filter((u) => u.some(has));
+        if (cat === "하의") bottoms = bottoms.filter(has);
+        if (cat === "신발") shoes = shoes.filter(has);
+        if (cat === "아우터") outers = outers.filter(has);
+        if (cat === "원피스") { units = []; dresses = dresses.filter(has); }
+        if (cat === "상의" || cat === "하의") dresses = [];  // 원피스 조합에는 상의·하의가 없다
+      }
       const candidates = [];
-      for (const top of topUnits(pools["상의"], temp))
-        for (const bottom of pools["하의"]) for (const outer of outers) for (const shoe of pools["신발"])
+      for (const top of units)
+        for (const bottom of bottoms) for (const outer of outers) for (const shoe of shoes)
           candidates.push([...top, bottom, ...(outer ? [outer] : []), shoe]);
-      for (const dress of pools["원피스"]) for (const outer of outers) for (const shoe of pools["신발"])
+      for (const dress of dresses) for (const outer of outers) for (const shoe of shoes)
         candidates.push([dress, ...(outer ? [outer] : []), shoe]);
 
       const ex = new Set(excludeKeys);
@@ -423,20 +435,27 @@
       const same = items.filter((x) => canon(x.subcategory) === s);
       return { same_type: same, same_color: same.filter((x) => color && normalizeColor(x.color) === color) };
     }
-    function candidateReport(candidate, items, { cold = 0, heat = 0 } = {}) {
+    // 후보 없이 지금 옷장의 상황별 최고 점수·온도 계산 (core/shopping.py baseline). 같은 옷장·체질이면 후보끼리 같이 쓴다
+    function baseline(items, { cold = 0, heat = 0 } = {}) {
+      const out = new Map();
+      for (const t of [...new Set(Object.values(D.SEASON_TEMPS).flat())]) for (const purpose of D.PURPOSES) {
+        const r = recommend(items, { temperature: t, apparent: t, rain: false, purpose, cold, heat, topK: 1 });
+        out.set(`${t}|${purpose}`, { best: r.results.length ? r.results[0].score : null, context: r.context });
+      }
+      return out;
+    }
+    function candidateReport(candidate, items, { cold = 0, heat = 0, base = null } = {}) {
       const cand = { ...candidate, id: D.CANDIDATE_ID }, seasons = itemSeasons(cand);
       const cells = {}, allKeys = new Set();
+      base = base || baseline(items, { cold, heat });
       for (const season of SEASONS) for (const purpose of D.PURPOSES) {
         const temps = D.SEASON_TEMPS[season];
         const cell = { n: 0, best: null, best_without: null, results: [], temp: temps[temps.length - 1] }, keys = new Set();
         for (const t of temps) {
           const args = { temperature: t, apparent: t, rain: false, purpose, cold, heat };
-          const base = recommend(items, { ...args, topK: 1 });
-          if (base.results.length) {
-            const sc = base.results[0].score;
-            cell.best_without = cell.best_without === null ? sc : Math.max(cell.best_without, sc);
-          }
-          if (!seasons.includes(season) || !wearable(cand, base.context)) continue;
+          const b = base.get(`${t}|${purpose}`);
+          if (b.best !== null) cell.best_without = cell.best_without === null ? b.best : Math.max(cell.best_without, b.best);
+          if (!seasons.includes(season) || !wearable(cand, b.context)) continue;
           const out = recommend([...items, cand], { ...args, topK: 3, mustInclude: D.CANDIDATE_ID });
           for (const k of out.comboKeys) keys.add(k.join(","));
           if (out.results.length && (cell.best === null || out.results[0].score > cell.best)) {
@@ -480,7 +499,7 @@
 
     return { recommend, breakdown, outfitKey, normalizeColor, hexToName, ruleFor, roles, josa, COLOR_KO, D,
       temperatureContext, itemFlags, wetBurden,
-      SEASONS, seasonsFor, manualSeasons, itemSeasons, seasonLabel, currentSeason, candidateReport };
+      SEASONS, seasonsFor, manualSeasons, itemSeasons, seasonLabel, currentSeason, candidateReport, baseline };
   }
 
   const api = { create, COLOR_KO };

@@ -26,15 +26,35 @@ def similar_items(cand, items):
     return {"same_type": same, "same_color": same_color}
 
 
-def candidate_report(candidate, items, cold=0.0, heat=0.0):
+def baseline(items, cold=0.0, heat=0.0):
+    """후보 없이 지금 옷장의 상황별(대표 기온 × 목적) 최고 점수와 온도 계산. 후보와 상관없어서 같은 옷장·체질이면
+    후보 여러 개가 같이 쓴다. {(기온, 목적): {"best": 점수 또는 None, "context": ...}}"""
+    out = {}
+    for t in sorted({t for temps in SEASON_TEMPS.values() for t in temps}):
+        for purpose in PURPOSES:
+            base = recommend(items, t, t, 60, 0, False, 8, purpose, cold, heat, 1)
+            out[(t, purpose)] = {"best": base["results"][0]["score"] if base["results"] else None,
+                                 "context": base["context"]}
+    return out
+
+
+def candidate_reports(candidates, items, cold=0.0, heat=0.0):
+    """후보 여러 개를 한 번에 (기준 점수는 한 번만 계산)."""
+    base = baseline(items, cold, heat)
+    return [candidate_report(c, items, cold, heat, base) for c in candidates]
+
+
+def candidate_report(candidate, items, cold=0.0, heat=0.0, base=None):
     """반환 {"seasons", "cells", "total", "partners", "improves", "similar", "verdict"}.
-    cells[(계절, 목적)] = {"n": 코디 수, "best": 최고 점수, "best_without": 후보 없이 최고 점수, "results": TOP3, "temp"}"""
+    cells[(계절, 목적)] = {"n": 코디 수, "best": 최고 점수, "best_without": 후보 없이 최고 점수, "results": TOP3, "temp"}
+    base: 같은 옷장·체질의 baseline() 결과 (없으면 여기서 계산)."""
     cand = {**candidate, "id": CANDIDATE_ID}
+    base = base if base is not None else baseline(items, cold, heat)
     seasons = item_seasons(cand)
     cells, all_keys = {}, set()
     for season in SEASONS:
         for purpose in PURPOSES:
-            cell, keys = _cell(cand, items, season in seasons, SEASON_TEMPS[season], purpose, cold, heat)
+            cell, keys = _cell(cand, items, season in seasons, SEASON_TEMPS[season], purpose, cold, heat, base)
             all_keys |= keys
             cells[(season, purpose)] = cell
 
@@ -48,16 +68,16 @@ def candidate_report(candidate, items, cold=0.0, heat=0.0):
             "similar": similar, "verdict": _verdict(similar, len(all_keys), improves, partners)}
 
 
-def _cell(cand, items, in_season, temps, purpose, cold, heat):
+def _cell(cand, items, in_season, temps, purpose, cold, heat, base):
     """한 상황(계절 대표 기온들 × 목적): 후보 없이 최고 점수, 후보를 넣은 코디 수·최고 점수·TOP 3."""
     cell = {"n": 0, "best": None, "best_without": None, "results": [], "temp": temps[-1]}
     keys = set()
     for t in temps:
-        base = recommend(items, t, t, 60, 0, False, 8, purpose, cold, heat, 1)
-        if base["results"]:
-            s = base["results"][0]["score"]
+        b = base[(t, purpose)]
+        if b["best"] is not None:
+            s = b["best"]
             cell["best_without"] = s if cell["best_without"] is None else max(cell["best_without"], s)
-        if not in_season or not wearable(cand, base["context"]):
+        if not in_season or not wearable(cand, b["context"]):
             continue
         out = recommend(items + [cand], t, t, 60, 0, False, 8, purpose, cold, heat, 3, must_include=CANDIDATE_ID)
         keys.update(tuple(k) for k in out["combo_keys"])

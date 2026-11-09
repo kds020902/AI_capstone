@@ -440,7 +440,8 @@ def recommend(items, temperature, apparent_temperature, humidity, precipitation,
 
     if must_include is None:  # 특정 옷을 꼭 넣을 때는 덜어내지 않는다 (그 옷이 빠질 수 있어서)
         pools = _prune(pools, ctx["t_filter"])
-    kept = _keep(_combos(pools, outer_required, ctx["t_filter"]), must_include, set(exclude_keys or ()), warnings)
+    kept = _keep(_combos(pools, outer_required, ctx["t_filter"], must_include), must_include, set(exclude_keys or ()),
+                 warnings)
     out["n_combos"] = len(kept)
     if must_include is not None:
         out["combo_keys"] = sorted(sorted(int(p["id"]) for p in c) for c in kept)
@@ -472,13 +473,29 @@ def _candidate_pools(usable, flags, ctx, warnings):
     return pools, outer_required
 
 
-def _combos(pools, outer_required, temp):
-    """모든 조합: 상의(겹쳐 입기 포함)+하의+신발 / 원피스+신발, 겉옷은 필수면 반드시, 아니면 없이도."""
+def _combos(pools, outer_required, temp, only=None):
+    """모든 조합: 상의(겹쳐 입기 포함)+하의+신발 / 원피스+신발, 겉옷은 필수면 반드시, 아니면 없이도.
+    only(사기 전에 맞춰보기의 후보 id): 그 옷이 들어갈 자리만 그 옷으로 좁혀서, 전부 만든 뒤 거르는 것과
+    같은 조합을 같은 순서로 만든다 (상의는 겹쳐 입기의 안·위 모두, 상의·하의 후보면 원피스 조합은 없음)."""
+    units, bottoms, shoes, dresses = _top_units(pools["상의"], temp), pools["하의"], pools["신발"], pools["원피스"]
     outers = pools["아우터"] if outer_required else [None] + pools["아우터"]
+    if only is not None:
+        def has(x):
+            return x is not None and int(x["id"]) == int(only)
+        cat = next((c for c in CATEGORIES if any(has(x) for x in pools[c])), None)
+        if cat is None:                       # 후보가 이 단계의 후보 옷에 없으면 조합도 없다
+            return []
+        units = [u for u in units if any(has(t) for t in u)] if cat == "상의" else units
+        bottoms = [x for x in bottoms if has(x)] if cat == "하의" else bottoms
+        shoes = [x for x in shoes if has(x)] if cat == "신발" else shoes
+        outers = [x for x in outers if has(x)] if cat == "아우터" else outers
+        if cat == "원피스":
+            units, dresses = [], [x for x in dresses if has(x)]
+        elif cat in ("상의", "하의"):
+            dresses = []                      # 원피스 조합에는 상의·하의가 없다
     out = [top + [bottom] + ([outer] if outer else []) + [shoe]
-           for top, bottom, outer, shoe in product(_top_units(pools["상의"], temp), pools["하의"], outers, pools["신발"])]
-    out += [[dress] + ([outer] if outer else []) + [shoe]
-            for dress, outer, shoe in product(pools["원피스"], outers, pools["신발"])]
+           for top, bottom, outer, shoe in product(units, bottoms, outers, shoes)]
+    out += [[dress] + ([outer] if outer else []) + [shoe] for dress, outer, shoe in product(dresses, outers, shoes)]
     return out
 
 

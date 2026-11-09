@@ -87,8 +87,10 @@ class LocalMedia:
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
 
-    def save(self, user_id, prefix, data: bytes, suffix=".jpg"):
-        path = self.folder / f"{prefix}{user_id}_{int(time.time() * 1000)}{suffix}"
+    def save(self, user_id, prefix, data: bytes, suffix=".jpg", key=None, ready=False):
+        """key(등록 요청 id)를 주면 이름이 고정돼, 다시 저장해도 같은 파일을 덮어쓴다 (사진이 늘지 않음).
+        로컬은 원본 그대로 보관한다 (ready 는 Supabase 판과 인자를 맞추려고만 받음)."""
+        path = self.folder / f"{prefix}{user_id}_{key or int(time.time() * 1000)}{suffix}"
         path.write_bytes(data)
         return str(path)
 
@@ -113,12 +115,14 @@ class SupabaseMedia:
     def _bucket(self):
         return self.client.storage.from_(BUCKET)
 
-    def save(self, user_id, prefix, data: bytes, suffix=".jpg"):
+    def save(self, user_id, prefix, data: bytes, suffix=".jpg", key=None, ready=False):
+        """key(등록 요청 id)를 주면 이름이 고정돼, 올리기 응답을 못 받고 다시 올려도 같은 파일을 덮어쓴다.
+        ready=True: 이미 to_cloud_jpeg 로 줄인 사진이라 다시 압축하지 않고 그대로 올린다 (JPEG 두 번 압축 방지)."""
         if str(user_id) != self.uid:
             raise PermissionError("다른 사용자의 폴더에는 저장할 수 없어요.")
-        jpeg = to_cloud_jpeg(data)
-        path = f"{self.uid}/{prefix}{int(time.time() * 1000)}.jpg"
-        self._bucket().upload(path, jpeg, {"content-type": "image/jpeg", "upsert": "false"})
+        jpeg = data if ready else to_cloud_jpeg(data)
+        path = f"{self.uid}/{prefix}{key or int(time.time() * 1000)}.jpg"
+        self._bucket().upload(path, jpeg, {"content-type": "image/jpeg", "upsert": "true" if key else "false"})
         self._cache[path] = jpeg
         return SB_PREFIX + path
 

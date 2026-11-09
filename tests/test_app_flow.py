@@ -51,6 +51,17 @@ def test_local_mode_full_flow(tmp_path, monkeypatch):
     assert not at.exception
 
 
+def test_half_settings_show_error_instead_of_local_mode(monkeypatch, tmp_path):
+    """공개 배포 설정이 반쪽이면 로그인 없는 로컬 모드로 열리지 않고 무엇이 빠졌는지 보여 준다 (설정값은 안 보임)."""
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "app.sqlite3")
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    assert any("SUPABASE_KEY" in e.value for e in at.error)
+    assert not any("example.supabase.co" in e.value for e in at.error)
+    assert len(at.sidebar.radio) == 0 and not (tmp_path / "app.sqlite3").exists()   # 메뉴도 로컬 DB도 없음
+
+
 @pytest.fixture
 def cloud(monkeypatch):
     backend = FakeBackend()
@@ -112,6 +123,28 @@ def test_cloud_mode_requires_login_and_keeps_accounts_apart(cloud):
     assert not at.exception and not bt.exception
 
 
+def test_cloud_recommendation_retry_after_lost_response_keeps_one_session(cloud):
+    """추천 저장이 응답 유실로 오류가 난 뒤 같은 추천을 다시 누르면, 세션이 두 번 생기지 않고 결과가 보인다.
+    오류 없이 한 번 더 누르면 예전처럼 새 세션이 생긴다."""
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    _signup(at, "r@example.com")
+    _make_profile_recommend_and_save(at, "R")                      # 세션 1개
+    _goto(at, "오늘의 추천")
+    _by_label(at.radio, "날씨").set_value("수동 입력").run()
+    cloud.rpc_faults["save_recommendation_session"] = "lost"
+    _button(at, "TOP 3 추천 생성").click().run()
+    assert at.exception                                            # 사용자는 오류를 보지만 DB에는 저장돼 있다
+    assert len(cloud.rows("recommendation_sessions")) == 2
+    _button(at, "TOP 3 추천 생성").click().run()
+    assert not at.exception and any("1위" in m.value for m in at.markdown)
+    assert len(cloud.rows("recommendation_sessions")) == 2 and len(cloud.rows("recommendations")) == 6
+    sid = at.session_state["recommendation_session_id"]
+    assert {r["recommendation_id"] for r in at.session_state["recommendations"]} == \
+        {r["id"] for r in cloud.rows("recommendations") if r["session_id"] == sid}
+    _button(at, "TOP 3 추천 생성").click().run()                   # 정상 저장 뒤 다시 누르면 새 세션 (예전과 같음)
+    assert len(cloud.rows("recommendation_sessions")) == 3
+
+
 def test_cloud_mode_signup_with_email_confirmation(cloud):
     cloud.autoconfirm = False
     at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
@@ -127,6 +160,16 @@ def _photo(i):
     buf = io.BytesIO()
     Image.new("RGB", (64, 80), (12 * i, 255 - 12 * i, 90)).save(buf, "JPEG")
     return (f"p{i}.jpg", buf.getvalue(), "image/jpeg")
+
+
+def _noisy_photo(i):
+    """무늬 있는 사진 (단색 사진은 JPEG를 두 번 압축해도 바이트가 같아서 두 번 압축을 못 잡는다)."""
+    import io
+    import random
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.frombytes("RGB", (64, 80), random.Random(i).randbytes(64 * 80 * 3)).save(buf, "JPEG")
+    return (f"n{i}.jpg", buf.getvalue(), "image/jpeg")
 
 
 def test_cloud_mode_direct_add_many_photos(cloud):
@@ -163,6 +206,69 @@ def test_cloud_mode_direct_add_many_photos(cloud):
     assert any("같은 사진 1장은 한 번만" in t.value for t in at.toast)
     assert len(at.session_state.ba_cards) == 9
     assert not at.exception
+
+
+def _confirm_all_and_save(at, n):
+    for _ in range(n):
+        _button(at, "✓ 확인하고 다음 ›").click().run()
+    _button(at, f"저장 ({n}장)").click().run()
+
+
+def test_cloud_direct_add_retry_does_not_duplicate_photos_or_items(cloud):
+    """직접 추가 저장이 사진 올리기 중간에 실패하거나, DB 저장 뒤 응답만 유실돼도 다시 누르면 사진·옷이 늘지 않는다."""
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    _signup(at, "retry@example.com")
+    _goto(at, "프로필")
+    _by_label(at.text_input, "이름 / 닉네임").input("R")
+    _button(at, "저장").click().run()
+    _goto(at, "내 옷장")
+    up = next(u for u in at.file_uploader if u.label == "저장할 의류를 넣어 주세요 (최대 10장까지)")
+    up.set_value([_photo(i) for i in range(3)]).run()
+
+    cloud.faults[("storage", "upload")] = [None, "error"]               # 1장은 올라가고 2장째에서 실패
+    _confirm_all_and_save(at, 3)
+    assert any("저장하지 못했어요" in e.value for e in at.error)
+    assert len(cloud.objects) == 1 and cloud.rows("wardrobe_items") == [] and len(at.session_state.ba_cards) == 3
+    _button(at, "저장 (3장)").click().run()                              # 확인 상태는 그대로, 다시 저장
+    assert not at.exception and len(at.session_state.ba_cards) == 0
+    assert len(cloud.objects) == 3 and len(cloud.rows("wardrobe_items")) == 3
+
+    more = next(u for u in at.file_uploader if u.label == "저장할 의류를 넣어 주세요 (최대 10장까지)")
+    more.set_value([_noisy_photo(7), _noisy_photo(8)]).run()
+    cloud.faults[("wardrobe_items", "upsert")] = "lost"                 # DB에는 들어갔는데 응답만 유실
+    _confirm_all_and_save(at, 2)
+    assert any("저장하지 못했어요" in e.value for e in at.error)
+    assert len(cloud.rows("wardrobe_items")) == 5 and len(at.session_state.ba_cards) == 2
+    _button(at, "저장 (2장)").click().run()
+    assert not at.exception and len(at.session_state.ba_cards) == 0
+    assert len(cloud.objects) == 5 and len(cloud.rows("wardrobe_items")) == 5
+    assert len({r["image_path"] for r in cloud.rows("wardrobe_items")}) == 5
+    from core.media import to_cloud_jpeg                       # 저장된 사진은 한 번만 압축한 것 (두 번 압축 안 함)
+    assert set(cloud.objects.values()) == ({to_cloud_jpeg(_photo(i)[1]) for i in (0, 1, 2)}
+                                           | {to_cloud_jpeg(_noisy_photo(i)[1]) for i in (7, 8)})
+
+
+def test_cloud_candidate_retry_does_not_duplicate(cloud):
+    """구매 후보 저장: 사진 올리기 실패 뒤, 그리고 저장 뒤 응답 유실 뒤 다시 눌러도 사진·후보가 하나씩만 생긴다."""
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    _signup(at, "cand@example.com")
+    _goto(at, "프로필")
+    _by_label(at.text_input, "이름 / 닉네임").input("C")
+    _button(at, "저장").click().run()
+    _goto(at, "사기 전에 맞춰보기")
+    next(u for u in at.file_uploader if u.label.startswith("상품 사진")).set_value(_photo(3)).run()
+    cloud.faults[("storage", "upload")] = "error"
+    _button(at, "구매 후보로 저장").click().run()
+    assert any("저장하지 못했어요" in e.value for e in at.error)
+    assert cloud.objects == {} and cloud.rows("purchase_candidates") == []
+    cloud.faults[("purchase_candidates", "upsert")] = "lost"
+    _button(at, "구매 후보로 저장").click().run()
+    assert any("두 번 저장되지 않아요" in e.value for e in at.error)
+    assert len(cloud.objects) == 1 and len(cloud.rows("purchase_candidates")) == 1
+    _button(at, "구매 후보로 저장").click().run()
+    assert not at.exception
+    assert len(cloud.objects) == 1 and len(cloud.rows("purchase_candidates")) == 1
+    assert any(m.value == "### " + cloud.rows("purchase_candidates")[0]["name"] for m in at.markdown)
 
 
 def _local_app(tmp_path, monkeypatch):

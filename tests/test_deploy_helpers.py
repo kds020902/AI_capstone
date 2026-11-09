@@ -31,6 +31,49 @@ def test_local_mode_when_supabase_settings_missing(monkeypatch):
     assert config.cloud_settings() is None
 
 
+@pytest.mark.parametrize("given, missing", [("SUPABASE_URL", "SUPABASE_KEY"), ("SUPABASE_KEY", "SUPABASE_URL")])
+def test_half_supabase_settings_stop_instead_of_local_mode(monkeypatch, given, missing):
+    """둘 중 하나만 있으면 로컬 모드(로그인 없는 공용 SQLite)로 넘어가지 않고, 빠진 이름을 알려 준다 (값은 안 보임)."""
+    secret = "https://abc.supabase.co" if given == "SUPABASE_URL" else "sb_publishable_secret_value_123"
+    monkeypatch.delenv(missing, raising=False)
+    monkeypatch.setenv(given, secret)
+    with pytest.raises(config.SettingsError) as e:
+        config.cloud_settings()
+    assert missing in str(e.value) and secret not in str(e.value)
+
+
+class _Secrets:
+    """st.secrets 대신: 읽으려 하면 지정한 오류를 낸다."""
+
+    def __init__(self, error):
+        self.error = error
+
+    def __contains__(self, name):
+        raise self.error
+
+
+def test_secrets_file_missing_means_local_but_broken_file_is_an_error(monkeypatch, tmp_path):
+    import streamlit as st
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
+    # 지금 설치된 Streamlit 이 실제로 내는 오류로: 파일 없음 → 로컬 모드, 형식 오류 → 멈춤
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(st, "secrets", type(st.secrets)())
+    assert config.get_setting("SUPABASE_URL") is None and config.cloud_settings() is None
+    (tmp_path / ".streamlit").mkdir()
+    (tmp_path / ".streamlit" / "secrets.toml").write_text('SUPABASE_URL = "https://abc.supabase.co"\nSUPABASE_KEY = sb_publishable_oops\n')
+    monkeypatch.setattr(st, "secrets", type(st.secrets)())
+    with pytest.raises(config.SettingsError) as e:
+        config.cloud_settings()
+    assert "line 2" in str(e.value) and "sb_publishable_oops" not in str(e.value) and "abc.supabase.co" not in str(e.value)
+    # 예전 Streamlit 처럼 오류 문구로만 구분되는 경우
+    monkeypatch.setattr(st, "secrets", _Secrets(FileNotFoundError("No secrets files found. Valid paths: ...")))
+    assert config.get_setting("SUPABASE_URL") is None
+    monkeypatch.setattr(st, "secrets", _Secrets(ValueError("Error parsing secrets file at s.toml (at line 3, column 1)")))
+    with pytest.raises(config.SettingsError):
+        config.get_setting("SUPABASE_URL")
+
+
 def test_cloud_settings_from_env(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://abc.supabase.co/")
     monkeypatch.setenv("SUPABASE_KEY", _jwt({"role": "anon"}))

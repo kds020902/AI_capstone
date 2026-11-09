@@ -1,13 +1,14 @@
 """오늘의 추천: 날씨(자동·수동)와 외출 목적으로 TOP 3 코디를 만들고 저장·피드백을 받는다."""
 from __future__ import annotations
 
+import uuid
 from datetime import date
 
 import pandas as pd
 import streamlit as st
 
 from core import weather
-from core.recommender import explain_score_breakdown, recommend
+from core.recommender import explain_score_breakdown, outfit_key, recommend
 from core.taxonomy import PURPOSES
 from core.weather import CITY_PRESETS, RETURN_HOURS, coldest_until
 from screens.common import THERMAL_FEEDBACK, tryon_button
@@ -107,13 +108,26 @@ def _make_recommendation(app, user, items, w, purpose):
         seed=f"{user['id']}-{date.today().isoformat()}",  # 같은 날엔 같은 결과, 날마다 동점 코디가 바뀜
         later=w["later"],
     )
-    sid = app.store.create_recommendation_session(user["id"], purpose, w["temperature"], w["apparent"], w["humidity"],
-                                                  w["precipitation"], w["rain"], w["wind"], w["source"])
-    for rank, result in enumerate(out["results"], 1):
-        result["recommendation_id"] = app.store.save_recommendation(sid, rank, result)
+    fields = (purpose, w["temperature"], w["apparent"], w["humidity"], w["precipitation"], w["rain"], w["wind"],
+              w["source"])
+    sid, rids = app.store.save_recommendation_session(user["id"], _request_id(fields, out["results"]), *fields,
+                                                      out["results"])
+    st.session_state.rec_request = None
+    for result, rid in zip(out["results"], rids):
+        result["recommendation_id"] = rid
     st.session_state.recommendations = out["results"]
     st.session_state.recommendation_session_id = sid
     st.session_state.rec_meta = {"warnings": out["warnings"], "context": out["context"]}
+
+
+def _request_id(fields, results):
+    """추천 저장 요청 id. 저장이 오류로 끝난 뒤 같은 추천을 다시 저장하면 같은 id를 써서, 사실은 저장이 됐더라도
+    (응답만 못 받은 경우) 세션이 두 번 생기지 않게 한다. 저장에 성공하면 비워서 다음 버튼은 새 세션이 된다."""
+    key = repr((fields, [(r["score"], sorted(outfit_key(r["pieces"]))) for r in results]))
+    pending = st.session_state.get("rec_request")
+    if not pending or pending["key"] != key:
+        pending = st.session_state.rec_request = {"id": str(uuid.uuid4()), "key": key}
+    return pending["id"]
 
 
 def _context_caption(ctx):

@@ -45,7 +45,7 @@ python -m http.server -d web 8000
 
 - 앱: Streamlit Community Cloud · 로그인·DB·옷 사진: Supabase (사용자별 접근 제한) · 가상 착용(예시): Hugging Face ZeroGPU Space (`tryon_space/`) · 웹 체험판: GitHub Pages
 - 설정 이름: `SUPABASE_URL`, `SUPABASE_KEY`(공개용 키만), `TRYON_SPACE_URL`(선택), `WEB_TRIAL_URL`(선택) — 예시는 `.streamlit/secrets.toml.example`
-- 이 설정이 없으면 위 실행 방법 그대로 로컬 모드(로그인 없음, SQLite)로 동작합니다.
+- 이 설정(`SUPABASE_URL`·`SUPABASE_KEY`)이 둘 다 없으면 위 실행 방법 그대로 로컬 모드(로그인 없음, SQLite)로 동작합니다. 하나만 있으면 로컬 모드로 넘어가지 않고 빠진 이름을 알려 주며 멈춥니다.
 - 공개 배포 작업 전 버전(로그인 없이 내 PC에서만 도는 SQLite 버전)은 커밋 `74c3210` 입니다. 압축 파일: <https://github.com/kds020902/AI_capstone/archive/74c3210.zip>
 - 무료 요금제라 잠들기(앱 12시간·Supabase 1주일 무활동)와 가상 착용 하루 사용량 제한이 있습니다. 자세한 한도는 `DEPLOY.md` 5절.
 

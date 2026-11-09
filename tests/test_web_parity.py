@@ -105,7 +105,10 @@ def test_js_shopping_report_matches_python(tmp_path):
              (cand("흰 반팔", "상의", "반팔 티셔츠", "white", 1), starter_items("male")),          # dup
              (cand("그레이 니트", "상의", "니트", "gray", 3), summer),                             # gap
              (cand("실버 힐", "신발", "힐", "gray", 1), starter_items("female")),
-             (cand("레드 니트", "상의", "니트", "red", 3), [x for x in starter_items("female") if x["category"] != "신발"])]
+             (cand("레드 니트", "상의", "니트", "red", 3), [x for x in starter_items("female") if x["category"] != "신발"]),
+             (cand("블랙 원피스", "원피스", "원피스", "black", 2), starter_items("female")),
+             (cand("연청 청바지", "하의", "청바지", "skyblue", 2), starter_items("female")),
+             (cand("카멜 코트", "아우터", "코트", "camel", 4), starter_items("female"))]   # 원피스 + 후보 겉옷 조합
     src = tmp_path / "shop.json"
     src.write_text(json.dumps({"data": closet_data(), "cases": [{"cand": c, "items": i} for c, i in cases]},
                               ensure_ascii=False), encoding="utf-8")

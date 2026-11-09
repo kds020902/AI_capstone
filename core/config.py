@@ -6,7 +6,9 @@
                     예전 anon public 키(eyJ…)도 아직 동작하지만 Supabase가 2026년 말까지 없앨 예정이라 바꿔 둔다
   TRYON_SPACE_URL   (선택) 가상 착용 Hugging Face Space 페이지 주소 (https://huggingface.co/spaces/아이디/공간이름)
   WEB_TRIAL_URL     (선택) 웹 체험판 주소 (GitHub Pages 등)
-SUPABASE_URL·SUPABASE_KEY 가 없으면 지금처럼 로컬 SQLite + data/uploads 로 동작한다.
+SUPABASE_URL·SUPABASE_KEY 가 둘 다 없으면 지금처럼 로컬 SQLite + data/uploads 로 동작한다.
+하나만 있거나 Secrets 파일 형식이 틀렸으면 로컬 모드로 넘어가지 않고 멈춘다 (공개 주소에서 로그인 없는 공용
+SQLite 로 돌아가면 방문자끼리 데이터가 섞이고 서버가 다시 켜질 때 사라진다).
 """
 from __future__ import annotations
 
@@ -17,7 +19,11 @@ import os
 import re
 
 
-class UnsafeKeyError(ValueError):
+class SettingsError(ValueError):
+    """설정이 반쪽이거나 Secrets 파일을 읽을 수 없을 때. 문구에 설정값(비밀값)은 넣지 않는다."""
+
+
+class UnsafeKeyError(SettingsError):
     """서버 전용 비밀 키를 앱에 넣었을 때."""
 
 
@@ -27,17 +33,30 @@ LEGACY_KEY_WARNING = (
 )
 
 
+def _no_secrets_file(e):
+    """Streamlit 이 'Secrets 파일이 아예 없음'으로 낸 오류인지 (형식 오류와 같은 종류의 예외라 내용으로 구분)."""
+    return getattr(e, "error_id", None) == "no-secrets-found" or "No secrets" in str(e)
+
+
 def get_setting(name, default=None):
     value = os.environ.get(name)
     if value:
         return value.strip()
     try:
         import streamlit as st
+    except ImportError:              # Streamlit 없이 도는 스크립트
+        return default
+    try:
         if name in st.secrets:
             v = st.secrets[name]
             return str(v).strip() if v is not None else default
-    except Exception:  # secrets.toml 이 없거나 Streamlit 밖에서 실행
-        pass
+    except Exception as e:
+        if _no_secrets_file(e):      # secrets.toml 이 없음 = 설정 안 함 (로컬 실행)
+            return default
+        where = re.search(r"line \d+(?:, column \d+)?", str(e))   # 파일 내용(비밀값)은 문구에 넣지 않는다
+        raise SettingsError("Streamlit Secrets 설정을 읽지 못했어요 (형식 오류"
+                            + (f", {where.group(0)}" if where else "") + "). "
+                            "secrets.toml 또는 앱 Settings → Secrets 의 형식을 확인해 주세요 (예: NAME = \"값\").") from None
     return default
 
 
@@ -81,10 +100,14 @@ def normalize_supabase_url(url):
 
 
 def cloud_settings():
-    """{"url", "key"} 또는 None(로컬 모드)."""
+    """{"url", "key"} 또는 None(로컬 모드: 둘 다 없을 때만). 하나만 있으면 SettingsError."""
     url, key = get_setting("SUPABASE_URL"), get_setting("SUPABASE_KEY")
-    if not url or not key:
+    if not url and not key:
         return None
+    if not url or not key:
+        missing, has = ("SUPABASE_URL", "SUPABASE_KEY") if not url else ("SUPABASE_KEY", "SUPABASE_URL")
+        raise SettingsError(f"{has} 는 있는데 {missing} 가 없어요. 공개 배포는 둘 다 넣고, "
+                            "로그인 없는 로컬 모드로 쓰려면 둘 다 지워 주세요.")
     key = check_public_key(key)
     if is_legacy_key(key):    # 사용자 화면이 아니라 서버 기록(Streamlit Cloud → Manage app → Logs)에만 남긴다
         logging.getLogger(__name__).warning(LEGACY_KEY_WARNING)

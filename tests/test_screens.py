@@ -36,3 +36,44 @@ def test_every_store_function_that_writes_wardrobe_is_watched():
             writers.add(name)
     assert {"create_wardrobe_items", "deactivate_item", "buy_candidate", "add_starter_wardrobe"} <= writers
     assert writers <= WARDROBE_CHANGES, writers - WARDROBE_CHANGES
+
+
+def test_each_watched_function_really_changes_wardrobe_and_clears(tmp_path, monkeypatch):
+    """코드 문자열이 아니라 실제 상태로: WARDROBE_CHANGES 의 함수를 모두 실제 SQLite 저장소에 불러, 부를 때마다
+    옷장(또는 체질)이 실제로 바뀌고 '추천 비우기'가 불리는지 본다. 목록에 함수를 더하면 여기도 더해야 통과한다."""
+    import json
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "w.sqlite3")
+    db.init_db()
+    uid = db.create_user("나", "male", 0, 0)
+    cleared = []
+    store = WatchedStore(db, lambda: cleared.append(1))
+
+    def snapshot():
+        with db.conn() as c:
+            return json.dumps([[dict(r) for r in c.execute(f"SELECT * FROM {t} ORDER BY id")] for t in
+                               ("wardrobe_items", "users")], default=str)
+
+    cid = db.create_candidate(uid, "후보 코트", "아우터", "코트", "beige", 4, 0)
+    steps = [("add_starter_wardrobe", lambda: store.add_starter_wardrobe(uid)),
+             ("create_wardrobe_item", lambda: store.create_wardrobe_item(uid, "새 셔츠", "상의", "셔츠", "white", 2, 0)),
+             ("create_wardrobe_items", lambda: store.create_wardrobe_items(uid, [
+                 {"name": "새 니트", "category": "상의", "subcategory": "니트", "warmth": 3, "rain_ok": 0}])),
+             ("update_wardrobe_item", lambda: store.update_wardrobe_item(iid(), uid, "고친 셔츠", "상의", "셔츠", "black", 3, 1)),
+             ("deactivate_item", lambda: store.deactivate_item(iid(), uid)),
+             ("reactivate_item", lambda: store.reactivate_item(iid(), uid)),
+             ("update_item_seasons", lambda: store.update_item_seasons(iid(), uid, ["여름"])),
+             ("set_items_active", lambda: store.set_items_active([iid()], uid, False)),
+             ("soft_delete_item", lambda: store.soft_delete_item(iid(), uid)),
+             ("buy_candidate", lambda: store.buy_candidate(cid, uid)),
+             ("update_user", lambda: store.update_user(uid, "female", 0.6, 0.1))]
+
+    def iid():
+        with db.conn() as c:
+            return c.execute("SELECT id FROM wardrobe_items WHERE name IN ('새 셔츠', '고친 셔츠')").fetchone()[0]
+
+    for name, call in steps:
+        before, n = snapshot(), len(cleared)
+        call()
+        assert snapshot() != before, f"{name}: 옷장·체질이 안 바뀜"
+        assert len(cleared) == n + 1, f"{name}: 추천 비우기가 안 불림"
+    assert {name for name, _ in steps} == WARDROBE_CHANGES

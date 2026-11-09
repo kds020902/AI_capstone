@@ -7,6 +7,7 @@ from core.cloud_store import CloudStore
 from core.recommender import outfit_key, recommend
 from tests.fake_supabase import FakeAPIError, FakeBackend, signed_in_client
 
+REQ, REQ2 = "6f1c1e0a-3a52-4c63-9a0e-2f1d1a0b9c01", "6f1c1e0a-3a52-4c63-9a0e-2f1d1a0b9c02"
 DROP = {"id", "user_id", "created_at", "started_at", "completed_at", "saved_at", "updated_at", "session_id",
         "recommendation_id"}
 
@@ -60,6 +61,13 @@ def _scenario(store, uid):
     store.upsert_feedback(uid, rids[0], worn=True, thermal_feedback=-1, satisfaction=4)
     store.upsert_feedback(uid, rids[1], rating="dislike")
     sid2 = store.create_recommendation_session(uid, "운동", 25, 26, 50, 0, False, 5, "manual")  # 추천 없는 세션
+    # 화면이 쓰는 한 묶음 저장: 같은 요청 id로 다시 보내면 처음 묶음 그대로, 새 요청은 새 세션
+    bundle = store.save_recommendation_session(uid, REQ, "등교", 12, 11, 60, 0, False, 8, "manual", rec["results"])
+    out["bundle_n"] = len(bundle[1])
+    out["bundle_again_same"] = store.save_recommendation_session(uid, REQ, "등교", 12, 11, 60, 0, False, 8, "manual",
+                                                                 rec["results"]) == bundle
+    out["bundle_empty_n"] = len(store.save_recommendation_session(uid, REQ2, "외출", 30, 31, 40, 0, True, 3, "manual",
+                                                                  [])[1])
     dis = store.disliked_item_sets(uid)
     out["disliked_ok"] = dis == {outfit_key(rec["results"][1]["pieces"])}
     out["sessions"] = store.count_recommendation_sessions(uid)
@@ -85,13 +93,17 @@ def _scenario(store, uid):
     return out
 
 
-def test_cloud_store_matches_sqlite(tmp_path):
+@pytest.mark.parametrize("max_rows", [1000, 2])
+def test_cloud_store_matches_sqlite(tmp_path, max_rows):
+    """max_rows=2: Supabase 가 한 번에 2줄만 돌려줘도(옷 30벌·추천 로그 여러 줄) 끝까지 나눠 받아 결과가 같다."""
     db.DB_PATH = tmp_path / "parity.sqlite3"
     db.init_db()
     local_uid = db.create_user("동일", "female", 0.6, 0.1)
     local = _scenario(db, local_uid)
 
-    client = signed_in_client(FakeBackend(), "a@example.com")
+    backend = FakeBackend()
+    backend.max_rows = max_rows
+    client = signed_in_client(backend, "a@example.com")
     cloud = CloudStore(client, client.uid)
     cloud.create_user("동일", "female", 0.6, 0.1)
     remote = _scenario(cloud, client.uid)
@@ -103,8 +115,13 @@ def test_cloud_store_matches_sqlite(tmp_path):
     assert edited["ai_subcategory"] == "슬랙스"                      # AI 기록은 그대로
     assert not any(x["name"] == "바뀌면 안 됨" for x in local["items"])
     assert local["disliked_ok"] and remote["disliked_ok"]
+    assert local["bundle_n"] == 3 and local["bundle_again_same"] and local["bundle_empty_n"] == 0
+    assert local["sessions"] == 4
     for key in local:
         assert remote[key] == local[key], key
+    assert len(local["log_rows"]) == 8 and len(local["items"]) == 29        # 둘 다 한도(2줄)보다 많다
+    if max_rows == 2:                                       # 나눠 받지 않으면 2줄만 온다 (가짜 백엔드가 한도를 재현함)
+        assert len(client.table("wardrobe_items").select("*").execute().data) == 2
 
 
 def test_profile_round_trip_and_update():
@@ -205,16 +222,15 @@ def test_buy_candidate_failure_keeps_candidate_and_retry_adds_one(tmp_path, monk
             raise RuntimeError("저장 실패")
         return real_insert(c, table, values)
 
-    def broken_create(*a, **k):
-        raise RuntimeError("저장 실패")
+    def broken_rpc():   # DB 함수가 후보를 뺀 뒤 옷장에 넣다가 실패 → 함수 전체가 되돌아감
+        client.backend.rpc_faults["buy_candidate"] = "error"
 
     for store, uid, break_it in ((db, local_uid, lambda: monkeypatch.setattr(db, "_insert", broken_insert)),
-                                 (cloud, client.uid, lambda: monkeypatch.setattr(cloud, "create_wardrobe_item",
-                                                                                 broken_create))):
+                                 (cloud, client.uid, broken_rpc)):
         cid = store.create_candidate(uid, "네이비 플리스", "아우터", "플리스", "navy", 3, 0)
         n_before = len(store.list_wardrobe_items(uid))
         break_it()
-        with pytest.raises(RuntimeError):
+        with pytest.raises((RuntimeError, FakeAPIError)):
             store.buy_candidate(cid, uid)
         monkeypatch.undo()
         assert [c["id"] for c in store.list_candidates(uid)] == [cid]          # 후보가 그대로 남음
@@ -223,6 +239,111 @@ def test_buy_candidate_failure_keeps_candidate_and_retry_adds_one(tmp_path, monk
         assert new_id and store.buy_candidate(cid, uid) is None                 # 다시 눌러도 한 벌만
         assert len(store.list_wardrobe_items(uid)) == n_before + 1
         assert store.list_candidates(uid) == []
+
+
+def test_buy_candidate_lost_response_then_retry_adds_one():
+    """옷장에 넣기까지 끝났는데 응답만 못 받은 경우: 다시 눌러도 후보를 되살려 두 번 넣지 않는다 (예전 방식의 중복 원인)."""
+    backend = FakeBackend()
+    client = signed_in_client(backend, "lost@example.com")
+    store = CloudStore(client, client.uid)
+    store.create_user("나", "male", 0, 0)
+    cid = store.create_candidate(client.uid, "네이비 플리스", "아우터", "플리스", "navy", 3, 0)
+    backend.rpc_faults["buy_candidate"] = "lost"
+    with pytest.raises(FakeAPIError):
+        store.buy_candidate(cid, client.uid)
+    assert store.buy_candidate(cid, client.uid) is None                   # 이미 산 후보
+    assert [x["name"] for x in store.list_wardrobe_items(client.uid)] == ["네이비 플리스"]
+    assert store.list_candidates(client.uid) == []
+
+
+def test_recommendation_bundle_is_all_or_nothing_and_retry_safe(tmp_path, monkeypatch):
+    """추천 세션과 TOP 3는 함께 저장되거나 함께 안 남는다. 응답을 못 받고 같은 요청을 다시 보내도 세션은 하나 (SQLite·Supabase)."""
+    db.DB_PATH = tmp_path / "rec.sqlite3"
+    db.init_db()
+    local_uid = db.create_user("나", "male", 0, 0)
+    backend = FakeBackend()
+    client = signed_in_client(backend, "rec@example.com")
+    cloud = CloudStore(client, client.uid)
+    cloud.create_user("나", "male", 0, 0)
+    results = [{"score": 0.9 - i / 10, "pieces": [{"id": i, "name": f"옷{i}"}], "reasons": ["r"],
+                "components": {"weather": 0.9}} for i in range(3)]
+    args = ("등교", 12, 11, 60, 0, False, 8, "manual")
+
+    real_insert = db._insert
+    calls = []
+
+    def insert_fails_on_third_result(c, table, values):
+        if table == "recommendations":
+            calls.append(1)
+            if len(calls) == 3:
+                raise RuntimeError("셋째 결과 저장 실패")
+        return real_insert(c, table, values)
+
+    for store, uid, break_it in (
+            (db, local_uid, lambda: monkeypatch.setattr(db, "_insert", insert_fails_on_third_result)),
+            (cloud, client.uid, lambda: backend.rpc_faults.update(save_recommendation_session="error"))):
+        break_it()
+        with pytest.raises((RuntimeError, FakeAPIError)):
+            store.save_recommendation_session(uid, REQ, *args, results)
+        monkeypatch.undo()
+        assert store.count_recommendation_sessions(uid) == 0 and store.export_user_logs(uid).empty   # 반쪽 기록 없음
+        sid, rids = store.save_recommendation_session(uid, REQ, *args, results)
+        assert len(rids) == 3 and store.count_recommendation_sessions(uid) == 1
+
+    backend.rpc_faults["save_recommendation_session"] = "lost"               # 저장은 됐는데 응답만 유실
+    with pytest.raises(FakeAPIError):
+        cloud.save_recommendation_session(client.uid, REQ2, *args, results)
+    again = cloud.save_recommendation_session(client.uid, REQ2, *args, results)
+    assert len(again[1]) == 3 and cloud.count_recommendation_sessions(client.uid) == 2
+    assert len(cloud.export_user_logs(client.uid)) == 6
+
+
+def test_same_request_id_registers_once(tmp_path):
+    """사진 등록·구매 후보: 같은 요청 id로 다시 저장하면(응답 유실 뒤 재시도) 새로 넣지 않고 처음 id를 돌려준다 (두 저장소 같음)."""
+    db.DB_PATH = tmp_path / "once.sqlite3"
+    db.init_db()
+    local_uid = db.create_user("나", "male", 0, 0)
+    client = signed_in_client(FakeBackend(), "once@example.com")
+    cloud = CloudStore(client, client.uid)
+    cloud.create_user("나", "male", 0, 0)
+    rows = [{"name": f"셔츠{i}", "category": "상의", "subcategory": "셔츠", "color": "white", "warmth": 2,
+             "rain_ok": 0, "image_path": f"p{i}.jpg", "request_id": f"6f1c1e0a-3a52-4c63-9a0e-00000000000{i}"}
+            for i in range(3)]
+    out = {}
+    for name, store, uid in (("local", db, local_uid), ("cloud", cloud, client.uid)):
+        first = store.create_wardrobe_items(uid, rows[:2])
+        again = store.create_wardrobe_items(uid, rows)                 # 앞 2벌은 이미 있음, 셋째만 새로
+        cand = store.create_candidate(uid, "후보", "아우터", "코트", "beige", 3, 0, request_id=REQ)
+        out[name] = (len(first), again[:2] == first, len(set(again)),
+                     store.create_candidate(uid, "후보(고침)", "아우터", "코트", "beige", 3, 0, request_id=REQ) == cand,
+                     sorted(x["name"] for x in store.list_wardrobe_items(uid)),
+                     [c["name"] for c in store.list_candidates(uid)])
+        store.create_wardrobe_items(uid, [{**rows[0], "request_id": None, "name": "요청 id 없음"}] * 2)  # 예전처럼 매번 새로
+        assert len(store.list_wardrobe_items(uid)) == 5
+    assert out["local"] == out["cloud"] == (2, True, 3, True, ["셔츠0", "셔츠1", "셔츠2"], ["후보"])
+
+
+def test_photo_with_request_key_is_saved_once(tmp_path):
+    from core.media import LocalMedia, SupabaseMedia
+    local = LocalMedia(tmp_path)
+    assert local.save(7, "b_", b"1", ".jpg", key="k1") == local.save(7, "b_", b"1", ".jpg", key="k1")
+    assert len(list(tmp_path.iterdir())) == 1
+    backend = FakeBackend()
+    c = signed_in_client(backend, "photo@example.com")
+    m = SupabaseMedia(c, c.uid)
+    from tests.test_deploy_helpers import _png
+    backend.faults[("storage", "upload")] = "lost"                      # 올라갔는데 응답만 유실
+    with pytest.raises(FakeAPIError):
+        m.save(c.uid, "b_", _png(), ".png", key="k2")
+    ref = m.save(c.uid, "b_", _png(), ".png", key="k2")                 # 다시 올려도 같은 파일 하나
+    assert ref.endswith("/b_k2.jpg") and len(backend.objects) == 1
+    m.save(c.uid, "b_", _png(), ".png")
+    m.save(c.uid, "b_", _png(), ".png")                                 # 이름을 안 정하면 예전처럼 새 파일
+    from core.media import to_cloud_jpeg
+    ready = to_cloud_jpeg(_png())
+    ref = m.save(c.uid, "b_", ready, ".jpg", key="k3", ready=True)      # 이미 줄인 사진은 그대로 올린다
+    assert backend.objects["wardrobe/" + ref[3:]] == ready
+    assert len(backend.objects) >= 2
 
 
 def test_photo_cache_drops_oldest_when_full():

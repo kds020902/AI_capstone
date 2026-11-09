@@ -8,7 +8,7 @@ from pathlib import Path
 import streamlit as st
 
 from core import db
-from core.config import UnsafeKeyError, cloud_settings, get_setting
+from core.config import SettingsError, cloud_settings, get_setting
 from core.media import LocalMedia
 from core.vision import model_status
 from screens import home, kpi, profile, recommend, saved, shopping, wardrobe
@@ -26,6 +26,9 @@ for key, value in {
     "active_user_id": None,
     "recommendations": None,
     "recommendation_session_id": None,
+    "rec_request": None,          # 저장이 오류로 끝난 추천의 요청 id (같은 추천을 다시 저장할 때 재사용)
+    "cand_request": None,         # 구매 후보: 저장이 오류로 끝난 요청 id, 이미 올린 상품 사진
+    "cand_photo": None,
     "rec_meta": None,
     "weather_cache": None,
     "ba_cards": [],      # 직접 추가: 확인 중인 사진 카드 (최대 10장)
@@ -41,7 +44,7 @@ for key, value in {
 # ------------------------------------------------------------------ 저장소: 로컬(SQLite) 또는 공개 배포(Supabase)
 try:
     CLOUD = cloud_settings()
-except UnsafeKeyError as e:
+except SettingsError as e:      # 반쪽 설정·Secrets 형식 오류·서비스 키 → 로컬 모드로 넘어가지 않고 멈춤
     st.error(str(e))
     st.stop()
 

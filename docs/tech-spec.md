@@ -44,19 +44,20 @@
 | `app.py` | 설정 읽기, 저장소 선택(로컬/클라우드), 사이드바, 메뉴 → 화면 연결 (약 100줄) |
 | `screens/context.py` | 한 번 그릴 때 쓰는 `App`: 저장소·사진 저장소·설정, 그번에만 쓰는 캐시(사용자 1번·옷장 1번 읽기), 목록용 작은 사진. 저장소를 감싸 옷장·체질을 바꾸는 함수(`WARDROBE_CHANGES`)가 성공하면 지난 추천을 비운다. 세션마다 다른 값은 모듈 전역에 두지 않는다 (사용자끼리 섞임 방지) |
 | `screens/*.py` | 화면마다 하나: `login`, `home`, `profile`, `wardrobe`, `direct_add`, `recommend`, `shopping`, `saved`, `kpi`, 공통 위젯 `common` (가상 착용 창·정보 수정 창·AI 후보 고르기) |
-| `core/config.py` | 설정 읽기(환경 변수 → Streamlit Secrets), 서비스 키 거부, Supabase 주소 정리 |
+| `core/config.py` | 설정 읽기(환경 변수 → Streamlit Secrets), 서비스 키 거부, 반쪽 설정(URL·키 중 하나만)·Secrets 형식 오류는 로컬 모드로 넘어가지 않고 멈춤(문구에 설정값 없음), Supabase 주소 정리 |
 | `core/cloud_auth.py` | 가입·로그인·세션·로그아웃, 오류 문구 변환 |
 | `core/db.py` / `core/cloud_store.py` | 같은 함수 이름의 두 저장소: SQLite / Supabase. 화면 코드는 `store.함수()`만 부른다. 여러 벌 한 번에 넣기 `create_wardrobe_items`(Supabase는 insert 1번), 저장 후 고치기 `update_wardrobe_item`(지운 옷 제외) |
-| `core/media.py` | 사진 저장: `LocalMedia`(폴더) / `SupabaseMedia`(Storage, 서명 주소). `PhotoCache`(최근 쓴 순서, 크기 한도)를 세션에 두어 다시 그릴 때 사진을 다시 내려받지 않음, 목록용 작은 사진 `thumbnail_jpeg` |
+| `core/rows.py` | 옷장 옷·구매 후보 한 줄의 값(기본값·형태)을 두 저장소가 같이 씀. SQL·권한 처리는 각 저장소에 |
+| `core/media.py` | 사진 저장: `LocalMedia`(폴더) / `SupabaseMedia`(Storage, 서명 주소). `PhotoCache`(최근 쓴 순서, 크기 한도)를 세션에 두어 다시 그릴 때 사진을 다시 내려받지 않음, 목록용 작은 사진 `thumbnail_jpeg`. 이미 저장용 JPEG로 줄인 사진(`ready`)은 다시 압축하지 않음, 등록 요청 id로 이름 고정 |
 | `core/batch_add.py` | 직접 추가(사진 여러 장) 계산: 10장 제한, 끝과 처음이 이어진 이동, 다음 확인 안 한 사진, 겹치지 않는 자동 이름. 화면 상태(확인 카드)는 `st.session_state.ba_cards`에 두고, 안 보이는 카드의 입력값은 카드에 따로 보관한다 (Streamlit은 화면에 없는 위젯 값을 지움) |
 | `core/eligibility.py` | 온도 세 가지(실제 체감·추천 기준·두께 취향), 체감 성향 5단계 표(앱 프로필·시험·웹 체험판이 같이 씀), 옷 하나의 후보 자격(절대 금지 / 목적 완화 / 기온 완화), 젖음 부담(사용자 체크 우선). 추천·구매 판정이 같이 쓰고, 계절 계산도 같은 기온 비교를 씀 |
 | `core/recommender.py`, `core/taxonomy.py`, `data/clothing_taxonomy.csv` | 추천 단계(정상 → 목적 완화 → 기온 완화 → 둘 다, 코디가 나오는 첫 단계), 점수·순위(0.02 칸 → 색 → 점수 → FNV-1a 고정 순서), 42종 규칙표(착용 범위, 절대 금지·완화 목적, 젖음 부담, 비를 막는 겉옷), 겹쳐 입기·평소 피하는 조합, 계절 계산 |
-| `core/shopping.py` | 사기 전에 맞춰보기 |
+| `core/shopping.py` | 사기 전에 맞춰보기. 후보 없는 기준 점수(`baseline`)는 같은 옷장·체질이면 후보끼리 같이 쓰고(앱은 캐시), 후보가 든 코디는 후보 자리만 후보로 좁혀 만든다(전부 만든 뒤 거르는 것과 같은 조합·순서, 웹 체험판도 같음) |
 | `core/vision.py` | 분류 모델 불러오기·분류, 대표색 |
 | `core/weather.py` | Open-Meteo 호출, 귀가 전 최저 기온 |
 | `core/colors.py`, `core/care.py`, `core/catalog.py` | 색 이름·조화, 세탁 가이드, 스타터 옷장 |
 | `core/tryon.py` | 가상 착용 옷 고르기, Space 주소 만들기 |
-| `supabase/schema.sql` | 표·접근 정책·사진 버킷 (여러 번 실행해도 안전) |
+| `supabase/schema.sql` | 표·접근 정책·사진 버킷, 한 거래로 처리하는 DB 함수(`buy_candidate`, `save_recommendation_session`), 기록 조회용 뷰(`saved_outfit_rows`, `disliked_outfit_rows`, `recommendation_log_rows`, `kpi_rows`) (여러 번 실행해도 안전) |
 | `tryon_space/` | Hugging Face Space에 올리는 가상 착용 앱. 옷 사진 주소가 다른 곳으로 넘어가면 넘어갈 때마다 허용 목록을 다시 확인(최대 3번) |
 | `scripts/` | 데이터 받기·학습(`open_datasets.py`, `prepare_dataset.py`, `train_classifier.py`), 웹 체험판 만들기(`build_web.py`), Supabase 점검·이전 |
 | `notebooks/` | Colab 노트북: 앱 실행(`COLAB_RUN.ipynb`), CatVTON 가상 착용 시험(`CATVTON_TEST.ipynb`) |
@@ -68,16 +69,21 @@
 | 표 | 주요 열 | 제약 |
 |---|---|---|
 | `profiles` | id(=로그인 사용자), name, gender, cold_sensitivity, heat_sensitivity | id → auth.users, 계정당 1행 |
-| `wardrobe_items` | user_id, name, category, subcategory, color, warmth, rain_ok, material, image_path, ai_category/ai_subcategory/ai_confidence, seasons, active, deleted | 삭제는 deleted=1 (소프트 삭제) |
-| `recommendation_sessions` | user_id, purpose, temperature, apparent_temperature, humidity, precipitation, rain, wind_speed, weather_source, started_at, completed_at | 추천 1회 = 1세션 |
+| `wardrobe_items` | user_id, name, category, subcategory, color, warmth, rain_ok, material, image_path, ai_category/ai_subcategory/ai_confidence, seasons, active, deleted, request_id | 삭제는 deleted=1 (소프트 삭제). unique(user_id, request_id): 사진 등록을 다시 보내도 1벌 |
+| `recommendation_sessions` | user_id, purpose, temperature, apparent_temperature, humidity, precipitation, rain, wind_speed, weather_source, started_at, completed_at, request_id | 추천 1회 = 1세션. unique(user_id, request_id): 같은 요청을 다시 보내도 1세션 |
 | `recommendations` | user_id, session_id, rank, score, pieces_json, reasons_json, components_json | 세션당 TOP 3 |
 | `saved_outfits` | user_id, recommendation_id, saved_at | unique(user_id, recommendation_id) |
 | `feedback` | user_id, recommendation_id, rating(like/dislike), worn, thermal_feedback(−2~2), satisfaction(1~5) | unique(user_id, recommendation_id) |
-| `purchase_candidates` | user_id, name, category, subcategory, color, warmth, rain_ok, image_path, link, deleted | – |
+| `purchase_candidates` | user_id, name, category, subcategory, color, warmth, rain_ok, image_path, link, deleted, request_id | unique(user_id, request_id): 다시 보내도 1개 |
 
 - 모든 표의 `user_id`는 기본값 `auth.uid()`, auth.users 삭제 시 함께 삭제(cascade).
 - 시각은 한국 시간 ISO 문자열(text)로 저장해 로컬 SQLite 형식과 맞춘다.
 - 사진 참조: 로컬은 파일 경로, 클라우드는 `sb:<사용자id>/<파일명>.jpg`.
+- 여러 표를 잇는 조회·집계(저장 코디, '별로' 조합, 추천 로그 CSV, KPI 두 숫자)는 `core/db.py`의 SQL과 같은 조인을 DB 뷰로 둔다. 뷰는 `security_invoker`라 아래 표의 RLS가 그대로 적용된다(PostgreSQL 15 이상). Supabase API는 한 번에 최대 1,000줄만 돌려주므로, 여러 줄 조회는 정렬을 정하고 `count`(전체 줄 수)를 받아 받은 줄 수만큼 넘겨 가며 끝까지 받는다(서버 한도가 더 작아도 결과가 같음).
+- 여러 표를 함께 바꾸는 작업은 DB 함수 하나(= 거래 하나)로 한다. 앱은 `rpc`로 부르고, 함수는 `security invoker`라 부른 사용자의 RLS가 그대로 적용되며 사용자는 `auth.uid()`로만 정한다. 로컬 SQLite는 같은 이름의 함수가 연결 하나(거래 하나)로 같은 결과를 낸다.
+  - `buy_candidate(후보 id)`: 후보 빼기 + 옷장 넣기. 이미 뺀 후보면 빈 결과 → 두 번 누르거나 응답을 못 받고 다시 눌러도 옷은 한 벌, 중간 실패 시 둘 다 그대로.
+  - 사진 등록(직접 추가)·구매 후보: 카드(또는 올린 파일)마다 고정된 요청 id를 쓴다. 사진 이름도 이 id라 응답만 못 받고 다시 올리면 같은 파일을 덮어쓰고, 이미 올린 사진 경로는 다시 쓴다. DB는 같은 요청 id 행을 다시 넣지 않는다(`on conflict do nothing`). 실패한 저장의 사진은 지우지 않는다(응답만 유실돼 실제로는 DB에 연결됐을 수 있음). 남는 사진은 버린 카드·파일당 1장을 넘지 않는다.
+  - `save_recommendation_session(요청 id, 날씨·목적, 결과 목록)`: 세션 + TOP 3를 한 묶음으로. 화면은 저장이 오류로 끝난 추천의 요청 id를 기억했다가 같은 추천을 다시 저장할 때 재사용한다 (응답만 유실된 경우 세션 중복 방지). 정상 저장 뒤 다시 누르면 새 세션.
 
 ### 관계 (ER 다이어그램)
 

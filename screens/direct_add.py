@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import uuid
 
 import streamlit as st
 from PIL import ImageOps
@@ -47,7 +48,8 @@ def ba_new_card(app, uploaded, digest):
     data, suffix = upload_bytes(uploaded)
     try:
         image = open_upright(io.BytesIO(data))
-        if app.media.kind == "supabase":     # 어차피 긴 변 1280px JPEG로 저장하므로 미리 줄여 둔다 (무료 서버 메모리 절약)
+        ready = app.media.kind == "supabase"  # 어차피 긴 변 1280px JPEG로 저장하므로 미리 줄여 둔다 (무료 서버 메모리 절약)
+        if ready:                             # AI 분류는 위에서 연 원본 사진으로 한다
             data, suffix = to_cloud_jpeg(data), ".jpg"
     except Exception:
         return None
@@ -59,6 +61,8 @@ def ba_new_card(app, uploaded, digest):
     st.session_state.ba_seq += 1
     return {
         "uid": f"{st.session_state.ba_seq}_{digest[:8]}", "hash": digest, "data": data, "suffix": suffix,
+        "req": str(uuid.uuid4()), "path": "",        # 등록 요청 id (사진 이름·DB 중복 방지), 올린 사진 경로
+        "ready": ready,                              # 이미 저장용 JPEG로 줄였으면 저장할 때 다시 압축하지 않음
         "view": _jpeg(image, 720), "thumb": _jpeg(image, 200, square=True), "ai": ai, "cands": cands,
         "pick": sub if cands else OTHER_KIND, "sub": sub, "cat": main_category_for_subcategory(sub),
         "color": color if color in COLOR_KO else COLORS[0], "warmth": rule["default_warmth"],
@@ -220,15 +224,21 @@ def ba_fields(card):
 
 
 def ba_save(app, user, cards):
-    """카드들을 옷장에 한 번에 넣는다. 사진은 한 장씩 저장소에, 옷 정보는 한 번에 DB에."""
+    """카드들을 옷장에 한 번에 넣는다. 사진은 한 장씩 저장소에, 옷 정보는 한 번에 DB에.
+    카드마다 고정된 요청 id 를 쓴다: 중간에 실패해 다시 눌러도 이미 올린 사진은 그 경로를 다시 쓰고(사진 이름도 요청 id라
+    응답만 못 받은 사진은 같은 파일에 덮어씀), 이미 DB에 들어간 옷은 다시 넣지 않는다. 실패한 저장의 사진을 지우지 않는
+    이유: 응답만 유실돼 실제로는 DB에 연결됐을 수 있다. 남는 사진은 버린 카드당 1장을 넘지 않는다."""
     rows = []
-    for i, c in enumerate(cards):
-        path = app.media.save(user["id"], f"b{i}_", c["data"], c["suffix"])    # 같은 순간에 저장해도 이름이 겹치지 않게
+    for c in cards:
+        c.setdefault("req", str(uuid.uuid4()))
+        if not c.get("path"):
+            c["path"] = app.media.save(user["id"], "b_", c["data"], c["suffix"], key=c["req"], ready=c.get("ready", False))
         ai = c["ai"] if c["ai"].get("ok") else {}                          # 기록용: AI 1등 답
         rows.append({"name": c["name"], "category": c["cat"], "subcategory": c["sub"], "color": c["color"],
-                     "warmth": c["warmth"], "rain_ok": c["rain_ok"], "material": c["material"], "image_path": path,
-                     "notes": c["notes"].strip(), "ai_category": ai.get("category"),
-                     "ai_subcategory": ai.get("subcategory"), "ai_confidence": ai.get("confidence")})
+                     "warmth": c["warmth"], "rain_ok": c["rain_ok"], "material": c["material"],
+                     "image_path": c["path"], "notes": c["notes"].strip(), "ai_category": ai.get("category"),
+                     "ai_subcategory": ai.get("subcategory"), "ai_confidence": ai.get("confidence"),
+                     "request_id": c["req"]})
     app.store.create_wardrobe_items(user["id"], rows)     # 저장소가 지난 추천을 비운다 (screens/context.py)
 
 

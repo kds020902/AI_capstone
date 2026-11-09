@@ -64,3 +64,32 @@ def test_candidate_is_kept_out_of_closet_until_bought(tmp_path):
     bought = next(x for x in db.list_wardrobe_items(uid) if x["id"] == item_id)
     assert bought["subcategory"] == "플리스" and bought["notes"] == "https://example.com/p/1"
     assert db.list_candidates(uid) == [] and db.buy_candidate(cid, uid) is None
+
+
+def test_candidate_combos_equal_filtering_all_combos():
+    """구매 후보가 들어갈 자리만 좁혀 만든 조합 = 모든 조합을 만든 뒤 후보가 든 것만 거른 조합 (같은 순서).
+    무작위 옷장 300개 × 후보 종류(상의는 겹쳐 입기의 안·위 둘 다, 원피스, 겉옷 필수/선택) × 기온."""
+    import random
+
+    from core.recommender import CATEGORIES, _combos
+    from core.taxonomy import LAYER_PAIRS, RULES
+    rng = random.Random(11)
+    layer_subs = sorted({s for pair in LAYER_PAIRS for s in pair if s in RULES})
+    by_cat = {c: [s for s, r in RULES.items() if r["main_category"] == c] for c in CATEGORIES}
+    by_cat["상의"] = sorted(set(by_cat["상의"]) | set(layer_subs))
+    checked = 0
+    for _ in range(300):
+        items, next_id = [], 1
+        for cat, (lo, hi) in {"상의": (0, 4), "하의": (0, 3), "원피스": (0, 2), "아우터": (0, 3), "신발": (1, 2)}.items():
+            for _ in range(rng.randint(lo, hi)):
+                items.append({"id": next_id, "category": cat, "subcategory": rng.choice(by_cat[cat])})
+                next_id += 1
+        cand = rng.choice(items + [{"id": 0, "category": "상의", "subcategory": "셔츠"}])   # 가끔은 후보가 풀에 없음
+        cand_id, cand["id"] = -1, -1
+        pools = {c: [x for x in items if x["category"] == c] for c in CATEGORIES}
+        for temp in (-5, 8, 15, 24):
+            for outer_required in (True, False):
+                full = [c for c in _combos(pools, outer_required, temp) if any(p["id"] == cand_id for p in c)]
+                assert _combos(pools, outer_required, temp, only=cand_id) == full
+                checked += bool(full)
+    assert checked > 500
