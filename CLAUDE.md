@@ -58,7 +58,7 @@
 - 화면 코드는 `screens/`에 화면마다 하나씩 둔다. `app.py`는 설정·로그인·사이드바·메뉴만. 화면은 `render(app)`로 받고, 세션마다 다른 값(저장소·사용자)을 모듈 전역 변수에 두지 않는다.
 - '입을 수 있나' 판정과 온도 계산은 `core/eligibility.py` 한 곳에 둔다 (추천·구매 판정이 같이 씀).
 - 추천·분류·계절·구매 판정 규칙을 바꾸면 웹 체험판(`web/src/`)도 고치고 `python scripts/build_web.py`로 다시 만든다 (`tests/test_web_parity.py`, 다시 만들기를 잊으면 `tests/test_web_build.py`가 실패).
-- 표 구조를 바꾸면 `supabase/schema.sql`(여러 번 실행해도 안전하게), `tests/fake_supabase.py`, `tests/test_rls_sql.py`를 함께 고친다.
+- 표 구조를 바꾸면 `supabase/schema.sql`(여러 번 실행해도 안전하게), `tests/fake_supabase.py`, `tests/test_rls_sql.py`를 함께 고친다 (`tests/test_storage_contract.py`가 두 저장소의 열과, 넣은 값이 DB 함수를 거쳐 그대로 저장·조회되는지 확인).
 
 ## 실행·시험
 
