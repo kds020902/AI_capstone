@@ -1,6 +1,7 @@
 """AI 옷장 · 가상 착용(예시) — Hugging Face ZeroGPU Space 용 Gradio 앱.
 
 외부 공개 사전학습 모델 CatVTON(https://github.com/Zheng-Chong/CatVTON, CC BY-NC-SA 4.0)을 그대로 쓴다.
+코드는 저자의 공식 Hugging Face 데모 Space(zhengchong/CatVTON)에서 고정한 판으로 받는다.
 AI 옷장에서 직접 학습한 모델이 아니다. 비상업·학습·시연용.
 
 - 사람 사진 + 옷 사진(최대 2벌: 상의·원피스·아우터 → 하의 순서) → 그 옷을 입은 예시 이미지
@@ -24,19 +25,30 @@ import numpy as np
 import requests
 import spaces
 import torch
+from huggingface_hub import snapshot_download
 from PIL import Image, ImageOps
 
 HERE = Path(__file__).resolve().parent
 CATVTON_DIR = Path(os.environ.get("CATVTON_DIR", HERE / "CatVTON"))
-CATVTON_COMMIT = "7818397"     # 2025-12-16 판 (Colab 시험과 같은 코드)
+# 원래는 GitHub(Zheng-Chong/CatVTON)에서 받았지만 2026-11-17 Space 첫 실행에서 그 저장소 받기가 실패해(GitHub 가
+# 로그인을 요구), 같은 저자의 공식 데모 Space 코드를 받는다. 판을 고정해 그쪽이 바뀌어도 이 앱은 그대로.
+CATVTON_SPACE = "zhengchong/CatVTON"
+CATVTON_REVISION = "24a6952918a8c6168b89ae32ad61e7e447e3987b"   # 2026-05-26 판 (새 ZeroGPU 하드웨어 대응)
 if not (CATVTON_DIR / "model" / "pipeline.py").exists():
-    subprocess.run(["git", "clone", "-q", "https://github.com/Zheng-Chong/CatVTON.git", str(CATVTON_DIR)], check=True)
-    subprocess.run(["git", "-C", str(CATVTON_DIR), "checkout", "-q", CATVTON_COMMIT], check=True)
+    snapshot_download(CATVTON_SPACE, repo_type="space", revision=CATVTON_REVISION, local_dir=str(CATVTON_DIR),
+                      allow_patterns=["model/*", "densepose/*", "utils.py"], ignore_patterns=["*.pyc"])
 sys.path.insert(0, str(CATVTON_DIR))
+
+# detectron2: 공식 Space 와 같은 방법. 지금 Python·torch 에 맞게 처음 켤 때 소스에서 설치한다 (몇 분 걸림).
+torch.jit.script = lambda f: f       # detectron2 를 불러오기 전에 (공식 Space 와 같음)
+try:
+    import detectron2  # noqa: F401
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-build-isolation", "--no-deps",
+                           "git+https://github.com/facebookresearch/detectron2.git"])
 
 import detectron2.config.defaults as d2_defaults  # noqa: E402
 from diffusers.image_processor import VaeImageProcessor  # noqa: E402
-from huggingface_hub import snapshot_download  # noqa: E402
 from model.cloth_masker import AutoMasker  # noqa: E402
 from model.pipeline import CatVTONPipeline  # noqa: E402
 from utils import resize_and_crop, resize_and_padding  # noqa: E402
