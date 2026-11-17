@@ -10,7 +10,7 @@ from core.taxonomy import (
     MAIN_CATEGORIES, SEASONS, current_season, item_seasons, manual_seasons, season_label, seasons_for,
 )
 from screens import direct_add
-from screens.common import edit_item_dialog, gender_ko, tryon_button
+from screens.common import edit_item_dialog, gender_ko, tryon_panel
 
 
 def render(app):
@@ -18,7 +18,8 @@ def render(app):
     user = app.need_user()
 
     st.caption(f"현재 프로필: {user['name']} · {gender_ko(user['gender'])}")
-    tab1, tab2, tab3 = st.tabs(["옷장 목록", "30개 스타터 옷장", "직접 추가"])
+    names = ["옷장 목록", "30개 스타터 옷장", "직접 추가"] + (["한번 입어보기"] if app.tryon_url else [])
+    tab1, tab2, tab3, *tab_tryon = st.tabs(names)      # 가상 착용 Space 주소가 설정됐을 때만 '한번 입어보기' 탭
     with tab1:
         items = app.active_items(user["id"])
         _season_tidy(app, user, items)
@@ -35,6 +36,9 @@ def render(app):
         _starter_tab(app, user)
     with tab3:
         direct_add.render(app, user)
+    for tab in tab_tryon:
+        with tab:
+            tryon_panel(app, app.active_items(user["id"]))
 
 
 def _season_tidy(app, user, items):
@@ -78,7 +82,6 @@ def _item_card(app, user, item):
             st.caption(f"세탁: {get_care_guide(item['material'])['text']}")
         if item.get("notes"):
             st.caption(f"설명: {item['notes']}")
-        tryon_button(app, [item], f"item_{item['id']}")
         with st.container(horizontal=True):
             if st.button("정보 수정", key=f"edit_{item['id']}"):
                 edit_item_dialog(app, item, user["id"])

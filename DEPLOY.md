@@ -6,7 +6,7 @@ PC나 Colab을 켜 두지 않아도 되는 무료 서비스만 씁니다. 비용
 |---|---|---|
 | 앱 (입구 주소) | Streamlit Community Cloud | `https://<앱이름>.streamlit.app` |
 | 로그인 · DB · 옷 사진 | Supabase Free | 앱이 안에서만 사용 |
-| 가상 착용(예시) | Hugging Face ZeroGPU Space | 앱 안 창으로 열림 (`https://huggingface.co/spaces/<아이디>/<이름>`) |
+| 가상 착용(한번 입어보기) | Hugging Face ZeroGPU Space | 내 옷장의 '한번 입어보기' 탭에서 새 창 또는 화면 안 창으로 열림 (`https://huggingface.co/spaces/<아이디>/<이름>`) |
 | 설치 없는 웹 체험판 (선택) | GitHub Pages | `https://kds020902.github.io/AI_capstone/` |
 
 사용자는 **앱 주소 하나**로 들어와 가입·로그인하고, 옷장·추천·구매 후보·KPI·가상 착용을 모두 그 안에서 씁니다.
@@ -155,7 +155,7 @@ python scripts/migrate_to_supabase.py --user-id 1 --email me@example.com
 | 예전 키를 끈 뒤 모두 로그인이 안 됨 | Secrets 에 아직 anon 키가 있음 → publishable 키로 바꾸거나, 예전 키를 잠시 다시 켬 |
 | 가입 후 "인증 링크를 확인해 주세요" 만 나오고 메일이 안 옴 | Supabase 의 Confirm email 이 켜져 있음 → 1-3 참고 |
 | 갑자기 모두 로그인이 안 됨 | Supabase 프로젝트가 일시 정지됐는지 대시보드에서 확인 후 Restore |
-| 가상 착용 버튼이 안 보임 | Secrets 에 `TRYON_SPACE_URL` 이 있는지, 옷이 상의·하의·원피스·아우터인지 (신발 미지원) |
+| 내 옷장에 '한번 입어보기' 탭이 안 보임 | Secrets 에 `TRYON_SPACE_URL` 이 있는지 (탭에서 고를 수 있는 옷은 상의·하의·원피스·아우터, 신발 미지원) |
 | 가상 착용 창에 "허용하지 않은 주소" | Space 변수 `ALLOWED_GARMENT_HOSTS` 가 내 Supabase 호스트와 같은지 |
 | 앱 안 창에서 카메라가 안 켜짐 | 브라우저가 겹친 창의 카메라를 막을 수 있음 → "새 창에서 열기" 또는 사진 올리기 사용 |
 | 앱 설치가 PyTorch 에서 실패 | Advanced settings 의 Python 이 3.11~3.13 인지 (3.12 권장) |

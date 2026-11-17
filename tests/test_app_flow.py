@@ -95,15 +95,20 @@ def test_cloud_mode_requires_login_and_keeps_accounts_apart(cloud):
     assert at.sidebar.radio[0].label == "메뉴"
     assert any("a@example.com" in c.value for c in at.sidebar.caption)
     _make_profile_recommend_and_save(at, "A")
-    _goto(at, "오늘의 추천")
-    assert any(b.label == "👗 가상 착용(예시)" for b in at.button)   # 설정된 Space 가 있으면 버튼이 보인다
-    _button(at, "👗 가상 착용(예시)").click().run()
+    _goto(at, "오늘의 추천")                                  # 추천 카드에는 입어보기 버튼이 없다 (내 옷장 탭으로 옮김)
+    assert not any("입어보기" in b.label or "가상 착용" in b.label for b in at.button)
+    _goto(at, "내 옷장")
+    assert not any("입어보기" in b.label or "가상 착용" in b.label for b in at.button)   # 옷 카드에도 없다
+    assert [t.label for t in at.tabs] == ["옷장 목록", "30개 스타터 옷장", "직접 추가", "한번 입어보기"]
+    assert not at.get("iframe")                                 # 켜기 전에는 Space 화면을 불러오지 않는다
+    pick = next(m for m in at.multiselect if m.label.startswith("입혀 볼 옷"))
+    assert len(pick.value) == 2                                  # 옷장이 비어 있을 때 먼저 그려졌어도 상의 + 하의 기본 선택
+    at.toggle(key="tryon_open").set_value(True).run()
     assert not at.exception
     frame, link = at.get("iframe")[0].proto, at.get("link_button")[0].proto
-    assert frame.src.startswith("https://me-closet-tryon.hf.space/?")            # 앱 안 창
+    assert frame.src.startswith("https://me-closet-tryon.hf.space/?")            # 화면 안 창
     assert link.url.startswith("https://huggingface.co/spaces/me/closet-tryon?")  # 새 창 (Hugging Face 로그인 적용)
     assert "kind=upper" in frame.src and "kind2=lower" in frame.src
-    assert at.get("multiselect")[0].proto.default == [0, 1]                      # 상의 + 하의 기본 선택
 
     # 다른 브라우저(세션)에서 B가 가입하면 A의 옷장·기록이 안 보인다
     bt = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
@@ -239,7 +244,7 @@ def test_cloud_mode_direct_add_many_photos(cloud):
     _by_label(at.text_input, "이름 / 닉네임").input("D")
     _button(at, "저장").click().run()
     _goto(at, "내 옷장")
-    assert [t.label for t in at.tabs] == ["옷장 목록", "30개 스타터 옷장", "직접 추가"]
+    assert [t.label for t in at.tabs] == ["옷장 목록", "30개 스타터 옷장", "직접 추가", "한번 입어보기"]
     up = next(u for u in at.file_uploader if u.label == "저장할 의류를 넣어 주세요 (최대 10장까지)")
     up.set_value([_photo(i) for i in range(12)]).run()
     assert not at.exception

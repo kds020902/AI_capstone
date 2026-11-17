@@ -14,7 +14,7 @@ from core.taxonomy import (
     PURPOSES, RULES, SEASONS, SUBCATEGORIES, current_season, main_category_for_subcategory, season_label,
 )
 from core.vision import classify_clothing_image, dominant_color_name
-from screens.common import ai_candidate_pick, tryon_button, upload_bytes
+from screens.common import ai_candidate_pick, upload_bytes
 
 
 @st.cache_data(show_spinner=False, max_entries=16)
@@ -146,7 +146,6 @@ def _candidate_card(app, user, cand, rep, items, view):
         c_img, c_body = st.columns([1, 3])
         with c_img:
             app.show_image(cand["image_path"], thumb=True)
-            tryon_button(app, [cand], f"cand_{cand['id']}")
         with c_body:
             _candidate_summary(cand, rep, {x["id"]: x["name"] for x in items})
         gain = {(x["season"], x["purpose"]) for x in rep["improves"]}

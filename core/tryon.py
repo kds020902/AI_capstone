@@ -27,8 +27,14 @@ def tryon_order(items):
 
 
 def tryon_default(items):
-    """여러 벌 중 기본으로 입혀 볼 옷 (최대 2벌): 상의·원피스와 하의를 먼저 고른다."""
-    picked = sorted(tryon_supported(items), key=lambda x: _PICK_FIRST[tryon_kind(x.get("category"))])
+    """여러 벌 중 기본으로 입혀 볼 옷 (최대 2벌): 부위마다 한 벌씩, 상의·원피스 → 하의 → 아우터 순으로 고른다.
+    (옷장 전체처럼 상의가 여러 벌이어도 상의만 두 벌 고르지 않게)"""
+    picked, kinds = [], set()
+    for x in sorted(tryon_supported(items), key=lambda x: _PICK_FIRST[tryon_kind(x.get("category"))]):
+        group = {"overall": "upper"}.get(tryon_kind(x.get("category")), tryon_kind(x.get("category")))
+        if group not in kinds:
+            picked.append(x)
+            kinds.add(group)
     return tryon_order(picked[:MAX_GARMENTS])
 
 

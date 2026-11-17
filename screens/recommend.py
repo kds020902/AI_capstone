@@ -13,7 +13,7 @@ from core import weather
 from core.recommender import explain_score_breakdown, recommend
 from core.taxonomy import PURPOSES
 from core.weather import CITY_PRESETS, RETURN_HOURS, coldest_until
-from screens.common import THERMAL_FEEDBACK, tryon_button
+from screens.common import THERMAL_FEEDBACK
 
 # 날씨를 불러오기 전 기본값 (수동 입력 슬라이더의 처음 값과 같다)
 DEFAULT_WEATHER = {"temperature": 22.0, "humidity": 70.0, "apparent": 22.0, "precipitation": 0.0, "rain": False,
@@ -175,7 +175,6 @@ def _result_card(app, user, rank, result, purpose):
         with st.expander("점수 근거"):
             st.dataframe(pd.DataFrame(explain_score_breakdown(result["components"], purpose)),
                          hide_index=True, width="stretch")
-        tryon_button(app, result["pieces"], f"rec_{rid}")
         c1, c2, c3 = st.columns(3)
         if c1.button("이 코디 저장", key=f"s_{rid}"):
             app.store.save_outfit(user["id"], rid)

@@ -186,6 +186,10 @@ def test_tryon_kind_and_order():
     # 상의+하의+아우터 코디는 기본으로 상의·하의를 고르고, 입히는 순서는 하의가 마지막
     assert [x["name"] for x in tryon_default(items)] == ["셔츠", "청바지"]
     assert [x["name"] for x in tryon_default([items[3], items[0]])] == ["코트", "청바지"]
+    # 옷장 전체처럼 상의가 여러 벌이어도 부위마다 한 벌씩 (상의 하나 + 하의 하나)
+    closet = [{"name": "니트", "category": "상의"}, {"name": "셔츠", "category": "상의"},
+              {"name": "원피스", "category": "원피스"}, {"name": "슬랙스", "category": "하의"}]
+    assert [x["name"] for x in tryon_default(closet)] == ["니트", "슬랙스"]
 
 
 def test_space_addresses_from_page_or_direct_url():

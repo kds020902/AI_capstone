@@ -75,38 +75,37 @@ def ai_candidate_pick(ai, key):
                     format_func=lambda sub: f"{sub} {conf[sub] * 100:.0f}%")
 
 
-@st.dialog("가상 착용(예시)", width="large")
-def tryon_dialog(app, items):
-    """Hugging Face ZeroGPU Space(가상 착용)를 이 창 안에 띄우고, 고른 옷 사진을 10분짜리 서명 주소로 넘긴다."""
-    supported = tryon_supported(items)
-    choices = tryon_default(supported)
-    if len(supported) > 1:
-        picked = st.multiselect("입혀 볼 옷 (최대 2벌, 상의 → 하의 순서로 입혀요)", list(range(len(supported))),
-                                default=[supported.index(x) for x in choices], max_selections=MAX_GARMENTS,
-                                format_func=lambda i: f"{supported[i]['name']} ({supported[i]['category']})")
-        choices = tryon_order([supported[i] for i in picked])
+def tryon_panel(app, items):
+    """내 옷장 > 한번 입어보기: 옷장에서 고른 옷(최대 2벌)의 사진을 10분짜리 서명 주소로 넘기며
+    Hugging Face ZeroGPU Space(가상 착용)를 띄운다."""
+    supported = {x["id"]: x for x in tryon_supported(items)}
+    st.caption("사람 사진에 옷을 입혀 보는 AI 예시 이미지예요. 실제 사이즈·핏은 반영되지 않아요. "
+               "입힐 수 있는 옷은 상의·하의·원피스·아우터예요.")
+    picked = st.multiselect("입혀 볼 옷 (최대 2벌, 상의 → 하의 순서로 입혀요)", list(supported),
+                            default=[x["id"] for x in tryon_default(list(supported.values()))],
+                            max_selections=MAX_GARMENTS, placeholder="입혀 볼 옷을 골라 주세요",
+                            # 옷 목록이 바뀌면 새 칸으로 (예전 빈 선택이 남아 기본 선택이 안 들어가지 않게)
+                            key=f"tryon_pick_{hash(tuple(supported))}",
+                            format_func=lambda i: f"{supported[i]['name']} ({supported[i]['category']})")
+    choices = tryon_order([supported[i] for i in picked])
     garments = [(app.media.signed_url(x.get("image_path"), seconds=600), tryon_kind(x.get("category"))) for x in choices]
     embed, page = space_addresses(app.tryon_url)
-    st.caption("사람 사진에 옷을 입혀 보는 AI 예시 이미지예요. 실제 사이즈·핏은 반영되지 않아요.")
-    if any(g is None for g, _ in garments):
-        st.info("사진이 없거나 넘길 수 없는 옷이 있어요 (스타터 옷장·로컬 실행 등). 아래 창에서 옷 사진을 직접 올려 주세요.")
+    if not choices:
+        st.info("옷을 고르지 않으면 열린 화면에서 옷 사진을 직접 올려요.")
+    elif any(g is None for g, _ in garments):
+        st.info("사진이 없거나 넘길 수 없는 옷이 있어요 (스타터 옷장·로컬 실행 등). 열린 화면에서 옷 사진을 직접 올려 주세요.")
     st.link_button("새 창(Hugging Face)에서 열기 · 권장", tryon_link(page, garments), type="primary")
     st.caption("새 창에서는 내 무료 GPU 사용량으로 실행돼요 (하루 비로그인 약 2분, Hugging Face 무료 계정 로그인 시 약 5분, "
-               "첫 사용 24시간 뒤 다시 채워짐). 아래 창은 바로 써 볼 수 있지만 Hugging Face 로그인이 전달되지 않아 "
+               "첫 사용 24시간 뒤 다시 채워짐). 이 화면 안에서 열면 바로 써 볼 수 있지만 Hugging Face 로그인이 전달되지 않아 "
                "사용량이 더 빨리 바닥날 수 있어요. 무료 GPU라 대기열이 생길 수 있어요.")
-    if hasattr(st, "iframe"):      # 새 Streamlit (components.iframe 은 없어질 예정)
-        st.iframe(tryon_link(embed, garments), height=820)
-    else:
-        import streamlit.components.v1 as components
-        components.iframe(tryon_link(embed, garments), height=820, scrolling=True)
+    # 탭은 안 보일 때도 함께 그려지므로, 켤 때만 Space 화면을 불러온다 (내 옷장을 열 때마다 Space 를 깨우지 않게)
+    if st.toggle("이 화면 안에서 열기", key="tryon_open"):
+        if hasattr(st, "iframe"):      # 새 Streamlit (components.iframe 은 없어질 예정)
+            st.iframe(tryon_link(embed, garments), height=820)
+        else:
+            import streamlit.components.v1 as components
+            components.iframe(tryon_link(embed, garments), height=820, scrolling=True)
     st.caption("올린 사람 사진은 AI 옷장 DB에 저장하지 않아요. 옷 사진 주소는 10분 동안만 열려요.")
-
-
-def tryon_button(app, items, key):
-    """가상 착용 Space 주소가 설정돼 있고, 입힐 수 있는 옷(상의·하의·원피스·아우터)이 있을 때만 버튼을 보인다."""
-    if app.tryon_url and tryon_supported(items):
-        if st.button("👗 가상 착용(예시)", key=f"tryon_{key}"):
-            tryon_dialog(app, items)
 
 
 @st.dialog("정보 수정")

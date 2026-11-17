@@ -11,7 +11,7 @@
 | 옷 분류 AI | PyTorch, torchvision (EfficientNet-B0) | torch 2.9.1 CPU, torchvision 0.24.1 CPU |
 | 데이터 처리 | pandas, numpy, Pillow | requirements.txt 범위 |
 | 날씨 | Open-Meteo API (requests) | – |
-| 가상 착용 | Hugging Face ZeroGPU Space, Gradio, spaces, diffusers, transformers, CatVTON | Gradio 5.49.1, diffusers 0.41.0, transformers 5.19.0, CatVTON 커밋 7818397 |
+| 가상 착용 | Hugging Face ZeroGPU Space, Gradio, spaces, diffusers, transformers, CatVTON | Gradio 5.49.1, diffusers 0.41.0, transformers 5.19.0, CatVTON 공식 HF 데모 Space 판 24a6952 (2026-05-26) |
 | 웹 체험판 | 순수 HTML·JavaScript (라이브러리 없음) | – |
 | 로컬 모드 | SQLite, 로컬 폴더 `data/uploads/` | – |
 | 시험 | pytest, Streamlit AppTest, Node.js(웹-앱 결과 비교), ruff, GitHub Actions CI (`.github/workflows/ci.yml`, PostgreSQL 16 서비스로 RLS 시험) | – |
@@ -32,7 +32,7 @@
    ├─ core/cloud_store.py ──► Supabase PostgreSQL (RLS)
    └─ core/media.py ────────► Supabase Storage (비공개 버킷 wardrobe)
                                    │ 10분짜리 서명 주소
-[가상 착용 버튼] ──새 창/앱 안 창──► [Hugging Face ZeroGPU Space] tryon_space/app.py (CatVTON)
+[내 옷장 > 한번 입어보기 탭] ──새 창/화면 안 창──► [Hugging Face ZeroGPU Space] tryon_space/app.py (CatVTON)
 
 [GitHub Pages] web/ ── 설치 없는 웹 체험판 (서버 없음)
 ```
@@ -43,7 +43,7 @@
 |---|---|
 | `app.py` | 설정 읽기, 저장소 선택(로컬/클라우드), 사이드바, 메뉴 → 화면 연결 (약 100줄) |
 | `screens/context.py` | 한 번 그릴 때 쓰는 `App`: 저장소·사진 저장소·설정, 그번에만 쓰는 캐시(사용자 1번·옷장 1번 읽기), 목록용 작은 사진. 저장소를 감싸 옷장·체질을 바꾸는 함수(`WARDROBE_CHANGES`)를 부르면 성공·실패와 상관없이 지난 추천을 비운다(실패·응답 유실로 실제로 바뀌었는지 모를 때도). 세션마다 다른 값은 모듈 전역에 두지 않는다 (사용자끼리 섞임 방지) |
-| `screens/*.py` | 화면마다 하나: `login`, `home`, `profile`, `wardrobe`, `direct_add`, `recommend`, `shopping`, `saved`, `kpi`, 공통 위젯 `common` (가상 착용 창·정보 수정 창·AI 후보 고르기, 알림 `toast`: `duration` 인자가 없는 Streamlit에서는 생략) |
+| `screens/*.py` | 화면마다 하나: `login`, `home`, `profile`, `wardrobe`, `direct_add`, `recommend`, `shopping`, `saved`, `kpi`, 공통 위젯 `common` (한번 입어보기 탭 내용·정보 수정 창·AI 후보 고르기, 알림 `toast`: `duration` 인자가 없는 Streamlit에서는 생략) |
 | `core/config.py` | 설정 읽기(환경 변수 → Streamlit Secrets), 서비스 키 거부, 반쪽 설정(URL·키 중 하나만)·Secrets 형식 오류는 로컬 모드로 넘어가지 않고 멈춤(문구에 설정값 없음). '파일 없음'은 새 Streamlit은 `error_id`로만, 옛 Streamlit(1.40~)은 `FileNotFoundError` + 알려진 문구 시작으로만 판단. 옛 Streamlit이 읽기 실패를 화면에 먼저 띄우는 오류 원문(설정값이 섞일 수 있음)은 읽는 동안만 끔, Supabase 주소 정리 |
 | `core/cloud_auth.py` | 가입·로그인·세션·로그아웃, 오류 문구 변환 |
 | `core/db.py` / `core/cloud_store.py` | 같은 함수 이름의 두 저장소: SQLite / Supabase. 화면 코드는 `store.함수()`만 부른다. 여러 벌 한 번에 넣기 `create_wardrobe_items`(Supabase는 insert 1번), 저장 후 고치기 `update_wardrobe_item`(지운 옷 제외) |
