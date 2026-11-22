@@ -54,6 +54,7 @@
 ## 코드 규칙
 
 - 화면 문구는 쉬운 한국어로 쓴다. 이름 짓기와 주석 밀도는 주변 코드에 맞춘다.
+- 화면 배치·글자 크기·여백·버튼·안내 상자·색은 `docs/ui-guide.md`를 따른다.
 - 저장소 함수는 `core/db.py`(SQLite)와 `core/cloud_store.py`(Supabase)에 같은 이름·같은 결과로 둔다 (`tests/test_cloud_store.py`가 비교). 옷장이나 체질을 바꾸는 함수를 새로 만들면 `screens/context.py`의 `WARDROBE_CHANGES`에 넣는다 (지난 추천을 비움, `tests/test_screens.py`가 확인).
 - 화면 코드는 `screens/`에 화면마다 하나씩 둔다. `app.py`는 설정·로그인·사이드바·메뉴만. 화면은 `render(app)`로 받고, 세션마다 다른 값(저장소·사용자)을 모듈 전역 변수에 두지 않는다.
 - '입을 수 있나' 판정과 온도 계산은 `core/eligibility.py` 한 곳에 둔다 (추천·구매 판정이 같이 씀).

@@ -4,3 +4,17 @@ maxUploadSize = 20
 
 [browser]
 gatherUsageStats = false
+
+# 화면 공통 색 (docs/ui-guide.md). 밝은·어두운 모드를 둘 다 정해 두면 사용자의 시스템 설정을 그대로 따른다.
+# 기본 빨간 강조색(#FF4B4B)은 흰 글자와 명암비 3.3:1이라 4.5:1을 넘는 파란색(5.9:1)으로 바꾼다.
+# 글자색을 조금 더 진하게 하면 보조 글씨(st.caption, 글자색의 60%)도 흰 배경에서 4.5:1을 넘는다.
+[theme.light]
+primaryColor = "#2F5BD3"
+textColor = "#16181F"
+
+[theme.dark]
+primaryColor = "#2F5BD3"
+
+[theme.light.sidebar]
+# 사이드바 배경(#F0F2F6)에서도 보조 글씨가 4.5:1을 넘게 (본문 영역보다 배경이 어두워서 한 단계 더 진하게)
+textColor = "#0B0C10"

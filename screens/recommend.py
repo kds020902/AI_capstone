@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from datetime import date
 
@@ -11,94 +12,220 @@ import streamlit as st
 
 from core import weather
 from core.recommender import explain_score_breakdown, recommend
-from core.taxonomy import PURPOSES
+from core.taxonomy import MAIN_CATEGORIES, PURPOSES
 from core.weather import CITY_PRESETS, RETURN_HOURS, coldest_until
-from screens.common import THERMAL_FEEDBACK
+from screens.common import THERMAL_FEEDBACK, go_to_page
 
 # 날씨를 불러오기 전 기본값 (수동 입력 슬라이더의 처음 값과 같다)
 DEFAULT_WEATHER = {"temperature": 22.0, "humidity": 70.0, "apparent": 22.0, "precipitation": 0.0, "rain": False,
                    "wind": 8.0, "source": "manual", "later": None}
+# 세부 설정의 처음 값. 바꾸면 접힌 칸 바깥에 '적용 중' 줄로 알린다.
+DEFAULT_RETURN_HOUR = 22
+MANUAL_DETAIL_DEFAULTS = {"humidity": 70.0, "precipitation": 0.0, "wind": 8.0}
+
+# 화면 배치: 왼쪽 조건 : 오른쪽 결과 = 1 : 2 (docs/ui-guide.md)
+LAYOUT = [1, 2]
 
 
 def render(app):
     st.title("오늘의 추천")
     user = app.need_user()
     items = app.active_items(user["id"])
-    cats = {x["category"] for x in items}
-    if not (("상의" in cats and "하의" in cats and "신발" in cats) or ("원피스" in cats and "신발" in cats)):
-        st.warning("상의+하의+신발 또는 원피스+신발 조합이 필요합니다. 내 옷장에 옷을 더 넣거나 넣어 둔 옷을 꺼내 주세요.")
+    missing = missing_categories(items)
+    if missing:
+        _not_enough(app, user, missing)
         return
 
-    mode = st.radio("날씨", ["자동 조회", "수동 입력"], horizontal=True)
-    w = _auto_weather() if mode == "자동 조회" else _manual_weather()
-    purpose = st.selectbox("외출 목적", PURPOSES)
-    if st.button("TOP 3 추천 생성", type="primary", width="stretch"):
+    applied = st.container()                  # 제목 아래 '지금 적용 조건' (왼쪽 입력을 읽은 뒤 채운다)
+    left, right = st.columns(LAYOUT, gap="medium")
+    with left:
+        st.subheader("추천 조건")
+        w, status, purpose = _conditions()
+        clicked = st.button("코디 추천받기", type="primary", width="stretch")
+    with applied:
+        _applied_conditions(w, status)
+    if clicked:
         _make_recommendation(app, user, items, w, purpose)
-
-    results = st.session_state.recommendations
-    meta = st.session_state.rec_meta or {}
-    if meta.get("context"):
-        _context_caption(meta["context"])
-    for warning in meta.get("warnings", []):
-        st.warning(warning)
-    if results == []:
-        st.error("추천할 수 있는 코디가 없습니다.")
-    if results:
-        st.caption("점수 차이가 2점 안이면 색 조합이 더 잘 어울리는 코디를 앞에 둬요.")
-        for rank, result in enumerate(results, 1):
-            _result_card(app, user, rank, result, purpose)
+    with right:
+        st.subheader("추천 결과")
+        _results(app, user, purpose, status)
 
 
-def _auto_weather():
-    """도시·귀가 시각 → [현재 날씨 불러오기]. 불러온 날씨는 도시와 함께 기억하고, 다른 도시 날씨는 쓰지 않는다."""
-    w = dict(DEFAULT_WEATHER)
-    c1, c2 = st.columns(2)
-    city = c1.selectbox("도시", list(CITY_PRESETS))
-    return_hour = c2.select_slider("귀가 예정", RETURN_HOURS, value=22, format_func=lambda h: "자정" if h == 24 else f"{h}시")
-    if st.button("현재 날씨 불러오기"):
+# ---------------------------------------------------------------- 옷이 부족할 때
+NEEDED = "상의 + 하의 + 신발, 또는 원피스 + 신발"
+
+
+def missing_categories(items):
+    """추천에 필요한 조합(상의+하의+신발 / 원피스+신발)에서 빠진 것. 다 있으면 []."""
+    cats = {x["category"] for x in items}
+    if ("상의" in cats and "하의" in cats and "신발" in cats) or ("원피스" in cats and "신발" in cats):
+        return []
+    out = []
+    if not (("상의" in cats and "하의" in cats) or "원피스" in cats):
+        lack = [c for c in ("상의", "하의") if c not in cats]
+        out.append(f"{'·'.join(lack)} (또는 원피스)")
+    if "신발" not in cats:
+        out.append("신발")
+    return out
+
+
+def _not_enough(app, user, missing):
+    st.warning(f"추천에 필요한 옷이 부족해요. 빠진 옷: **{', '.join(missing)}**")
+    st.markdown(f"추천하려면 추천에 쓰는 옷 중에 **{NEEDED}** 조합이 있어야 해요.")
+    active = app.active_items(user["id"])
+    counts = {c: sum(1 for x in active if x["category"] == c) for c in MAIN_CATEGORIES}
+    have = ", ".join(f"{c} {n}벌" for c, n in counts.items() if n) or "없음"
+    note = f"지금 추천에 쓰는 옷: {have}"
+    if app.inactive_items(user["id"]):
+        note += f" · 넣어 둔 옷 {len(app.inactive_items(user['id']))}벌은 '내 옷장'에서 꺼내면 추천에 쓸 수 있어요."
+    st.caption(note)
+    go_to_page("내 옷장에서 옷 넣기", "내 옷장", key="rec_go_wardrobe", primary=True)
+
+
+# ---------------------------------------------------------------- 왼쪽: 추천 조건
+def _conditions():
+    """날씨 설정 → 외출 목적 → 저녁 대비·세부 설정. 반환: (날씨 값, 날씨 상태, 외출 목적)."""
+    mode = st.radio("날씨", ["자동 조회", "수동 입력"], horizontal=True)
+    if mode == "자동 조회":
+        city, data, cached = _auto_weather_inputs()
+    else:
+        w = _manual_main()
+    purpose = st.selectbox("외출 목적", PURPOSES)
+    changed = []
+    with st.expander("저녁 대비 · 세부 설정"):
+        if mode == "자동 조회":
+            return_hour = st.select_slider("귀가 예정", RETURN_HOURS, value=DEFAULT_RETURN_HOUR,
+                                           format_func=_hour_label)
+            st.caption("귀가 전까지 가장 추운 때를 예보에서 찾아 저녁 대비 겉옷을 알려 줘요.")
+            if return_hour != DEFAULT_RETURN_HOUR:
+                changed.append(f"귀가 {_hour_label(return_hour)}")
+        else:
+            changed = _manual_details(w)
+    if mode == "자동 조회":
+        w, status = _auto_weather(city, data, cached, return_hour)
+    else:
+        status = {"kind": "manual"}
+    if changed:
+        st.caption("적용 중인 세부 설정: " + ", ".join(changed))
+    return w, status, purpose
+
+
+def _hour_label(h):
+    return "자정" if h == 24 else f"{h}시"
+
+
+def _auto_weather_inputs():
+    """도시 → [현재 날씨 불러오기]. 불러온 날씨는 도시와 함께 기억하고, 다른 도시 날씨는 쓰지 않는다."""
+    city = st.selectbox("도시", list(CITY_PRESETS))
+    if st.button("현재 날씨 불러오기", width="stretch"):
         lat, lon = CITY_PRESETS[city]
         st.session_state.weather_cache = {"city": city, "data": weather.get_current_weather(lat, lon)}
     cached = st.session_state.weather_cache
     data = cached["data"] if cached and cached["city"] == city else None
+    return city, data, cached
+
+
+def _auto_weather(city, data, cached, return_hour):
+    """불러온 날씨(이 도시 것만)로 추천에 쓸 값을 만든다. 없거나 실패하면 기본값. 반환: (날씨 값, 상태)."""
+    w = dict(DEFAULT_WEATHER)
     if data and data.get("ok"):
         w.update(temperature=data["temperature"], humidity=data["humidity"], apparent=data["apparent_temperature"],
                  precipitation=data["precipitation"], rain=data["rain"] > 0 or data["precipitation"] > 0,
                  wind=data["wind_speed"], source=data["source"], later=coldest_until(data, return_hour))
-        _weather_metrics(w)
-    elif data:
-        st.warning(data["message"])
-    elif cached:
-        st.caption(f"{cached['city']} 날씨를 불러온 상태예요. {city} 날씨는 '현재 날씨 불러오기'를 다시 눌러 주세요. "
-                   "그 전에는 기본값(22℃, 비 없음)으로 추천합니다.")
-    else:
-        st.caption("날씨를 불러오기 전에는 기본값(22℃, 비 없음)으로 추천합니다.")
+        return w, {"kind": "loaded", "city": city, "return_hour": return_hour}
+    if data:
+        return w, {"kind": "failed", "city": city, "message": data["message"]}
+    if cached:
+        return w, {"kind": "other_city", "city": city, "loaded_city": cached["city"]}
+    return w, {"kind": "default", "city": city}
+
+
+def _manual_main():
+    """수동 입력에서 자주 바꾸는 값: 기온, 체감온도, 비."""
+    w = {"temperature": st.slider("기온", -10.0, 40.0, 22.0, 0.5),
+         "apparent": st.slider("체감온도", -15.0, 45.0, 22.0, 0.5), "source": "manual", "later": None}
+    w["rain"] = st.checkbox("비가 옴")
     return w
 
 
-def _weather_metrics(w):
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("기온", f"{w['temperature']:.1f}℃")
-    c2.metric("체감", f"{w['apparent']:.1f}℃")
-    c3.metric("습도", f"{w['humidity']:.0f}%")
-    c4.metric("풍속", f"{w['wind']:.1f} km/h")
-    if w["later"]:
-        c5.metric(f"귀가 전 최저 체감 ({w['later']['label']})", f"{w['later']['apparent_temperature']:.1f}℃")
-
-
-def _manual_weather():
-    c1, c2, c3 = st.columns(3)
-    w = {"temperature": c1.slider("기온", -10.0, 40.0, 22.0, 0.5),
-         "humidity": c2.slider("습도", 10.0, 100.0, 70.0, 1.0),
-         "apparent": c3.slider("체감온도", -15.0, 45.0, 22.0, 0.5), "source": "manual", "later": None}
-    c4, c5, c6 = st.columns(3)
-    w["rain"] = c4.checkbox("비가 옴")
-    w["precipitation"] = c5.number_input("강수량(mm)", 0.0, 100.0, 0.0, 0.5)
-    w["wind"] = c6.slider("풍속(km/h)", 0.0, 60.0, 8.0, 0.5)
-    c7, c8 = st.columns(2)
-    if c7.checkbox("저녁 늦게까지 밖에 있어요"):
-        later = c8.slider("저녁 체감온도", -15.0, 45.0, max(-15.0, w["apparent"] - 6), 0.5)
+def _manual_details(w):
+    """수동 입력의 세부 값(습도·강수량·풍속)과 저녁 대비. 처음 값에서 바꾼 것을 돌려준다."""
+    w["humidity"] = st.slider("습도", 10.0, 100.0, 70.0, 1.0)
+    w["precipitation"] = st.number_input("강수량(mm)", 0.0, 100.0, 0.0, 0.5)
+    w["wind"] = st.slider("풍속(km/h)", 0.0, 60.0, 8.0, 0.5)
+    changed = []
+    if st.checkbox("저녁 늦게까지 밖에 있어요"):
+        later = st.slider("저녁 체감온도", -15.0, 45.0, max(-15.0, w["apparent"] - 6), 0.5)
         w["later"] = {"temperature": later, "apparent_temperature": later, "label": "저녁"}
-    return w
+        changed.append(f"저녁 체감 {later:.1f}℃")
+    units = {"humidity": ("습도", "%", 0), "precipitation": ("강수량", "mm", 1), "wind": ("풍속", " km/h", 1)}
+    for key, default in MANUAL_DETAIL_DEFAULTS.items():
+        if w[key] != default:
+            name, unit, digits = units[key]
+            changed.append(f"{name} {w[key]:.{digits}f}{unit}")
+    return changed
+
+
+# ---------------------------------------------------------------- 위: 지금 적용 조건
+def _applied_conditions(w, status):
+    """제목 아래 한 줄: 지역 · 체감온도 · 비. 기본값·조회 실패는 이 줄에 붙여서 알린다."""
+    kind = status["kind"]
+    rain = "비 옴" if w["rain"] else "비 없음"
+    if kind == "manual":
+        st.markdown(f"**직접 입력한 날씨** · 체감 **{w['apparent']:.1f}℃** · **{rain}**")
+        detail = f"기온 {w['temperature']:.1f}℃ · 습도 {w['humidity']:.0f}% · 풍속 {w['wind']:.1f} km/h"
+        if w["later"]:
+            detail += f" · 저녁 체감 {w['later']['apparent_temperature']:.1f}℃"
+        st.caption(detail)
+        return
+    if kind == "loaded":
+        st.markdown(f"**{status['city']}** · 체감 **{w['apparent']:.1f}℃** · **{rain}**")
+        detail = (f"{w['source']} · 기온 {w['temperature']:.1f}℃ · 습도 {w['humidity']:.0f}% · "
+                  f"풍속 {w['wind']:.1f} km/h")
+        if w["later"]:
+            detail += f" · 귀가 전 최저 체감 ({w['later']['label']}) {w['later']['apparent_temperature']:.1f}℃"
+        st.caption(detail)
+        return
+    st.markdown(f"**{status['city']}** · 체감 **{w['apparent']:.1f}℃ (기본값)** · **{rain} (기본값)**")
+    if kind == "failed":
+        found = re.search(r"\(([^()]*)\)\s*$", status["message"])     # 실패 원인 (예: ConnectTimeout)
+        st.warning("날씨를 불러오지 못해 기본값(22℃, 비 없음)으로 추천합니다. 다시 불러오거나 '수동 입력'을 써 주세요."
+                   f" (원인: {found.group(1) if found else status['message']})")
+    elif kind == "other_city":
+        st.caption(f"{status['loaded_city']} 날씨를 불러온 상태예요. {status['city']} 날씨는 '현재 날씨 불러오기'를 "
+                   "다시 눌러 주세요. 그 전에는 기본값(22℃, 비 없음)으로 추천합니다.")
+    else:
+        st.caption("날씨를 불러오기 전에는 기본값(22℃, 비 없음)으로 추천합니다. '현재 날씨 불러오기'를 눌러 주세요.")
+
+
+# ---------------------------------------------------------------- 오른쪽: 추천 결과
+def _results(app, user, purpose, status):
+    results = st.session_state.recommendations
+    meta = st.session_state.rec_meta or {}
+    if results is None:
+        st.info(_next_step(status))
+        return
+    ctx = meta.get("context")
+    if ctx:
+        _context_caption(ctx)
+    for warning in meta.get("warnings", []):
+        st.warning(warning)
+    if not results:
+        st.error("추천할 수 있는 코디가 없습니다. 위 안내의 옷을 옷장에 넣거나, 외출 목적을 바꿔 보세요.")
+        go_to_page("내 옷장 확인하기", "내 옷장", key="rec_go_wardrobe_empty")
+        return
+    st.caption("점수 차이가 2점 안이면 색 조합이 더 잘 어울리는 코디를 앞에 둬요.")
+    for rank, result in enumerate(results, 1):
+        _result_card(app, user, rank, result, (ctx or {}).get("purpose", purpose), (ctx or {}).get("later"))
+
+
+def _next_step(status):
+    """추천 전, 결과 자리에 보여 줄 다음 행동 한 문장."""
+    if status["kind"] in ("default", "other_city"):
+        return "'현재 날씨 불러오기'를 누르고 외출 목적을 고른 뒤 '코디 추천받기'를 눌러 주세요."
+    if status["kind"] == "failed":
+        return "날씨를 다시 불러오거나 '수동 입력'으로 바꾼 뒤 '코디 추천받기'를 눌러 주세요."
+    return "외출 목적을 확인하고 '코디 추천받기'를 누르면 여기에 코디 3개가 나와요."
 
 
 def _make_recommendation(app, user, items, w, purpose):
@@ -150,42 +277,58 @@ def _request_id(key):
 
 
 def _context_caption(ctx):
-    """'실제 체감 · 추천 기준' 줄 (운동 보정, 두께에 반영한 체질·비, 저녁 기온)."""
-    line = f"실제 체감 {ctx['t_env']:.1f}℃ · 추천 기준 **{ctx['t_filter']:.1f}℃**"
+    """이 추천을 만든 조건: '외출 목적 · 실제 체감 · 추천 기준' 줄 (운동 보정, 두께에 반영한 체질·비, 저녁 기온)."""
+    line = f"{ctx['purpose']} · 실제 체감 {ctx['t_env']:.1f}℃ · 추천 기준 **{ctx['t_filter']:.1f}℃**"
     if ctx["purpose"] == "운동":
         line += " (실외 운동 +5℃)"
     if ctx["adjustments"]:
         adj = ", ".join(f"{label} {delta:+.1f}℃" for label, delta in ctx["adjustments"])
         line += f" · 두께는 {adj}를 반영해 {ctx['t_pref']:.1f}℃에 맞춰 골라요"
-    st.caption(line)
+    st.markdown(line)
     if ctx.get("later"):
         lt = ctx["later"]
         st.caption(f"{lt['label']}: 체감 {lt['t_env']:.1f}℃ (지금보다 {ctx['t_env'] - lt['t_env']:.1f}℃ 낮음)")
 
 
-def _result_card(app, user, rank, result, purpose):
+def split_later_reason(reasons, later):
+    """추천 이유에서 저녁 대비 안내(추천 규칙이 '{시각}쯤 체감 …'으로 넣은 문장)를 떼어 낸다. → (나머지 이유, 저녁 안내)"""
+    if not later:
+        return list(reasons), None
+    head = f"{later['label']}쯤 체감 "
+    rest = [r for r in reasons if not r.startswith(head)]
+    advice = next((r for r in reasons if r.startswith(head)), None)
+    return rest, advice
+
+
+def _result_card(app, user, rank, result, purpose, later=None):
+    """카드 순서: 순위·옷 조합 → 추천 이유 → 저녁 대비(해당 시) → 저장·좋아요·별로 → 점수 근거·착용 후 피드백."""
     rid = result["recommendation_id"]
+    reasons, advice = split_later_reason(result["reasons"], later)
     with st.container(border=True):
-        st.markdown(f"## {rank}위 · {result['score']*100:.1f}%")
-        st.write(" + ".join(p["name"] for p in result["pieces"]))
-        if result.get("carry"):
-            st.markdown(f"🧥 **저녁 대비 겉옷:** {result['carry']['name']}")
-        for reason in result["reasons"]:
-            st.write(f"- {reason}")
+        st.markdown(f"##### {rank}위 · {result['score']*100:.1f}%")
+        st.markdown("  \n".join(f"{p['category']} · **{p['name']}**" for p in result["pieces"]))
+        if reasons:
+            st.markdown("\n".join(f"- {r}" for r in reasons))
+        if result.get("carry") or advice:
+            head = f"**저녁 대비 겉옷: {result['carry']['name']}**  \n" if result.get("carry") else "**저녁 대비**  \n"
+            st.info(head + (advice or ""), icon="🧥")
+        with st.container(horizontal=True, gap="small"):
+            save = st.button("이 코디 저장", key=f"s_{rid}")
+            like = st.button("👍 좋아요", key=f"l_{rid}")
+            dislike = st.button("👎 별로", key=f"d_{rid}")
+        if save:
+            app.store.save_outfit(user["id"], rid)
+            app.store.complete_recommendation_session(st.session_state.recommendation_session_id)
+            st.success("코디를 저장했습니다. 메뉴의 '저장 코디'에서 다시 볼 수 있어요.")
+        if like:
+            app.store.upsert_feedback(user["id"], rid, rating="like")
+            st.toast("좋아요를 기록했습니다.")
+        if dislike:
+            app.store.upsert_feedback(user["id"], rid, rating="dislike")
+            st.toast("다음 추천부터 이 조합은 제외합니다.")
         with st.expander("점수 근거"):
             st.dataframe(pd.DataFrame(explain_score_breakdown(result["components"], purpose)),
                          hide_index=True, width="stretch")
-        c1, c2, c3 = st.columns(3)
-        if c1.button("이 코디 저장", key=f"s_{rid}"):
-            app.store.save_outfit(user["id"], rid)
-            app.store.complete_recommendation_session(st.session_state.recommendation_session_id)
-            st.success("코디를 저장했습니다.")
-        if c2.button("👍 좋아요", key=f"l_{rid}"):
-            app.store.upsert_feedback(user["id"], rid, rating="like")
-            st.toast("좋아요를 기록했습니다.")
-        if c3.button("👎 별로", key=f"d_{rid}"):
-            app.store.upsert_feedback(user["id"], rid, rating="dislike")
-            st.toast("다음 추천부터 이 조합은 제외합니다.")
         with st.expander("착용 후 피드백"):
             _feedback_form(app, user, rid)
 

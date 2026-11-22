@@ -12,7 +12,7 @@ from core.config import SettingsError, cloud_settings, get_setting
 from core.media import LocalMedia
 from core.vision import model_status
 from screens import home, kpi, profile, recommend, saved, shopping, wardrobe
-from screens.common import APP_NAME, gender_ko
+from screens.common import APP_NAME, NAV_KEY, gender_ko
 from screens.context import App, clear_recommendations
 from screens.login import cloud_login_gate
 
@@ -89,7 +89,7 @@ if st.session_state.active_user_id != st.session_state.user_id:
 
 PAGES = {"홈": home, "프로필": profile, "내 옷장": wardrobe, "오늘의 추천": recommend,
          "사기 전에 맞춰보기": shopping, "저장 코디": saved, "KPI·데이터": kpi}
-page = st.sidebar.radio("메뉴", list(PAGES))
+page = st.sidebar.radio("메뉴", list(PAGES), key=NAV_KEY)   # 화면 안 버튼이 key로 메뉴를 바꿀 수 있게
 st.sidebar.divider()
 st.sidebar.caption(f"의류 분류: {model_status()['classifier']}")
 if app.web_url:

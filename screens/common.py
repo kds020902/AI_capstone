@@ -23,6 +23,16 @@ THERMAL_OPTIONS = list(THERMAL_TYPES)
 THERMAL_FEEDBACK = {None: "응답 안 함", -2: "매우 추움", -1: "약간 추움", 0: "적당함", 1: "약간 더움", 2: "매우 더움"}
 
 
+NAV_KEY = "nav_page"     # 사이드바 메뉴(app.py)의 위젯 key. 다른 화면으로 보내는 버튼이 이 값을 바꾼다.
+
+
+def go_to_page(label, page, key, primary=False):
+    """다른 메뉴로 가는 버튼 (예: 옷이 부족할 때 '내 옷장'). 누르면 사이드바 메뉴가 그 화면으로 바뀐다."""
+    def _go():
+        st.session_state[NAV_KEY] = page
+    st.button(label, key=key, on_click=_go, type="primary" if primary else "secondary")
+
+
 def gender_ko(g):
     return "여성" if g == "female" else "남성"
 

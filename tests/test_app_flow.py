@@ -31,7 +31,7 @@ def _make_profile_recommend_and_save(at, name):
     _button(at, "프로필 성별 기준 30개 추가").click().run()
     _goto(at, "오늘의 추천")
     _by_label(at.radio, "날씨").set_value("수동 입력").run()
-    _button(at, "TOP 3 추천 생성").click().run()
+    _button(at, "코디 추천받기").click().run()
     assert any("1위" in m.value for m in at.markdown), "추천이 안 나옴"
     next(b for b in at.button if b.label == "이 코디 저장").click().run()
     assert any("코디를 저장했습니다" in s.value for s in at.success)
@@ -137,16 +137,16 @@ def test_cloud_recommendation_retry_after_lost_response_keeps_one_session(cloud)
     _goto(at, "오늘의 추천")
     _by_label(at.radio, "날씨").set_value("수동 입력").run()
     cloud.rpc_faults["save_recommendation_session"] = "lost"
-    _button(at, "TOP 3 추천 생성").click().run()
+    _button(at, "코디 추천받기").click().run()
     assert at.exception                                            # 사용자는 오류를 보지만 DB에는 저장돼 있다
     assert len(cloud.rows("recommendation_sessions")) == 2
-    _button(at, "TOP 3 추천 생성").click().run()
+    _button(at, "코디 추천받기").click().run()
     assert not at.exception and any("1위" in m.value for m in at.markdown)
     assert len(cloud.rows("recommendation_sessions")) == 2 and len(cloud.rows("recommendations")) == 6
     sid = at.session_state["recommendation_session_id"]
     assert {r["recommendation_id"] for r in at.session_state["recommendations"]} == \
         {r["id"] for r in cloud.rows("recommendations") if r["session_id"] == sid}
-    _button(at, "TOP 3 추천 생성").click().run()                   # 정상 저장 뒤 다시 누르면 새 세션 (예전과 같음)
+    _button(at, "코디 추천받기").click().run()                   # 정상 저장 뒤 다시 누르면 새 세션 (예전과 같음)
     assert len(cloud.rows("recommendation_sessions")) == 3
 
 
@@ -171,27 +171,27 @@ def test_cloud_recommendation_retry_with_changed_content_never_reuses_old_ids(cl
     _goto(at, "오늘의 추천")
     _by_label(at.radio, "날씨").set_value("수동 입력").run()
     cloud.rpc_faults["save_recommendation_session"] = "lost"
-    _button(at, "TOP 3 추천 생성").click().run()                                 # P: 세션 2 (응답 유실)
+    _button(at, "코디 추천받기").click().run()                                 # P: 세션 2 (응답 유실)
     _by_label(at.checkbox, "저녁 늦게까지 밖에 있어요").check().run()
-    _button(at, "TOP 3 추천 생성").click().run()                                 # 내용이 달라 새 세션 3 (성공)
+    _button(at, "코디 추천받기").click().run()                                 # 내용이 달라 새 세션 3 (성공)
     assert not at.exception and len(rows()) == 3
     assert any("저녁" in x for r in at.session_state["recommendations"] for x in r["reasons"])
     assert _shown_matches_db(at, cloud)
     _by_label(at.checkbox, "저녁 늦게까지 밖에 있어요").uncheck().run()
-    _button(at, "TOP 3 추천 생성").click().run()                                 # 다시 P: 세션 2 재사용
+    _button(at, "코디 추천받기").click().run()                                 # 다시 P: 세션 2 재사용
     assert not at.exception and len(rows()) == 3
     assert at.session_state["recommendation_session_id"] == rows()[1]["id"] and _shown_matches_db(at, cloud)
 
     cloud.rpc_faults["save_recommendation_session"] = "lost"
-    _button(at, "TOP 3 추천 생성").click().run()                                 # A(=P, 성공해서 잊음): 세션 4 (유실)
+    _button(at, "코디 추천받기").click().run()                                 # A(=P, 성공해서 잊음): 세션 4 (유실)
     _by_label(at.selectbox, "외출 목적").set_value("운동").run()
     cloud.rpc_faults["save_recommendation_session"] = "lost"
-    _button(at, "TOP 3 추천 생성").click().run()                                 # B: 세션 5 (유실)
+    _button(at, "코디 추천받기").click().run()                                 # B: 세션 5 (유실)
     _by_label(at.selectbox, "외출 목적").set_value("등교").run()
-    _button(at, "TOP 3 추천 생성").click().run()                                 # 다시 A: 세션 4 재사용
+    _button(at, "코디 추천받기").click().run()                                 # 다시 A: 세션 4 재사용
     assert not at.exception and len(rows()) == 5
     assert at.session_state["recommendation_session_id"] == rows()[3]["id"] and _shown_matches_db(at, cloud)
-    _button(at, "TOP 3 추천 생성").click().run()                                 # 정상 저장 뒤엔 새 세션
+    _button(at, "코디 추천받기").click().run()                                 # 정상 저장 뒤엔 새 세션
     assert len(rows()) == 6 and _shown_matches_db(at, cloud)
 
 
@@ -425,7 +425,7 @@ def test_cloud_failed_retry_of_two_saved_cards_keeps_both_and_clears_old_recomme
     saved = sorted(r["name"] for r in cloud.rows("wardrobe_items") if r.get("request_id"))
     _goto(at, "오늘의 추천")
     _by_label(at.radio, "날씨").set_value("수동 입력").run()
-    _button(at, "TOP 3 추천 생성").click().run()
+    _button(at, "코디 추천받기").click().run()
     assert at.session_state["recommendations"]
     _goto(at, "내 옷장")
     for i in range(2):                                                     # 두 카드 이름 고치기
@@ -503,13 +503,53 @@ def test_weather_is_kept_per_city(tmp_path, monkeypatch):
     _by_label(at.radio, "날씨").set_value("자동 조회").run()
     _by_label(at.selectbox, "도시").set_value("서울").run()
     _button(at, "현재 날씨 불러오기").click().run()
-    assert _by_label(at.metric, "기온").value == "5.0℃"
+    assert any("기온 5.0℃" in c.value for c in at.caption)                 # 제목 아래 '적용 조건'
+    assert any("**서울** · 체감 **3.0℃** · **비 없음**" in m.value for m in at.markdown)
     _by_label(at.selectbox, "도시").set_value("수원").run()
-    assert not [m for m in at.metric if m.label == "기온"]
+    assert not any("기온 5.0℃" in c.value for c in at.caption)
+    assert any("**수원** · 체감 **22.0℃ (기본값)**" in m.value for m in at.markdown)
     assert any("서울 날씨를 불러온 상태" in c.value for c in at.caption)
     _by_label(at.selectbox, "도시").set_value("서울").run()
-    assert _by_label(at.metric, "기온").value == "5.0℃"
+    assert any("기온 5.0℃" in c.value for c in at.caption)
     assert not at.exception
+
+
+def test_recommend_screen_states(tmp_path, monkeypatch):
+    """오늘의 추천: 추천 전 다음 행동 안내 → 날씨 조회 실패는 날씨 줄에 붙여 경고 → 결과 카드(순위·옷 한 줄씩·저녁 대비)
+    → 옷이 부족하면 빠진 옷과 '내 옷장' 버튼, 누르면 메뉴가 내 옷장으로 바뀐다."""
+    from core import weather
+    monkeypatch.setattr(weather, "get_current_weather",
+                        lambda lat, lon: {"ok": False, "message": "자동 조회 실패. 수동 입력을 사용하세요. (ConnectTimeout)"})
+    at = _local_app(tmp_path, monkeypatch)
+    _make_profile_recommend_and_save(at, "상태")
+    at.session_state["recommendations"] = None                              # 추천 전 상태로
+    _goto(at, "프로필")
+    _goto(at, "오늘의 추천")
+    _by_label(at.radio, "날씨").set_value("자동 조회").run()
+    assert any("현재 날씨 불러오기" in i.value for i in at.info)              # 결과 자리의 다음 행동 안내
+    _button(at, "현재 날씨 불러오기").click().run()
+    assert any("날씨를 불러오지 못해 기본값" in w.value and "ConnectTimeout" in w.value for w in at.warning)
+    _by_label(at.radio, "날씨").set_value("수동 입력").run()
+    _by_label(at.checkbox, "저녁 늦게까지 밖에 있어요").check().run()
+    assert any("적용 중인 세부 설정: 저녁 체감" in c.value for c in at.caption)  # 접힌 칸 안의 값을 바깥에 알림
+    _button(at, "코디 추천받기").click().run()
+    results = at.session_state["recommendations"]
+    names = results[0]["pieces"]
+    assert any(m.value.startswith("##### 1위") for m in at.markdown)
+    assert any(all(f"**{p['name']}**" in m.value for p in names) for m in at.markdown)   # 옷은 한 줄에 한 벌
+    later = [r for r in results if any(x.startswith("저녁쯤 체감 ") for x in r["reasons"])]
+    assert later                                                             # 22℃ → 저녁 16℃: 저녁 안내가 붙는 조건
+    assert any("저녁 대비" in i.value for i in at.info)                       # 저녁 안내는 이유 목록이 아니라 따로
+    assert not any(m.value.startswith("- ") and "저녁쯤 체감" in m.value for m in at.markdown)
+    uid = db.list_users()[0]["id"]
+    for x in db.list_wardrobe_items(uid):
+        if x["category"] == "신발":
+            db.deactivate_item(x["id"], uid)
+    _goto(at, "프로필")
+    _goto(at, "오늘의 추천")
+    assert any("빠진 옷: **신발**" in w.value for w in at.warning)
+    _button(at, "내 옷장에서 옷 넣기").click().run()
+    assert at.sidebar.radio[0].value == "내 옷장" and not at.exception
 
 
 def test_cloud_wardrobe_rerun_reads_db_twice_and_reuses_photos(cloud, monkeypatch):
@@ -564,7 +604,7 @@ def test_shopping_screen_judges_candidate_and_buy_adds_it(tmp_path, monkeypatch)
     db.create_candidate(uid, "베이지 트렌치코트", "아우터", "코트", "beige", 3, 0)
     n_before = len(db.list_wardrobe_items(uid))
     _goto(at, "오늘의 추천")
-    _button(at, "TOP 3 추천 생성").click().run()
+    _button(at, "코디 추천받기").click().run()
     assert at.session_state["recommendations"]
     _goto(at, "사기 전에 맞춰보기")
     assert not at.exception
