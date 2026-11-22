@@ -7,7 +7,7 @@
 
 | ID | 작업 | 담당 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-02 | Supabase 정리 | 사용자 | – | 시험 계정 12개(`closet.check.*`, `closet.check3.*`, `closet.e2e.*`, `closet.e2e3.*`, `closet.e2e5.*` @example.com) 삭제 (Authentication → Users, 행·사진은 이미 지움) + 2026-11-09 배포 확인용 `closet.e2e6.*` 1개 (사진 폴더는 사용자가 지움) + `closet.e2e7.*`·`closet.e2e8.*`·`closet.e2e9.*` 각 1개 (행은 계정을 지우면 같이 지워짐, 사진은 Storage → wardrobe 의 그 사용자 id 폴더를 지움), DB 비밀번호 재설정 | 할 일 |
+| T-02 | Supabase 정리 | 사용자 | – | 시험 계정 12개(`closet.check.*`, `closet.check3.*`, `closet.e2e.*`, `closet.e2e3.*`, `closet.e2e5.*` @example.com) 삭제 (Authentication → Users, 행·사진은 이미 지움) + 2026-11-09 배포 확인용 `closet.e2e6.*` 1개 (사진 폴더는 사용자가 지움) + `closet.e2e7.*`·`closet.e2e8.*`·`closet.e2e9.*` 각 1개 + 2026-11-22 화면 배치 배포 확인용 `closet.e2e10.*`(프로필만)·`closet.e2e11.*` 각 1개 (행은 계정을 지우면 같이 지워짐, 사진은 Storage → wardrobe 의 그 사용자 id 폴더를 지움), DB 비밀번호 재설정 | 할 일 |
 | T-03 | Streamlit Secrets 정리 | 사용자 | – | ① `SUPABASE_KEY`를 publishable 키(`sb_publishable_…`)로 바꾸고 앱 동작 확인 → ② 그다음 Supabase Settings → API Keys에서 예전 anon·service_role 키 끄기 (예전 키는 2026년 말까지 폐지 예정, 순서는 DEPLOY.md 1-4) ③ `SUPABASE_URL`을 `https://<프로젝트ID>.supabase.co`로 (코드가 자동 변환하지만 정리 권장) | 할 일 |
 | T-04 | 웹 체험판 공개 | 사용자 | – | ~~Settings → Pages → GitHub Actions, Actions에서 1회 실행, `kds020902.github.io/AI_capstone` 열림~~ (2026-11-07 완료: 커밋 `4ec61c1` 배포 성공, test-plan 3절). 남은 것: Streamlit Secrets에 `WEB_TRIAL_URL = "https://kds020902.github.io/AI_capstone/"` 넣기 (앱 사이드바 링크) | 진행 중 |
 | T-07 | 가상 착용 Space 만들기 | 사용자 | Hugging Face `matsusung` 계정 가입 30일(2026-11-16 18:49 한국 시간 이후) + 이메일 인증, 또는 조건이 되는 팀원 계정 | ZeroGPU Space Running(`tryon_space/` 최신 파일 3개, 리다이렉트 확인 포함 2026-11-07판), 사진 1장으로 결과 생성, Logs의 `GPU 사용 n초` 기록 2026-11-17: `matsusung/ai-closet-tryon` 만듦(ZeroGPU, Public). 첫 실행에서 CatVTON GitHub 저장소 받기가 실패(GitHub가 로그인을 요구) → `tryon_space/app.py`가 저자의 공식 HF 데모 Space(`zhengchong/CatVTON`, 2026-05-26 판 고정)에서 코드를 받고 detectron2는 공식 Space처럼 처음 켤 때 설치하게 고침. 고친 app.py 다시 올림(커밋 `43fd050`) → **Running 확인**(ZeroGPU `zero-a10g`, Gradio 화면 뜸). 남은 것: 사진 1장으로 결과 생성, Logs의 `GPU 사용 n초` 기록 | 진행 중 |
@@ -34,7 +34,7 @@
 
 | 날짜 | 작업 | 근거 |
 |---|---|---|
-| 2026-11-22 | '오늘의 추천' PC 화면 배치: 제목 아래 적용 조건(지역·체감·비, 기본값·조회 실패를 붙여 표시), 조건 : 결과 = 1 : 2, 날씨 → 외출 목적 → '저녁 대비 · 세부 설정'(펼쳐 보기, 바꾼 값은 바깥에 표시), [TOP 3 추천 생성] → [코디 추천받기], 카드 순서 통일(옷 한 줄에 한 벌 → 이유 → 저녁 대비 → 저장·좋아요·별로 → 근거·피드백), 추천 전 다음 행동 안내, 옷 부족 시 빠진 옷 + 내 옷장 버튼. 테마 색(강조색·글자색, 밝은·어두운 모드)을 명암비 4.5:1 기준으로. 공통 기준 `docs/ui-guide.md` (내 옷장·구매 후보·저장 코디에 이어서 적용) | pytest 259 통과·20 건너뜀, 브라우저 검사 (test-plan 3절 2026-11-22). 배포 주소는 미확인 |
+| 2026-11-22 | '오늘의 추천' PC 화면 배치: 제목 아래 적용 조건(지역·체감·비, 기본값·조회 실패를 붙여 표시), 조건 : 결과 = 1 : 2, 날씨 → 외출 목적 → '저녁 대비 · 세부 설정'(펼쳐 보기, 바꾼 값은 바깥에 표시), [TOP 3 추천 생성] → [코디 추천받기], 카드 순서 통일(옷 한 줄에 한 벌 → 이유 → 저녁 대비 → 저장·좋아요·별로 → 근거·피드백), 추천 전 다음 행동 안내, 옷 부족 시 빠진 옷 + 내 옷장 버튼. 테마 색(강조색·글자색, 밝은·어두운 모드)을 명암비 4.5:1 기준으로. 공통 기준 `docs/ui-guide.md` (내 옷장·구매 후보·저장 코디에 이어서 적용) | pytest 259 통과·20 건너뜀, 브라우저 검사, main CI #17 통과, 배포 주소 새 시험 계정으로 10/10 (test-plan 3절 2026-11-22) |
 | – | 코디 추천 + 옷 사진 AI 분류 첫 버전 | 커밋 `a024a1d` |
 | – | 옷 9종 추가(42종), 일교차 안내, 계절 분류, 사기 전에 맞춰보기 | 커밋 `83b0501` |
 | – | CatVTON 가상 착용 Colab 시험 노트북 | 커밋 `74c3210` |
