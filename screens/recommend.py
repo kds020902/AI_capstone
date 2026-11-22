@@ -25,6 +25,18 @@ MANUAL_DETAIL_DEFAULTS = {"humidity": 70.0, "precipitation": 0.0, "wind": 8.0}
 
 # 화면 배치: 왼쪽 조건 : 오른쪽 결과 = 1 : 2 (docs/ui-guide.md)
 LAYOUT = [1, 2]
+# 오른쪽 결과 목록만 세로로 스크롤한다. 높이는 화면 높이에 맞춰 줄고(고정 높이 st.container 는 화면 크기를 몰라서 안 씀),
+# 결과가 짧으면 스크롤이 생기지 않는다. 목록 끝에 닿아도 페이지가 따라 움직이지 않게 스크롤 전파를 막는다.
+# 화면 위쪽(제목·적용 조건·'추천 결과' 제목)이 약 330px이라 그만큼 빼고, 너무 작은 화면에서도 420px은 남긴다.
+RESULTS_KEY = "rec_results"
+RESULTS_SCROLL_CSS = f"""<style>
+.st-key-{RESULTS_KEY} {{
+  max-height: max(420px, calc(100vh - 350px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.5rem;
+}}
+</style>"""
 
 
 def render(app):
@@ -48,7 +60,9 @@ def render(app):
         _make_recommendation(app, user, items, w, purpose)
     with right:
         st.subheader("추천 결과")
-        _results(app, user, purpose, status)
+        st.html(RESULTS_SCROLL_CSS)
+        with st.container(key=RESULTS_KEY):      # 결과 목록만 따로 스크롤 (제목은 밖에 고정)
+            _results(app, user, purpose, status)
 
 
 # ---------------------------------------------------------------- 옷이 부족할 때

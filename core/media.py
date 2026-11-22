@@ -12,7 +12,7 @@ import time
 from collections import OrderedDict
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 
 SB_PREFIX = "sb:"
 BUCKET = "wardrobe"
@@ -48,6 +48,28 @@ def thumbnail_jpeg(data: bytes, side=THUMB_SIDE) -> bytes:
     img.thumbnail((side, side))
     out = io.BytesIO()
     img.save(out, "JPEG", quality=85)
+    return out.getvalue()
+
+
+def square_jpeg(data: bytes | None, side=320) -> bytes:
+    """고르기 화면용 정사각형 작은 사진: 옷이 잘리지 않게 줄이고 남는 곳은 밝은 회색으로 채운다 (카드 높이를 맞추려고).
+    사진이 없거나 열 수 없으면 옷 모양 대체 그림."""
+    try:
+        img = open_upright(io.BytesIO(data)).convert("RGB") if data else None
+    except Exception:
+        img = None
+    canvas = Image.new("RGB", (side, side), (240, 242, 246))
+    if img is None:                                   # 대체 그림: 옷걸이에 걸린 윗옷 실루엣
+        d = ImageDraw.Draw(canvas)
+        k = side / 100
+        d.polygon([(x * k, y * k) for x, y in ((35, 28), (65, 28), (82, 42), (74, 52), (68, 47), (68, 80), (32, 80),
+                                               (32, 47), (26, 52), (18, 42))], fill=(200, 204, 212))
+        d.line([(40 * k, 28 * k), (50 * k, 20 * k), (60 * k, 28 * k)], fill=(170, 175, 185), width=max(1, int(2 * k)))
+    else:
+        img.thumbnail((side, side))
+        canvas.paste(img, ((side - img.width) // 2, (side - img.height) // 2))
+    out = io.BytesIO()
+    canvas.save(out, "JPEG", quality=85)
     return out.getvalue()
 
 

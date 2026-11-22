@@ -9,7 +9,7 @@ import streamlit as st
 
 from core.colors import COLOR_KO
 from core.eligibility import THERMAL_TYPES
-from core.media import open_upright
+from core.media import PhotoCache, open_upright, square_jpeg
 from core.taxonomy import MAIN_CATEGORIES, SUBCATEGORIES, main_category_for_subcategory
 from core.tryon import MAX_GARMENTS, space_addresses, tryon_default, tryon_kind, tryon_link, tryon_order, tryon_supported
 from core.vision import SURE_CONFIDENCE
@@ -85,22 +85,40 @@ def ai_candidate_pick(ai, key):
                     format_func=lambda sub: f"{sub} {conf[sub] * 100:.0f}%")
 
 
+TRYON_FILTERS = ["전체", "상의", "하의", "원피스", "아우터"]     # 가상 착용이 지원하는 종류 (core/tryon.py)
+TRYON_COLUMNS = 6                                                # 고르기 창의 한 줄 카드 수
+# 고르기 창: 카드 목록만 스크롤(끝에 닿아도 뒤 화면이 안 움직임), 고른 카드는 테두리·배경색으로도 표시한다.
+TRYON_PICKER_CSS = """<style>
+.st-key-tryon_grid { max-height: max(240px, calc(100vh - 430px)); overflow-y: auto; overscroll-behavior: contain;
+  padding-right: 0.5rem; }
+[class*="st-key-tryon_card_"]:has([data-testid="stIconMaterial"]) { border-color: #2F5BD3 !important; border-width: 2px;
+  background: rgba(47, 91, 211, 0.08); }
+[class*="st-key-tryon_card_"] button:has([data-testid="stIconMaterial"]) { background: #2F5BD3; border-color: #2F5BD3;
+  color: #FFFFFF; }
+</style>"""
+
+
 def tryon_panel(app, items):
-    """내 옷장 > 한번 입어보기: 옷장에서 고른 옷(최대 2벌)의 사진을 10분짜리 서명 주소로 넘기며
-    Hugging Face ZeroGPU Space(가상 착용)를 띄운다."""
+    """내 옷장 > 한번 입어보기: [입혀 볼 옷 고르기] 창에서 사진을 보며 최대 2벌을 고르고, 그 사진을 10분짜리
+    서명 주소로 넘기며 Hugging Face ZeroGPU Space(가상 착용)를 띄운다."""
     supported = {x["id"]: x for x in tryon_supported(items)}
     st.caption("사람 사진에 옷을 입혀 보는 AI 예시 이미지예요. 실제 사이즈·핏은 반영되지 않아요. "
                "입힐 수 있는 옷은 상의·하의·원피스·아우터예요.")
-    picked = st.multiselect("입혀 볼 옷 (최대 2벌, 상의 → 하의 순서로 입혀요)", list(supported),
-                            default=[x["id"] for x in tryon_default(list(supported.values()))],
-                            max_selections=MAX_GARMENTS, placeholder="입혀 볼 옷을 골라 주세요",
-                            # 옷 목록이 바뀌면 새 칸으로 (예전 빈 선택이 남아 기본 선택이 안 들어가지 않게)
-                            key=f"tryon_pick_{hash(tuple(supported))}",
-                            format_func=lambda i: f"{supported[i]['name']} ({supported[i]['category']})")
-    choices = tryon_order([supported[i] for i in picked])
+    # 확정한 선택. 옷 목록이 바뀌면 새로 기본 선택(부위마다 한 벌)을 넣는다 (예전 선택이 남아 기본 선택이 안 들어가지 않게)
+    confirm_key = f"tryon_pick_{hash(tuple(supported))}"
+    if confirm_key not in st.session_state:
+        st.session_state[confirm_key] = [x["id"] for x in tryon_default(list(supported.values()))]
+    choices = tryon_order([supported[i] for i in st.session_state[confirm_key] if i in supported])
+    _tryon_chosen(app, choices)
+    if st.button("입혀 볼 옷 고르기", key="tryon_pick_open", disabled=not supported):
+        st.session_state.tryon_draft = [x["id"] for x in choices]     # 창을 열 때마다 확정한 선택에서 시작
+        st.session_state.tryon_q, st.session_state.tryon_cat = "", "전체"
+        tryon_picker(app, supported, confirm_key)
     garments = [(app.media.signed_url(x.get("image_path"), seconds=600), tryon_kind(x.get("category"))) for x in choices]
     embed, page = space_addresses(app.tryon_url)
-    if not choices:
+    if not supported:
+        st.info("입힐 수 있는 옷(상의·하의·원피스·아우터)이 옷장에 없어요. 열린 화면에서 옷 사진을 직접 올려 주세요.")
+    elif not choices:
         st.info("옷을 고르지 않으면 열린 화면에서 옷 사진을 직접 올려요.")
     elif any(g is None for g, _ in garments):
         st.info("사진이 없거나 넘길 수 없는 옷이 있어요 (스타터 옷장·로컬 실행 등). 열린 화면에서 옷 사진을 직접 올려 주세요.")
@@ -116,6 +134,90 @@ def tryon_panel(app, items):
             import streamlit.components.v1 as components
             components.iframe(tryon_link(embed, garments), height=820, scrolling=True)
     st.caption("올린 사람 사진은 AI 옷장 DB에 저장하지 않아요. 옷 사진 주소는 10분 동안만 열려요.")
+
+
+def _tryon_chosen(app, choices):
+    """확정한 옷을 작은 사진과 함께 보여 준다 (입히는 순서대로)."""
+    order = " → ".join(x["category"] for x in choices)
+    st.markdown(f"**입혀 볼 옷** · {len(choices)}/{MAX_GARMENTS}벌" + (f" · {order} 순서로 입혀요" if choices else ""))
+    if not choices:
+        st.caption("아직 고른 옷이 없어요.")
+        return
+    cols = st.columns(6)
+    for col, x in zip(cols, choices):
+        with col:
+            st.image(_square_photo(app, x.get("image_path")), width="stretch",
+                     alt=x["name"] if x.get("image_path") else f"{x['name']} (사진 없음)")
+            st.caption(f"**{x['name']}**  \n{x['category']}")
+
+
+def _square_photo(app, ref):
+    """고르기 화면용 정사각형 사진 (세션에 담아 두고 다시 만들지 않는다)."""
+    cache = st.session_state.setdefault("thumb_cache", PhotoCache(15_000_000))
+    key = f"square:{ref or ''}"
+    if key not in cache:
+        cache[key] = square_jpeg(app.media.read(ref) if ref else None)
+    return cache[key]
+
+
+def _tryon_match(item, query, cat):
+    q = query.strip().lower()
+    hay = f"{item['name']} {item.get('subcategory') or ''} {item['category']}".lower()
+    return (cat in (None, "전체") or item["category"] == cat) and (not q or all(w in hay for w in q.split()))
+
+
+def _tryon_toggle(item_id):
+    draft = st.session_state.tryon_draft
+    if item_id in draft:
+        draft.remove(item_id)
+    elif len(draft) < MAX_GARMENTS:
+        draft.append(item_id)
+
+
+@st.dialog("입혀 볼 옷 고르기", width="large")
+def tryon_picker(app, supported, confirm_key):
+    """사진 카드에서 최대 2벌을 고른다. [선택 완료]만 확정하고, [취소]·닫기는 확정한 선택을 그대로 둔다."""
+    st.html(TRYON_PICKER_CSS)
+    draft = st.session_state.tryon_draft
+    c1, c2 = st.columns([3, 2], vertical_alignment="bottom")
+    query = c1.text_input("옷 이름 또는 종류 검색", key="tryon_q", placeholder="예: 셔츠, 니트, 코트")
+    cat = c2.segmented_control("종류", TRYON_FILTERS, key="tryon_cat")
+    shown = [x for x in supported.values() if _tryon_match(x, query, cat)]
+    full = len(draft) >= MAX_GARMENTS
+    more = " · 아래로 내려 더 보기" if len(shown) > TRYON_COLUMNS else ""
+    st.caption(f"입힐 수 있는 옷 {len(supported)}벌 중 {len(shown)}벌{more}")
+    with st.container(key="tryon_grid"):
+        if not shown:
+            st.info("찾는 옷이 없어요. 다른 말로 검색하거나 종류를 '전체'로 바꿔 보세요.")
+        for row in range(0, len(shown), TRYON_COLUMNS):
+            for col, x in zip(st.columns(TRYON_COLUMNS), shown[row:row + TRYON_COLUMNS]):
+                with col:
+                    _tryon_card(app, x, x["id"] in draft, full)
+    names = [x["name"] for x in tryon_order([supported[i] for i in draft])]
+    st.markdown(f"**{len(draft)}/{MAX_GARMENTS}벌 선택**" + (" · " + ", ".join(names) if names else ""))
+    if full:
+        st.caption(f"최대 {MAX_GARMENTS}벌까지 고를 수 있어요. 바꾸려면 고른 옷을 먼저 해제하세요.")
+    with st.container(horizontal=True, horizontal_alignment="right"):
+        if st.button("취소", key="tryon_cancel"):
+            st.rerun()
+        if st.button("선택 완료", key="tryon_done", type="primary"):
+            st.session_state[confirm_key] = list(draft)
+            st.rerun()
+
+
+def _tryon_card(app, item, selected, full):
+    """사진 → [선택] → 이름·종류. 사진은 모두 정사각형이라 버튼이 한 줄로 맞는다 (이름 길이와 상관없이)."""
+    with st.container(border=True, key=f"tryon_card_{item['id']}", gap="xsmall"):
+        has_photo = bool(item.get("image_path"))
+        st.image(_square_photo(app, item.get("image_path")), width="stretch",
+                 alt=item["name"] if has_photo else f"{item['name']} (사진 없음)")
+        # 버튼 종류(primary/secondary)를 바꾸면 버튼이 새로 그려져 키보드 포커스를 잃는다 → 종류는 그대로 두고 문구·아이콘·색으로 표시
+        st.button("선택됨" if selected else "선택", key=f"tryon_btn_{item['id']}", width="stretch",
+                  icon=":material/check_circle:" if selected else None, disabled=full and not selected,
+                  on_click=_tryon_toggle, args=(item["id"],))
+        st.markdown(f"**{item['name']}**")
+        detail = " · ".join(v for v in (item["category"], item.get("subcategory")) if v)
+        st.caption(detail + ("" if has_photo else " · 사진 없음"))
 
 
 @st.dialog("정보 수정")

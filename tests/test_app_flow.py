@@ -79,6 +79,22 @@ def _signup(at, email, pw="secret123"):
     _button(at, "가입하기").click().run()
 
 
+def _confirmed(at):
+    return next(m.value for m in at.markdown if m.value.startswith("**입혀 볼 옷**"))
+
+
+def _tryon_picker_flow(at):
+    """한번 입어보기 고르기 창을 처음 연 모습: 확정 선택(2벌)에서 시작, 2벌이면 다른 옷은 못 고름, 아래에 0/2벌 표시와 버튼.
+    (AppTest 는 창 안의 부분 재실행을 흉내 내지 못해 검색·취소·선택 완료는 브라우저 시험과 아래 단위 시험으로 본다)"""
+    _button(at, "입혀 볼 옷 고르기").click().run()
+    assert not at.exception
+    assert at.text_input(key="tryon_q").label == "옷 이름 또는 종류 검색"
+    assert sum(b.label == "선택됨" for b in at.button) == 2
+    assert all(b.disabled for b in at.button if b.label == "선택")
+    assert any(m.value.startswith("**2/2벌 선택**") for m in at.markdown)
+    assert {"취소", "선택 완료"} <= {b.label for b in at.button}
+
+
 def test_cloud_mode_requires_login_and_keeps_accounts_apart(cloud):
     at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
     assert not at.exception
@@ -101,8 +117,8 @@ def test_cloud_mode_requires_login_and_keeps_accounts_apart(cloud):
     assert not any("입어보기" in b.label or "가상 착용" in b.label for b in at.button)   # 옷 카드에도 없다
     assert [t.label for t in at.tabs] == ["옷장 목록", "30개 스타터 옷장", "직접 추가", "한번 입어보기"]
     assert not at.get("iframe")                                 # 켜기 전에는 Space 화면을 불러오지 않는다
-    pick = next(m for m in at.multiselect if m.label.startswith("입혀 볼 옷"))
-    assert len(pick.value) == 2                                  # 옷장이 비어 있을 때 먼저 그려졌어도 상의 + 하의 기본 선택
+    assert any(m.value.startswith("**입혀 볼 옷** · 2/2벌") for m in at.markdown)   # 옷장이 비어 있을 때 먼저 그려졌어도 상의 + 하의 기본 선택
+    _tryon_picker_flow(at)
     at.toggle(key="tryon_open").set_value(True).run()
     assert not at.exception
     frame, link = at.get("iframe")[0].proto, at.get("link_button")[0].proto
@@ -614,3 +630,25 @@ def test_shopping_screen_judges_candidate_and_buy_adds_it(tmp_path, monkeypatch)
     assert not at.exception
     assert len(db.list_wardrobe_items(uid)) == n_before + 1 and db.list_candidates(uid) == []
     assert at.session_state["recommendations"] is None
+
+
+def test_tryon_picker_search_and_toggle(monkeypatch):
+    """고르기 창의 검색(이름·세부 종류·대분류, 띄어 쓴 말은 모두 포함)·종류 거르기와 선택 토글(최대 2벌, 고른 순서 유지)."""
+    import streamlit as st
+
+    from screens import common
+    shirt = {"id": 1, "name": "네이비 셔츠", "category": "상의", "subcategory": "셔츠"}
+    coat = {"id": 2, "name": "카멜 롱", "category": "아우터", "subcategory": "코트"}
+    assert common._tryon_match(shirt, "셔츠", "전체") and common._tryon_match(coat, "코트", None)
+    assert common._tryon_match(coat, "카멜 코트", "아우터") and not common._tryon_match(coat, "카멜 셔츠", "전체")
+    assert not common._tryon_match(shirt, "", "하의") and common._tryon_match(shirt, " ", "상의")
+
+    class _State(dict):
+        __getattr__, __setattr__ = dict.__getitem__, dict.__setitem__
+    monkeypatch.setattr(st, "session_state", _State(tryon_draft=[]))
+    for i in (3, 1, 2):                         # 세 번째는 2벌이 차서 안 들어감
+        common._tryon_toggle(i)
+    assert st.session_state.tryon_draft == [3, 1]
+    common._tryon_toggle(3)
+    common._tryon_toggle(2)
+    assert st.session_state.tryon_draft == [1, 2]
