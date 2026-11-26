@@ -4,11 +4,11 @@ from __future__ import annotations
 import streamlit as st
 
 from core.taxonomy import NUM_SUBCATEGORIES
-from screens.common import APP_NAME, gender_ko
+from screens.common import APP_NAME, LOGO, gender_ko
 
 
 def render(app):
-    st.title(APP_NAME)
+    st.image(LOGO, width=140, alt=f"Fit · {APP_NAME}")
     st.subheader(f"성별 프로필 + 30개 캐주얼 스타터 옷장 + {NUM_SUBCATEGORIES}종 세부분류")
     user = app.current_user()
     if user:

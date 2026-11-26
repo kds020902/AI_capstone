@@ -4,7 +4,7 @@ from __future__ import annotations
 import streamlit as st
 
 from core.media import PhotoCache
-from screens.common import APP_NAME
+from screens.common import APP_NAME, LOGO
 
 
 def cloud_login_gate(settings):
@@ -18,7 +18,7 @@ def cloud_login_gate(settings):
     client = st.session_state.sb_client
     user = cloud_auth.current_user(client)
     if user is None:
-        st.title(f"👕 {APP_NAME}")
+        st.image(LOGO, width=140, alt=f"Fit · {APP_NAME}")
         st.caption("날씨·외출 목적·체질에 맞춰 내 옷장 속 옷으로 코디를 추천해요. 내 옷장은 로그인한 나만 볼 수 있어요.")
         tab_in, tab_up = st.tabs(["로그인", "회원가입"])
         with tab_in, st.form("login"):

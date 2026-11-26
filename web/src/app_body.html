@@ -1,4 +1,5 @@
 <title>AI 옷장 체험판</title>
+<link rel="icon" type="image/png" href="__LOGO_ICON__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -32,7 +33,8 @@ button, input, select { font: inherit; color: inherit; }
 .muted { color: var(--muted); }
 
 /* 머리말 */
-.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.brand .logo { display: block; height: 48px; width: auto; }   /* 로고 Fit: 흰 둥근 판이라 어두운 모드에서도 보임 */
 .brand h1 { font-family: var(--display); font-size: 2rem; font-weight: 700; letter-spacing: -0.01em; }
 .badge { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; border: 1px solid var(--accent); color: var(--accent);
   border-radius: 999px; padding: 1px 10px; }
@@ -179,7 +181,7 @@ footer a { color: var(--accent); }
 
 <div class="wrap">
   <header>
-    <div class="brand"><h1>AI 옷장</h1><span class="badge">체험판</span></div>
+    <div class="brand"><h1><img class="logo" src="__LOGO__" alt="Fit · AI 옷장"></h1><span class="badge">체험판</span></div>
     <p class="lede">설치 없이 브라우저에서 바로 써 보는 버전이에요. 날씨와 외출 목적을 고르면 옷장에 있는 옷으로 코디 3벌을 추천하고,
       옷 사진을 올리면 AI가 종류와 색을 채워 줘요. 옷장 기록은 이 브라우저에만 저장돼요.</p>
     <nav class="tabs" role="tablist" aria-label="메뉴">

@@ -12,14 +12,14 @@ from core.config import SettingsError, cloud_settings, get_setting
 from core.media import LocalMedia
 from core.vision import model_status
 from screens import home, kpi, profile, recommend, saved, shopping, wardrobe
-from screens.common import APP_NAME, NAV_KEY, gender_ko
+from screens.common import APP_NAME, LOGO, LOGO_ICON, NAV_KEY, gender_ko
 from screens.context import App, clear_recommendations
 from screens.login import cloud_login_gate
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT / "data" / "uploads"
 
-st.set_page_config(page_title=APP_NAME, page_icon="👕", layout="wide")
+st.set_page_config(page_title=APP_NAME, page_icon=LOGO_ICON, layout="wide")
 
 for key, value in {
     "user_id": None,
@@ -56,7 +56,7 @@ else:
 app = App(store, media, cloud=CLOUD, tryon_url=get_setting("TRYON_SPACE_URL"), web_url=get_setting("WEB_TRIAL_URL"))
 
 # ------------------------------------------------------------------ 사이드바
-st.sidebar.title(f"👕 {APP_NAME}")
+st.logo(LOGO, size="large", icon_image=LOGO_ICON)       # 사이드바 맨 위 (접으면 정사각형 아이콘)
 if CLOUD:
     st.sidebar.caption(f"로그인: {st.session_state.get('auth_email') or '-'}")
     if st.sidebar.button("로그아웃"):

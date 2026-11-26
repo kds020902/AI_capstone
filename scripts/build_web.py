@@ -124,13 +124,20 @@ def closet_data():
     }
 
 
+def _data_uri(path):
+    """로고 그림을 페이지 안에 넣는다 (한 파일 페이지라 따로 내려받지 않게)."""
+    return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
+
+
 def assemble(out=WEB / "index.html", body_only=False):
     src = WEB / "src"
     body = (src / "app_body.html").read_text(encoding="utf-8")
     body = (body.replace("__CLOSET_DATA__", json.dumps(closet_data(), ensure_ascii=False))
                 .replace("__CLOSETNET_SRC__", (src / "closetnet.js").read_text(encoding="utf-8"))
-                .replace("__CLOSET_JS__", (src / "closet.js").read_text(encoding="utf-8")))
-    for placeholder in ("__CLOSET_DATA__", "__CLOSETNET_SRC__", "__CLOSET_JS__"):
+                .replace("__CLOSET_JS__", (src / "closet.js").read_text(encoding="utf-8"))
+                .replace("__LOGO__", _data_uri(ROOT / "assets" / "fit_logo.png"))
+                .replace("__LOGO_ICON__", _data_uri(ROOT / "assets" / "fit_icon.png")))
+    for placeholder in ("__CLOSET_DATA__", "__CLOSETNET_SRC__", "__CLOSET_JS__", "__LOGO__", "__LOGO_ICON__"):
         assert placeholder not in body, placeholder
     out.write_text(body if body_only else SKELETON + body + "\n</body>\n</html>\n", encoding="utf-8",
                    newline="\n")   # Windows에서 만들어도 같은 파일 (tests/test_web_parity.py 가 저장소 파일과 비교)

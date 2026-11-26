@@ -15,6 +15,10 @@ from core.tryon import MAX_GARMENTS, space_addresses, tryon_default, tryon_kind,
 from core.vision import SURE_CONFIDENCE
 
 APP_NAME = "AI 옷장"
+# 서비스 로고 Fit (흰 둥근 판 위 검은 글자라 밝은·어두운 모드 모두에서 보인다). 가로형은 사이드바·로그인, 정사각형은 탭 아이콘.
+ASSETS = Path(__file__).resolve().parents[1] / "assets"
+LOGO = str(ASSETS / "fit_logo.png")
+LOGO_ICON = str(ASSETS / "fit_icon.png")
 MATERIALS = ["", "cotton", "polyester", "denim", "wool", "linen", "nylon", "other"]
 COLORS = list(COLOR_KO)
 
