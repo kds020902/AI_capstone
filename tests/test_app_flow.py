@@ -652,3 +652,33 @@ def test_tryon_picker_search_and_toggle(monkeypatch):
     common._tryon_toggle(3)
     common._tryon_toggle(2)
     assert st.session_state.tryon_draft == [1, 2]
+
+
+def test_wardrobe_list_pages(tmp_path, monkeypatch):
+    """옷장 목록은 9벌씩 쪽으로 나눈다: 다음·번호로 넘기고, 카테고리를 바꾸면 1쪽으로, 쪽이 하나면 넘기기 버튼이 없다."""
+    at = _local_app(tmp_path, monkeypatch)
+    _goto(at, "프로필")
+    _by_label(at.text_input, "이름 / 닉네임").input("쪽")
+    _button(at, "사용자 생성").click().run()
+    _goto(at, "내 옷장")
+    _button(at, "프로필 성별 기준 30개 추가").click().run()
+    assert any(c.value == "30벌 중 1–9번째" for c in at.caption)
+    assert sum(m.value.startswith("##### ") for m in at.markdown) == 9
+    _button(at, "다음").click().run()
+    assert any(c.value == "30벌 중 10–18번째" for c in at.caption)
+    _button(at, "4").click().run()
+    assert any(c.value == "30벌 중 28–30번째" for c in at.caption) and at.button(key="page_next").disabled
+    _by_label(at.selectbox, "카테고리").set_value("신발").run()          # 거르기를 바꾸면 1쪽부터
+    caps = [c.value for c in at.caption if "벌 중" in c.value]
+    assert len(caps) == 1 and " 중 1–" in caps[0]
+    assert int(caps[0].split("벌")[0]) <= 9 and not any(b.key == "page_next" for b in at.button)   # 한 쪽이면 넘기기 없음
+    assert not at.exception
+
+
+def test_page_numbers_window():
+    from screens.wardrobe import page_numbers
+    assert page_numbers(1, 1) == [1]
+    assert page_numbers(1, 5) == [1, 2, 3, None, 5]
+    assert page_numbers(5, 10) == [1, None, 3, 4, 5, 6, 7, None, 10]
+    assert page_numbers(10, 10) == [1, None, 8, 9, 10]
+    assert page_numbers(3, 4) == [1, 2, 3, 4]

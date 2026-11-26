@@ -33,6 +33,12 @@ def go_to_page(label, page, key, primary=False):
     st.button(label, key=key, on_click=_go, type="primary" if primary else "secondary")
 
 
+def info_icon(label, text, icon=":material/info:", key=None):
+    """자잘한 설명: 아이콘에 마우스를 올리면 툴팁으로, 누르면(휴대폰 포함) 작은 창으로 같은 내용을 보여 준다."""
+    with st.popover(label, icon=icon, help=text, type="tertiary", key=key):
+        st.markdown(text)
+
+
 def gender_ko(g):
     return "여성" if g == "female" else "남성"
 
@@ -122,18 +128,23 @@ def tryon_panel(app, items):
         st.info("옷을 고르지 않으면 열린 화면에서 옷 사진을 직접 올려요.")
     elif any(g is None for g, _ in garments):
         st.info("사진이 없거나 넘길 수 없는 옷이 있어요 (스타터 옷장·로컬 실행 등). 열린 화면에서 옷 사진을 직접 올려 주세요.")
-    st.link_button("새 창(Hugging Face)에서 열기 · 권장", tryon_link(page, garments), type="primary")
-    st.caption("새 창에서는 내 무료 GPU 사용량으로 실행돼요 (하루 비로그인 약 2분, Hugging Face 무료 계정 로그인 시 약 5분, "
-               "첫 사용 24시간 뒤 다시 채워짐). 이 화면 안에서 열면 바로 써 볼 수 있지만 Hugging Face 로그인이 전달되지 않아 "
-               "사용량이 더 빨리 바닥날 수 있어요. 무료 GPU라 대기열이 생길 수 있어요.")
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.link_button("새 창(Hugging Face)에서 열기 · 권장", tryon_link(page, garments), type="primary")
+        info_icon("사용량", "새 창에서는 내 무료 GPU 사용량으로 실행돼요 (하루 비로그인 약 2분, Hugging Face 무료 계정 로그인 시 "
+                  "약 5분, 첫 사용 24시간 뒤 다시 채워짐). 이 화면 안에서 열면 바로 써 볼 수 있지만 Hugging Face 로그인이 "
+                  "전달되지 않아 사용량이 더 빨리 바닥날 수 있어요. 무료 GPU라 대기열이 생길 수 있어요.",
+                  icon=":material/timer:", key="tip_tryon_quota")
     # 탭은 안 보일 때도 함께 그려지므로, 켤 때만 Space 화면을 불러온다 (내 옷장을 열 때마다 Space 를 깨우지 않게)
-    if st.toggle("이 화면 안에서 열기", key="tryon_open"):
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        inside = st.toggle("이 화면 안에서 열기", key="tryon_open")
+        info_icon("사진 보관", "올린 사람 사진은 AI 옷장 DB에 저장하지 않아요. 옷 사진 주소는 10분 동안만 열려요.",
+                  icon=":material/lock:", key="tip_tryon_privacy")
+    if inside:
         if hasattr(st, "iframe"):      # 새 Streamlit (components.iframe 은 없어질 예정)
             st.iframe(tryon_link(embed, garments), height=820)
         else:
             import streamlit.components.v1 as components
             components.iframe(tryon_link(embed, garments), height=820, scrolling=True)
-    st.caption("올린 사람 사진은 AI 옷장 DB에 저장하지 않아요. 옷 사진 주소는 10분 동안만 열려요.")
 
 
 def _tryon_chosen(app, choices):
@@ -146,12 +157,12 @@ def _tryon_chosen(app, choices):
     cols = st.columns(6)
     for col, x in zip(cols, choices):
         with col:
-            st.image(_square_photo(app, x.get("image_path")), width="stretch",
+            st.image(square_photo(app, x.get("image_path")), width="stretch",
                      alt=x["name"] if x.get("image_path") else f"{x['name']} (사진 없음)")
             st.caption(f"**{x['name']}**  \n{x['category']}")
 
 
-def _square_photo(app, ref):
+def square_photo(app, ref):
     """고르기 화면용 정사각형 사진 (세션에 담아 두고 다시 만들지 않는다)."""
     cache = st.session_state.setdefault("thumb_cache", PhotoCache(15_000_000))
     key = f"square:{ref or ''}"
@@ -209,7 +220,7 @@ def _tryon_card(app, item, selected, full):
     """사진 → [선택] → 이름·종류. 사진은 모두 정사각형이라 버튼이 한 줄로 맞는다 (이름 길이와 상관없이)."""
     with st.container(border=True, key=f"tryon_card_{item['id']}", gap="xsmall"):
         has_photo = bool(item.get("image_path"))
-        st.image(_square_photo(app, item.get("image_path")), width="stretch",
+        st.image(square_photo(app, item.get("image_path")), width="stretch",
                  alt=item["name"] if has_photo else f"{item['name']} (사진 없음)")
         # 버튼 종류(primary/secondary)를 바꾸면 버튼이 새로 그려져 키보드 포커스를 잃는다 → 종류는 그대로 두고 문구·아이콘·색으로 표시
         st.button("선택됨" if selected else "선택", key=f"tryon_btn_{item['id']}", width="stretch",
